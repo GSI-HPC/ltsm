@@ -1,0 +1,7 @@
+SErvername		lxdv81-kvm-tsm-server
+   Nodename		lxdv81
+   TCPServeraddress	192.168.254.101
+
+SErvername		polaris-kvm-tsm-server
+   Nodename		polaris
+   TCPServeraddress	192.168.254.101
