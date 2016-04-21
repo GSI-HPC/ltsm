@@ -1,4 +1,4 @@
-# LTSMAPI/LTSMC - Lightweight TSMAPI and TSM Client for Archiving Data
+# LTSM - Lightweight TSM API and TSM Console Client for Archiving Data
 
 A lightweight high-level TSM API/library (called *ltsmapi*) supporting operations
 * *archiving*
@@ -6,11 +6,10 @@ A lightweight high-level TSM API/library (called *ltsmapi*) supporting operation
 * *deleting*
 * and *querying*.
 
-In addition a lightweight console client (called *ltsmc*) is provided which demonstrates the use of the
-high-level TSMAPI calls.
+In addition a simple console client (called *ltsmc*) is provided which demonstrates the use of *ltsmapi*.
 
 ## Getting Started <a id="getting.started"></a>
-Before using LTSMAPI/LTSMC a working access to a TSM server is required. One can install for testing purposes a fully working
+Before using LTSM a working access to a TSM server is required. One can install for testing purposes a fully working
 TSM server (e.g. inside a KVM) for a period of 30 days before the license expires. A complete installation and setup guide is provided
 at [TSM Server Installation Guide](http://web-docs.gsi.de/~tstibor/tsm/).
 
@@ -19,11 +18,14 @@ To compile LTSMAPI/LTSMC, first clone the git repository first
 git clone https://github.com/tstibor/ltsm
 ```
 
+Download and install the TSM API client provided at [7.1.4.0-TIV-TSMBAC-LinuxX86_DEB.tar](ftp://ftp.software.ibm.com/storage/tivoli-storage-management/maintenance/client/v7r1/Linux/LinuxX86_DEB/BA/v714/).
+Make sure to install `tivsm-api64.amd64.deb` where the header files `dapitype.h, dsmapips.h, ...` and the low-level library `libApiTSM64.so` are provided.
+
 The building of LTSMAPI/LTSMC is based on simple `Makefile`
 ```
 make
 ```
-Gives result when IBM's header files and library is provided at the proper place:
+Gives result when the header files and library are provided at the proper place:
 ```
 gcc -m64 -DLINUX_CLIENT -std=c99 -Wall -D_FILE_OFFSET_BITS=64 -D_LARGEFILE64_SOURCE -O2 -DVERSION=\"0.0.1-19-g3f7bbbe\" -c src/qarray.c -I ibmtsm -o obj/src/qarray.o
 gcc -m64 -DLINUX_CLIENT -std=c99 -Wall -D_FILE_OFFSET_BITS=64 -D_LARGEFILE64_SOURCE -O2 -DVERSION=\"0.0.1-19-g3f7bbbe\" -c src/tsmapi.c -I ibmtsm -o obj/src/tsmapi.o
@@ -70,10 +72,26 @@ syntax: bin/ltsmc
 version: 0.0.1-19-g3f7bbbe, written by Thomas Stibor <t.stibor@gsi.de>
 ```
 
-## Examples
-Please follow first the installation and setup steps in [Section Getting Started](#getting.started)
+## Example of core TSM Operations
+Make sure to setup proper TSM server and nodename entries in file `/opt/tivoli/tsm/client/api/bin64/dsm.sys`. For the 
+[TSM Server Installation Guide](http://web-docs.gsi.de/~tstibor/tsm/) setup the following entries are working:
+```
+SErvername              lxdv81-kvm-tsm-server
+   Nodename             lxdv81
+   TCPServeraddress     192.168.254.101
 
-## Core TSM Operations
+SErvername              polaris-kvm-tsm-server
+   Nodename             polaris
+   TCPServeraddress     192.168.254.101
+```
+
+In addition setup `ENV` variable `export DSMI_CONFIG=`pwd`/dsmopt/dsm.opt` with file content
+```
+SERVERNAME lxdv81-kvm-tsm-server
+* SERVERNAME polaris-kvm-tsm-server
+```
+where `*` denote a comment.
+
 ### Archiving data
 For demonstrating of how to archive files and directories we first create an *archive* directories and place there some data.
 ```
