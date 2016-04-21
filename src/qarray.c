@@ -34,6 +34,7 @@ dsInt16_t init_qarray()
     
     qarray->data = malloc(sizeof(qryRespArchiveData) * INITIAL_CAPACITY);
     if (!qarray->data) {
+	free(qarray);
 	ERR_MSG("malloc");
 	return DSM_RC_NO_MEMORY;
     }
@@ -86,9 +87,6 @@ void destroy_qarray()
     if (!qarray)
 	return;
 
-    qarray->N = 0;
-    qarray->capacity = INITIAL_CAPACITY;
-    
     if (qarray->data) {
 	free(qarray->data);
 	qarray->data = NULL;
@@ -100,7 +98,6 @@ void destroy_qarray()
 
 int cmp_restore_order(const void *a, const void *b)
 {
-    
     const qryRespArchiveData *query_data_a = (qryRespArchiveData *)a;
     const qryRespArchiveData *query_data_b = (qryRespArchiveData *)b;
 

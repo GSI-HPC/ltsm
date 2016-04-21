@@ -144,11 +144,35 @@ void test_qarray_sort_all(CuTest *tc)
     destroy_qarray();
 }
 
+void test_qarray_init_destroy(CuTest *tc)
+{
+    dsInt16_t rc;
+
+    for (unsigned char i = 0; i < 128; i++) {
+	rc = init_qarray();
+	CuAssertTrue(tc, rc == DSM_RC_SUCCESSFUL);
+	destroy_qarray();
+    }
+
+    rc = init_qarray();
+    CuAssertTrue(tc, rc == DSM_RC_SUCCESSFUL);
+    rc = init_qarray();
+    CuAssertTrue(tc, rc == DSM_RC_UNSUCCESSFUL);
+    destroy_qarray();
+
+    /* Adding a query to non initialized qarray should give DSM_RC_UNSUCCESSFUL. */
+    qryRespArchiveData query_data;
+    rc = add_query(&query_data);
+    CuAssertTrue(tc, rc == DSM_RC_UNSUCCESSFUL);
+}
+
 CuSuite* qarray_get_suite()
 {
     CuSuite* suite = CuSuiteNew();
     SUITE_ADD_TEST(suite, test_qarray);
     SUITE_ADD_TEST(suite, test_qarray_sort_top);
     SUITE_ADD_TEST(suite, test_qarray_sort_all);
+    SUITE_ADD_TEST(suite, test_qarray_init_destroy);
+
     return suite;
 }

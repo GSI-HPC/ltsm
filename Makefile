@@ -3,6 +3,7 @@ SRCDIR          = src
 SRCTESTDIR      = $(SRCDIR)/test
 OBJDIR          = obj
 BINDIR          = bin
+TSM_CL_API_INCS = /opt/tivoli/tsm/client/api/bin64/sample
 # --------------- Name and location of executable files.
 EXE_LTSM_NAME   = ltsmc
 EXE_TEST_NAME   = ltsmc_testsuite
@@ -18,7 +19,7 @@ OBJTEST         = $(patsubst %.c, $(OBJDIR)/%.o, $(SRCTEST))
 CC              = gcc
 DFLAGS          = -D_FILE_OFFSET_BITS=64 -D_LARGEFILE64_SOURCE
 CFLAGS          = -m64 -DLINUX_CLIENT -std=c99 -Wall $(DFLAGS)
-INCS_IBMTSM     = -I ibmtsm
+INCS_IBMTSM     = -I ibmtsm -I $(TSM_CL_API_INCS)
 INCS_CUTEST     = -I cutest
 INC_TSMAPI      = -I $(SRCDIR)
 LIBS_IBMTSM     = -lApiTSM64
