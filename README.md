@@ -85,12 +85,12 @@ SErvername              polaris-kvm-tsm-server
    TCPServeraddress     192.168.254.101
 ```
 
-In addition setup `ENV` variable `export DSMI_CONFIG=`pwd`/dsmopt/dsm.opt` with file content
+In addition setup `ENV` variable `export DSMI_CONFIG=ltsm/dsmopt/dsm.opt` with file content
 ```
 SERVERNAME lxdv81-kvm-tsm-server
 * SERVERNAME polaris-kvm-tsm-server
 ```
-where `*` denote a comment.
+where `*` denote a comment. See also the [sanity script](https://github.com/tstibor/ltsm/blob/master/sanity.sh) fore more details.
 
 ### Archiving data
 For demonstrating of how to archive files and directories we first create an *archive* directories and place there some data.
