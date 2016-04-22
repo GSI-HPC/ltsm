@@ -140,9 +140,35 @@ Klick on the screenshot to see the full screencast
 * Implement multiple objects per transaction, currently a single object is processed per transaction.
 * Extend LTSMAPI with new compression stream algorithm such as LZ4 (perform a comparison to TSM built-in compression).
  
-## Issues
+## Pitfalls in libApiTSM64.so
+### Empty Files
+Large directories can contain empty files and naively setting the estimated file size as follows:
+```
+objAttrArea.sizeEstimate.hi = 0;
+objAttrArea.sizeEstimate.lo = 0;
+```
+leads to error `dsmSendData: ANS0344E (RC2107) Cannot Send data with a zero byte sizeEstimate.`
+Whenever you are using the low-level library `libApiTSM64.so` make sure to catch this issue. A simple approach is:
+```
+dsStruct64_t hi_lo_size = to_dsStruct64_t(st_buf.st_size);
 
-## Tweaks and Programming Tricks
+if (hi_lo_size.hi == 0 && hi_lo_size.lo == 0) {
+	hi_lo_size.lo++;
+	DEBUG_MSG("Modifying hi_lo_size (hi,lo):(%d,%d)\n", hi_lo_size.hi, hi_lo_size.lo);
+}
+
+objAttrArea.sizeEstimate.hi = hi_lo_size.hi;
+objAttrArea.sizeEstimate.lo = hi_lo_size.lo;
+
+```
+### Directories containing more than `DSM_MAX_GET_OBJ` files
+Before you can retrieve archived data, calling function `dsmBeginQuery(...)` is required. Subsequently filling e.g. an array
+of query replies is achieved with (multiple) function calls of `dsmGetNextQObj(...)`. However, when retrieving data
+make sure to call function `dsmBeginGetData` with parameter `dsmGetList` with not more than `DSM_MAX_GET_OBJ` objects
+values, otherwise your retrieving process will brake. A simple solution is to partition the query replies in chunks
+of `DSM_MAX_GET_OBJ` and call `dsmBeginGetData` on these max chunk sizes.
+
+## Issues
 
 ## References
 A thorough description and code examples of IBM's low-level TSM API/library can be found in the open document [Using the Application Programming Interface](http://web-docs.gsi.de/~tstibor/tsm/doc/using_the_programming_application_interface.pdf), 2007.
