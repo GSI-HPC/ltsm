@@ -17,6 +17,7 @@
  */
 
 #include <stdio.h>
+#include <stdlib.h>
 #include "CuTest.h"
 
 CuSuite* qarray_get_suite();
@@ -37,12 +38,10 @@ void run_all_tests(void) {
     CuSuiteDetails(suite, output);
     printf("%s\n", output->buffer);
 
-#if 0 /* There is a memory leak caused double free'ing in CuTest. */
     CuSuiteDelete(qarray_suite);
     CuSuiteDelete(dsstruct64_off_t_suite);
-#endif
     
-    CuSuiteDelete(suite);
+    free(suite);
     CuStringDelete(output);
 }
     
