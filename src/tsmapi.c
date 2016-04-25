@@ -529,6 +529,7 @@ dsInt16_t tsm_archive_file(const char *fs, const char *filename, const char *des
        copy destination consistency. The following error is thrown:
        dsmSendData: handle: 1 ANS0344E (RC2107) Cannot Send data with a zero byte sizeEstimate. */
     rc = dsmBeginTxn(handle);
+    tsm_debug_msg(rc, "dsmBeginTxn");
     if (rc) {
 	tsm_err_msg(rc, "dsmBeginTxn");
 	goto clean_up;
@@ -536,6 +537,7 @@ dsInt16_t tsm_archive_file(const char *fs, const char *filename, const char *des
 
     mcBindKey.stVersion = mcBindKeyVersion;
     rc = dsmBindMC(handle, &objName, stArchive, &mcBindKey);
+    tsm_debug_msg(rc, "dsmBeginMC");
     if (rc) {
 	tsm_err_msg(rc, "dsmBindMC");
 	goto clean_up_transaction;
@@ -601,6 +603,7 @@ dsInt16_t tsm_archive_file(const char *fs, const char *filename, const char *des
     objAttrArea.mcNameP = NULL;
 
     rc = dsmSendObj(handle, stArchive, &archData, &objName, &objAttrArea, NULL);
+    tsm_debug_msg(rc, "dsmSendObj");
     if (rc) {
 	tsm_err_msg(rc, "dsmSendObj");
 	goto clean_up_transaction;
@@ -619,6 +622,7 @@ dsInt16_t tsm_archive_file(const char *fs, const char *filename, const char *des
 	total_bytes += rbytes;
 
 	rc = dsmSendData(handle, &dataBlkArea);
+	tsm_debug_msg(rc, "dsmSendData");
 	if (rc) {
 	    tsm_err_msg(rc, "dsmSendData");
 	    goto clean_up_sendobj;
@@ -626,8 +630,9 @@ dsInt16_t tsm_archive_file(const char *fs, const char *filename, const char *des
     }
     success = bTrue;
     
-clean_up_sendobj:    
+clean_up_sendobj:
     rc = dsmEndSendObj(handle);
+    tsm_debug_msg(rc, "dsmEndSendObj");
     if (rc) {
 	tsm_err_msg(rc, "dsmEndSendObj");
 	success = bFalse;
@@ -636,6 +641,7 @@ clean_up_sendobj:
 
 clean_up_transaction:
     rc = dsmEndTxn(handle, DSM_VOTE_COMMIT, &reason);
+    tsm_debug_msg(rc, "dsmEndTxn");
     if (rc || reason) {
 	tsm_err_msg(rc, "dsmEndTxn");
 	tsm_err_msg(reason, "dsmEndTxn reason");
@@ -679,7 +685,7 @@ static dsInt16_t tsm_del_obj(const qryRespArchiveData *qry_resp_ar_data)
     
     rc = dsmBeginTxn(handle);
     tsm_debug_msg(rc, "dsmBeginTxn");
-    if (rc != DSM_RC_OK) {
+    if (rc != DSM_RC_SUCCESSFUL) {
 	tsm_err_msg(rc, "dsmBeginTxn");
 	return rc;
     }
@@ -689,7 +695,7 @@ static dsInt16_t tsm_del_obj(const qryRespArchiveData *qry_resp_ar_data)
 
     rc = dsmDeleteObj(handle, dtArchive, del_info);
     tsm_debug_msg(rc, "dsmDeleteObj");
-    if (rc != DSM_RC_OK) {
+    if (rc != DSM_RC_SUCCESSFUL) {
 	tsm_err_msg(rc, "dsmDeleteObj");
 	dsmEndTxn(handle, DSM_VOTE_COMMIT, &reason);
 	return rc;
@@ -697,7 +703,7 @@ static dsInt16_t tsm_del_obj(const qryRespArchiveData *qry_resp_ar_data)
 
     rc = dsmEndTxn(handle, DSM_VOTE_COMMIT, &reason);
     tsm_debug_msg(rc, "dsmEndTxn");
-    if (rc != DSM_RC_OK) {
+    if (rc != DSM_RC_SUCCESSFUL) {
 	tsm_err_msg(rc, "dsmEndTxn");
 	return rc;
     }
@@ -721,8 +727,10 @@ dsInt16_t tsm_delete_hl_ll(const char *fs, const char *hl, const char *ll)
     
     for (unsigned long n = 0; n < qarray_size(); n++) {
 	rc = get_query(&query_data, n);
+	DEBUG_MSG("get_query: %lu, rc: %d\n", n, rc);
 	if (rc != DSM_RC_SUCCESSFUL) {
-	    ERR_MSG("Cannot process query: %lu\n", n);
+	    errno = ENODATA; /* No data available */
+	    ERR_MSG("get_query");
 	    goto clean_up;
 	}
 	rc = tsm_del_obj(&query_data);
@@ -841,8 +849,10 @@ dsInt16_t tsm_retrieve_hl_ll(const char *fs, const char *hl, const char *ll, con
 	for (unsigned long c_iter = c_begin; c_iter <= c_end; c_iter++) {
 
 	    rc = get_query(&query_data, c_iter);
+	    DEBUG_MSG("get_query: %lu, rc: %d\n", c_iter, rc);
 	    if (rc != DSM_RC_SUCCESSFUL) {
-		ERR_MSG("Cannot process query: %lu\n", n);
+		errno = ENODATA; /* No data available */
+		ERR_MSG("get_query");
 		goto clean_up;
 	    }
 	    get_list.objId[i++] = query_data.objId;
@@ -866,8 +876,10 @@ dsInt16_t tsm_retrieve_hl_ll(const char *fs, const char *hl, const char *ll, con
 	for (unsigned long c_iter = c_begin; c_iter <= c_end; c_iter++) {
 
 	    rc = get_query(&query_data, c_iter);
+	    DEBUG_MSG("get_query: %lu, rc: %d\n", c_iter, rc);
 	    if (rc != DSM_RC_SUCCESSFUL) {
-		ERR_MSG("Cannot process query: %lu\n", n);
+		errno = ENODATA; /* No data available */
+		ERR_MSG("get_query");
 		goto clean_up;
 	    }
 	    memcpy(&obj_info,
@@ -934,14 +946,16 @@ dsInt16_t tsm_retrieve_hl_ll(const char *fs, const char *hl, const char *ll, con
 		}
 	    }
 	    rc = dsmEndGetObj(handle);
-	    if (rc != DSM_RC_OK) {
+	    tsm_debug_msg(rc, "dsmEndGetObj");
+	    if (rc != DSM_RC_SUCCESSFUL) {
 		tsm_err_msg(rc, "dsmEndGetObj");
 		goto clean_up;
 	    }
 	    rc = tsm_close_fstream(&fstream);
-	    if (rc != DSM_RC_OK)
-		goto clean_up;
-	    fstream = NULL;
+	    if (rc == DSM_RC_SUCCESSFUL)
+		fstream = NULL;
+	    else
+		ERR_MSG("tsm_close_fstream");
 	} /* End-for iterate objid's. */
 
 	/* There are no return codes that are specific to this call. */
@@ -955,16 +969,17 @@ dsInt16_t tsm_retrieve_hl_ll(const char *fs, const char *hl, const char *ll, con
 	    c_begin + (qarray_size() % DSM_MAX_GET_OBJ) - 1 :
 	    c_begin + DSM_MAX_GET_OBJ - 1; /* Process not last chunk. */
     } while (c_cur < c_total);
-    
+
 clean_up:
     if (get_list.objId)
 	free(get_list.objId);
     if (buf)
 	free(buf);
     if (fstream)
-	rc = tsm_close_fstream(&fstream);
+	tsm_close_fstream(&fstream);
 
     destroy_qarray();
+
     return rc;
 }
 

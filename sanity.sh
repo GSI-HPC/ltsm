@@ -190,12 +190,13 @@ __test_ltsm_hl_ll() {
 
 __create_letters() {
     local DIR_TEST_IMGS="${1}/letters/"
-    local SIZE=3072x3072
-    local IMG_FORMAT=pdf # Change format to e.g. ppm to create very large files. 
+    local SIZE=${2}
+    local IMG_FORMAT=${3} # Change format to e.g. ppm to create very large files.
+    local WHICH_LETTERS=${4}
 
     echo "creating ${IMG_FORMAT} image letters ${WHICH_LETTERS}, please wait..."
     mkdir -p ${DIR_TEST_IMGS}
-    for letter in {a..c}; do
+    for letter in {a..z}; do
 	convert \
 	    -size ${SIZE} \
 	    xc:lightgray \
@@ -252,7 +253,7 @@ unset LISTED_FILES
 LISTED_FILES=""
 unset MD5_LOCAL_FILES
 declare -A MD5_LOCAL_FILES
-__create_letters ${ARCHIVE_DIR}
+__create_letters ${ARCHIVE_DIR} "256x256" "png" "{a..z}"
 __create_filelist ${ARCHIVE_DIR}
 __calc_md5sum
 __test_ltsm_hl_ll ${ARCHIVE_DIR}
