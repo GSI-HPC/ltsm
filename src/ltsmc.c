@@ -258,7 +258,7 @@ int main(int argc, char *argv[])
 	    else if (d_arg)	/* Delete. */
 		rc = tsm_delete_file(f_arg, files_dirs_arg[i]);
 	    else if (a_arg) {	/* Archive. */
-		rc = is_valid_dir(files_dirs_arg[i]) ? tsm_archive_dir(f_arg, files_dirs_arg[i], c_arg, bTrue /* recursively */) :
+		rc = is_valid_dir(files_dirs_arg[i]) ? tsm_archive_dir(f_arg, files_dirs_arg[i], c_arg) :
 		    tsm_archive_file(f_arg, files_dirs_arg[i], c_arg);
 	    }
 	    if (rc)

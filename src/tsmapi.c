@@ -25,6 +25,7 @@
 #include <errno.h>
 #include <libgen.h>
 #include <dirent.h>
+#include <ftw.h>
 #include <math.h>
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -34,6 +35,15 @@
 #include "qarray.h"
 
 #define DIR_PERM (S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH)
+
+#define OBJ_TYPE(type) \
+    (DSM_OBJ_FILE == type ? "DSM_OBJ_FILE" : \
+    (DSM_OBJ_DIRECTORY == type ? "DSM_OBJ_DIRECTORY" : \
+    (DSM_OBJ_RESERVED1 == type ? "DSM_OBJ_RESERVED1" : \
+    (DSM_OBJ_RESERVED2 == type ? "DSM_OBJ_RESERVED2" : \
+    (DSM_OBJ_RESERVED3 == type ? "DSM_OBJ_RESERVED3" : \
+    (DSM_OBJ_WILDCARD == type ? "DSM_OBJ_WILDCARD" : \
+    (DSM_OBJ_ANY_TYPE == type ? "DSM_OBJ_ANY_TYPE" : "UNKNOWN")))))))
 
 static dsUint32_t handle;
 static char rcmsg[DSM_MAX_RC_MSG_LENGTH + 1] = {0};
@@ -174,10 +184,82 @@ static dsInt16_t tsm_close_fstream(FILE **fstream)
 	if (rc != 0) {
 	    ERR_MSG("fclose");
 	    rc = DSM_RC_UNSUCCESSFUL;
-	} else
+	} else {
+	    *fstream = NULL;
 	    rc = DSM_RC_SUCCESSFUL;
+	}
     } else
 	rc = DSM_RC_SUCCESSFUL;	/* FILE was already closed. */
+
+    return rc;
+}
+
+static dsInt16_t retrieve_file_obj(qryRespArchiveData *query_data,
+				   obj_info_t *obj_info)
+{
+    dsInt16_t rc;
+    FILE *fstream = NULL;
+    char *buf = NULL;
+    DataBlk dataBlk;
+
+    rc = tsm_open_fstream(query_data->objName.fs,
+			  query_data->objName.hl,
+			  query_data->objName.ll, &fstream);
+    if (rc != DSM_RC_SUCCESSFUL)
+	goto clean_up;
+
+    buf = malloc(sizeof(char) * TSM_BUF_LENGTH);
+    if (!buf) {
+	rc = DSM_RC_NO_MEMORY;
+	ERR_MSG("malloc");
+	goto clean_up;
+    }
+
+    dataBlk.stVersion = DataBlkVersion;
+    dataBlk.bufferLen = TSM_BUF_LENGTH;
+    dataBlk.numBytes  = 0;
+    dataBlk.bufferPtr = buf; /* Now we have a valid buffer pointer. */
+    memset(dataBlk.bufferPtr, 0, TSM_BUF_LENGTH);
+
+    off_t obj_size = to_off_t(obj_info->size);
+    off_t obj_size_write = 0;
+
+    /* Request data with a single dsmGetObj call, otherwise data is larger and we need
+       additional dsmGetData calls. */
+    rc = dsmGetObj(handle, &(query_data->objId), &dataBlk);
+    tsm_debug_msg(rc, "dsmGetObj");
+    dsBool_t done = bFalse;
+    while (!done) {
+
+	/* Note: dataBlk.numBytes always returns TSM_BUF_LENGTH (65536). */
+	if (!(rc == DSM_RC_MORE_DATA || rc == DSM_RC_FINISHED)) {
+	    tsm_err_msg(rc, "dsmGetObj or dsmGetData");
+	    done = bTrue;
+	} else {
+	    obj_size_write = obj_size < TSM_BUF_LENGTH ? obj_size : TSM_BUF_LENGTH;
+	    fwrite(buf, 1, obj_size_write, fstream);
+
+	    if (obj_size < TSM_BUF_LENGTH)
+		done = bTrue;
+	    else {
+		obj_size -= TSM_BUF_LENGTH;
+		dataBlk.numBytes = 0;
+		rc = dsmGetData(handle, &dataBlk);
+		tsm_debug_msg(rc, "dsmGetData");
+	    }
+	}
+    } /* End while (!done) */
+
+    rc = dsmEndGetObj(handle);
+    tsm_debug_msg(rc, "dsmEndGetObj");
+    if (rc != DSM_RC_SUCCESSFUL)
+	tsm_err_msg(rc, "dsmEndGetObj");
+
+clean_up:
+    if (buf)
+	free(buf);
+    if (fstream)
+	tsm_close_fstream(&fstream);
 
     return rc;
 }
@@ -193,12 +275,13 @@ void tsm_print_query_node(const qryRespArchiveData *qry_resp_arv_data,
 
     obj_info_t obj_info;
     memcpy(&obj_info, (char *)qry_resp_arv_data->objInfo, qry_resp_arv_data->objInfolen);
-    
+
     printf("object # %lu\n"
 	   "fs: %s, hl: %s, ll: %s\n"
 	   "object id (hi,lo)                          : (%u,%u)\n"
 	   "object info length                         : %d\n"
 	   "object info size (hi,lo)                   : (%u,%u)\n"
+	   "object type                                : %s\n"
 	   "object magic id                            : %d\n"
 	   "archive description                        : %s\n"
 	   "owner                                      : %s\n"
@@ -215,6 +298,7 @@ void tsm_print_query_node(const qryRespArchiveData *qry_resp_arv_data,
 	   qry_resp_arv_data->objInfolen,
 	   obj_info.size.hi,
 	   obj_info.size.lo,
+	   OBJ_TYPE(qry_resp_arv_data->objName.objType),
 	   obj_info.magic,
 	   qry_resp_arv_data->descr,
 	   qry_resp_arv_data->owner,
@@ -382,7 +466,7 @@ dsInt16_t tsm_query_hl_ll(const char *fs, const char *hl, const char *ll, const 
     strcpy(obj_name.fs, fs);
     strcpy(obj_name.hl, hl);
     strcpy(obj_name.ll, ll);
-    obj_name.objType = DSM_OBJ_FILE; /* Treat all objects as files, thus ignore DSM_OBJ_DIRECTORY, DSM_OBJ_ANY_TYPE. */
+    obj_name.objType = DSM_OBJ_ANY_TYPE;
 
     /* Fill up query structure. */
     qry_ar_data.stVersion = qryArchiveDataVersion;
@@ -391,7 +475,7 @@ dsInt16_t tsm_query_hl_ll(const char *fs, const char *hl, const char *ll, const 
     qry_ar_data.expDateLowerBound.year = DATE_MINUS_INFINITE;
     qry_ar_data.expDateUpperBound.year = DATE_PLUS_INFINITE;
     qry_ar_data.descr = desc == NULL || strlen(desc) == 0 ? "*" : (char *)desc;
-    qry_ar_data.owner = "";  /* Is an owner required? */
+    qry_ar_data.owner = "";  /* Omit owner. */
     qry_ar_data.objName = &obj_name;
 
     VERBOSE_MSG("tsm_query_archive with settings\n"
@@ -482,7 +566,7 @@ dsInt16_t extract_hl_ll(const char *filename, char *hl, char *ll)
     return DSM_RC_SUCCESSFUL;
 }
 
-dsInt16_t tsm_archive_file(const char *fs, const char *filename, const char *desc)
+static dsInt16_t tsm_archive(const char *fs, const char *filename, const char *desc, const dsBool_t is_file)
 {
     dsInt16_t rc;
     char hl[DSM_MAX_HL_LENGTH + 1] = {0};
@@ -520,7 +604,7 @@ dsInt16_t tsm_archive_file(const char *fs, const char *filename, const char *des
     strcpy(objName.fs, fs);
     strcpy(objName.hl, hl);
     strcpy(objName.ll, ll);
-    objName.objType = DSM_OBJ_FILE;
+    objName.objType = is_file ? DSM_OBJ_FILE : DSM_OBJ_DIRECTORY;
 
     /* A single transaction is an atomic action. Data sent within the
        boundaries of a transaction is either committed to the system at the end of the
@@ -613,7 +697,7 @@ dsInt16_t tsm_archive_file(const char *fs, const char *filename, const char *des
     dataBlkArea.stVersion = DataBlkVersion;
     dataBlkArea.bufferLen = sizeof(buf);
     
-    while (!feof(file)) {
+    while (is_file && !feof(file)) {
 	rbytes = fread(dataBlkArea.bufferPtr, 1, dataBlkArea.bufferLen, file);
 	if (ferror(file)) {
 	    ERR_MSG("fread");
@@ -675,6 +759,11 @@ clean_up:
     }
 	
     return rc;
+}
+
+dsInt16_t tsm_archive_file(const char *fs, const char *filename, const char *desc)
+{
+    return tsm_archive(fs, filename, desc, bTrue);
 }
 
 static dsInt16_t tsm_del_obj(const qryRespArchiveData *qry_resp_ar_data)
@@ -805,9 +894,6 @@ dsInt16_t tsm_retrieve_hl_ll(const char *fs, const char *hl, const char *ll, con
 {
     dsInt16_t rc;
     dsmGetList get_list;    
-    char *buf = NULL;
-    FILE *fstream = NULL;
-    DataBlk dataBlk;
 
     get_list.objId = NULL;
     
@@ -864,13 +950,6 @@ dsInt16_t tsm_retrieve_hl_ll(const char *fs, const char *hl, const char *ll, con
 	    tsm_err_msg(rc, "dsmBeginGetData");
 	    goto clean_up;
 	}
-	
-	buf = malloc(sizeof(char) * TSM_BUF_LENGTH);
-	if (!buf) {
-	    rc = DSM_RC_NO_MEMORY;
-	    ERR_MSG("malloc");
-	    goto clean_up;
-	}
 
 	obj_info_t obj_info;
 	for (unsigned long c_iter = c_begin; c_iter <= c_end; c_iter++) {
@@ -889,73 +968,55 @@ dsInt16_t tsm_retrieve_hl_ll(const char *fs, const char *hl, const char *ll, con
 	    VERBOSE_MSG("retrieving obj  fs          : %s\n"
 			"                hl          : %s\n"
 			"                ll          : %s\n"
+			"objtype                     : %s\n"
 			"objinfo magic               : %d\n"
 			"objinfo size bytes (hi,lo)  : (%u,%u)\n"
 			"estimated size bytes (hi,lo): (%u,%u)\n",
 			query_data.objName.fs,
 			query_data.objName.hl,
 			query_data.objName.ll,
+			OBJ_TYPE(query_data.objName.objType),
 			obj_info.magic,
 			obj_info.size.hi,
 			obj_info.size.lo,
 			query_data.sizeEstimate.hi,
 			query_data.sizeEstimate.lo);
 
-	    rc = tsm_open_fstream(query_data.objName.fs,
-				  query_data.objName.hl,
-				  query_data.objName.ll, &fstream);
-	    if (rc != DSM_RC_SUCCESSFUL)
-		goto clean_up;
-
 	    if (obj_info.magic != MAGIC_ID) {
-		VERBOSE_MSG("Ignore object due magic mismatch with MAGIC_ID: %d\n", obj_info.magic);
-		continue;
+		WARN_MSG("Skip object due magic mismatch with MAGIC_ID: %d\n", obj_info.magic);
+		continue;	/* Ignore this object and try next one. */
 	    }
-	    dataBlk.stVersion = DataBlkVersion;
-	    dataBlk.bufferLen = TSM_BUF_LENGTH;
-	    dataBlk.numBytes  = 0;
-	    dataBlk.bufferPtr = buf; /* Now we have a valid buffer pointer. */
-	    memset(dataBlk.bufferPtr, 0, TSM_BUF_LENGTH);
 
-	    off_t obj_size = to_off_t(obj_info.size);
-	    off_t obj_size_write = 0;
-		
-	    /* Request data with a single dsmGetObj call, otherwise data is larger and we need
-	       additional dsmGetData calls. */
-	    rc = dsmGetObj(handle, &(query_data.objId), &dataBlk);
-	    tsm_debug_msg(rc, "dsmGetObj");
-	    dsBool_t done = bFalse;
-	    while (!done) {
-
-		/* Note: dataBlk.numBytes always returns TSM_BUF_LENGTH (65536). */
-		if (!(rc == DSM_RC_MORE_DATA || rc == DSM_RC_FINISHED)) {
-		    tsm_err_msg(rc, "dsmGetObj or dsmGetData");
-		    done = bTrue;
-		} else {
-		    obj_size_write = obj_size < TSM_BUF_LENGTH ? obj_size : TSM_BUF_LENGTH;
-		    fwrite(buf, 1, obj_size_write, fstream);
-		
-		    if (obj_size < TSM_BUF_LENGTH)
-			done = bTrue;
-		    else {
-			obj_size -= TSM_BUF_LENGTH;
-			dataBlk.numBytes = 0;
-			rc = dsmGetData(handle, &dataBlk);
-			tsm_debug_msg(rc, "dsmGetData");
+	    switch (query_data.objName.objType) {
+	        case DSM_OBJ_FILE: {
+		    rc = retrieve_file_obj(&query_data, &obj_info);
+		    DEBUG_MSG("retrieve_fil_obj, rc: %d\n", rc);
+		    if (rc != DSM_RC_SUCCESSFUL) {
+			ERR_MSG("retrieve_file_obj");
 		    }
+		} break;
+	        case DSM_OBJ_DIRECTORY: {
+		    const unsigned int len = strlen(query_data.objName.fs) +
+			strlen(query_data.objName.hl) +
+			strlen(query_data.objName.ll) + 1;
+		    char directory[len];
+		    bzero(directory, sizeof(char) * len);
+		    snprintf(directory, len, "%s%s%s",
+			     query_data.objName.fs,
+			     query_data.objName.hl,
+			     query_data.objName.ll);
+		    rc = mkdir_p(directory);
+		    DEBUG_MSG("mkdir_p(%s)\n", directory);
+		    if (rc) {
+			ERR_MSG("mkdir_p");
+		    }
+		    break;
+		}
+	        default: {
+		    WARN_MSG("Skip object due to unkown type %s\n", OBJ_TYPE(query_data.objName.objType));
+		    continue;
 		}
 	    }
-	    rc = dsmEndGetObj(handle);
-	    tsm_debug_msg(rc, "dsmEndGetObj");
-	    if (rc != DSM_RC_SUCCESSFUL) {
-		tsm_err_msg(rc, "dsmEndGetObj");
-		goto clean_up;
-	    }
-	    rc = tsm_close_fstream(&fstream);
-	    if (rc == DSM_RC_SUCCESSFUL)
-		fstream = NULL;
-	    else
-		ERR_MSG("tsm_close_fstream");
 	} /* End-for iterate objid's. */
 
 	/* There are no return codes that are specific to this call. */
@@ -973,51 +1034,38 @@ dsInt16_t tsm_retrieve_hl_ll(const char *fs, const char *hl, const char *ll, con
 clean_up:
     if (get_list.objId)
 	free(get_list.objId);
-    if (buf)
-	free(buf);
-    if (fstream)
-	tsm_close_fstream(&fstream);
 
     destroy_qarray();
 
     return rc;
 }
 
-static dsInt16_t dir_walk(const char *fs, const char *directory, const char *desc, const dsBool_t recursive)
+
+static dsInt16_t dir_walk(const char *fs, const char *directory, const char *desc)
 {
-    dsInt16_t rc = DSM_RC_UNSUCCESSFUL;
-    DIR *dir = NULL;
+    dsInt16_t rc;
 
-    dir = opendir(directory);
-    if (!dir) {
-	ERR_MSG("opendir");
-	goto clean_up;
+    int dir_trav(const char *fpath, const struct stat *sb, int tflag)
+    {
+	dsInt16_t rc;
+
+	if (tflag == FTW_D)
+	    rc = tsm_archive(fs, fpath, desc, bFalse);
+	else if (tflag == FTW_F)
+	    rc = tsm_archive(fs, fpath, desc, bTrue);
+	else
+	    rc = DSM_RC_UNSUCCESSFUL;
+
+	return rc;
     }
 
-    char filepath[MAXPATHLEN] = {0};
-    struct dirent *entry = NULL;
-    for (entry = readdir(dir); entry; entry = readdir(dir)) {
-	sprintf(filepath, "%s/%s", directory, entry->d_name);
-	if (entry->d_type == DT_DIR
-	    && (strcmp(".", entry->d_name))
-	    && (strcmp("..", entry->d_name))
-	    && recursive) {
-	    DEBUG_MSG("dir_walk dir: %s\n", filepath);
-            dir_walk(fs, filepath, desc, recursive);
-	}
-	if (entry->d_type == DT_REG) {
-	    DEBUG_MSG("dir_walk file: %s\n", filepath);
-	    rc = tsm_archive_file(fs, filepath, desc);
-	    if (rc != DSM_RC_SUCCESSFUL)
-		WARN_MSG("Cannot archive file: %s\n", filepath);
-	}
-    }
-clean_up:
-    closedir(dir);
+    rc = ftw(directory, dir_trav, 0);
+
     return rc;
 }
 
-dsInt16_t tsm_archive_dir(const char *fs, const char *directory, const char *desc, const dsBool_t recursive)
+dsInt16_t tsm_archive_dir(const char *fs, const char *directory, const char *desc)
 {
-    return dir_walk(fs, directory, desc, recursive);
+    DEBUG_MSG("fs: %s, directory: %s, desc: %s\n", fs, directory, desc);
+    return dir_walk(fs, directory, desc);
 }
