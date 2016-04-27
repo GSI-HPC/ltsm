@@ -13,7 +13,7 @@ Before using LTSM a working access to a TSM server is required. One can install 
 TSM server (e.g. inside a KVM) for a period of 30 days before the license expires. A complete installation and setup guide is provided
 at [TSM Server Installation Guide](http://web-docs.gsi.de/~tstibor/tsm/).
 
-To compile LTSMAPI/LTSMC, first clone the git repository first
+To compile *ltsmc* first clone the git repository
 ```
 git clone https://github.com/tstibor/ltsm
 ```
@@ -72,7 +72,7 @@ syntax: bin/ltsmc
 version: 0.0.1-19-g3f7bbbe, written by Thomas Stibor <t.stibor@gsi.de>
 ```
 
-## Example of core TSM Operations
+## Examples of Core TSM Operations <a id="example.of.core.tsm.operations"></a>
 Make sure to setup proper TSM server and nodename entries in file `/opt/tivoli/tsm/client/api/bin64/dsm.sys`. For the 
 [TSM Server Installation Guide](http://web-docs.gsi.de/~tstibor/tsm/) setup the following entries are working:
 ```
@@ -169,6 +169,25 @@ values, otherwise your retrieving process will brake. A simple solution is to pa
 of `DSM_MAX_GET_OBJ` and call `dsmBeginGetData` on these max chunk sizes.
 
 ## Issues
+### Options file '*' could not be found, or it cannot be read
+
+If you experience the error
+```
+[ERROR] (src/tsmapi.c) dsmInitEx: handle: 0 ANS1035S (RC406) Options file '*' could not be found, or it cannot be read.
+```
+then the environment variable `DSMI_CONFIG` is either not set or is pointing to an improper option file. When you checkout the repository, e.g. make sure to set `DSMI_CONFIG` as follows
+```
+export DSMI_CONFIG=`pwd`/dsmopt/dsm.opt
+```
+The error can also be triggered by not existing or improper setup system file `/opt/tivoli/tsm/client/api/bin64/dsm.sys`. Make sure the `dsm.sys` file exists in directory `/opt/tivoli/tsm/client/api/bin64/` and contain proper settings such as
+listed in [Examples of Core TSM Operations](#example.of.core.tsm.operations).
+
+### Recursive query
+
+Suppose you want to query and list all archived data, however you don't know exactly the file paths. The following simple command query all archived data for the registered node
+```
+bin/ltsmc --query --fsname '/' --node lxdv81 --password lxdv81 --hl '*' --ll '/*'
+```
 
 ## References
 A thorough description and code examples of IBM's low-level TSM API/library can be found in the open document [Using the Application Programming Interface](http://web-docs.gsi.de/~tstibor/tsm/doc/using_the_programming_application_interface.pdf), 2007.
