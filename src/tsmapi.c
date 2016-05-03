@@ -655,15 +655,10 @@ static dsInt16_t tsm_archive(const char *fs, const char *filename, const char *d
 
     /* Note: If file is empty (filesize 0), then following error is thrown:
        dsmSendData: handle: 1 ANS0344E (RC2107) Cannot Send data with a zero byte sizeEstimate.
-       The implementation seems to be now bullet proof and the error can be ignored, the zero size file
-       is anyhow written on the TSM. The sound approach is by setting hi_lo_size.lo to 1 if it is 0. */
-    if (hi_lo_size.hi == 0 && hi_lo_size.lo == 0) {
-	hi_lo_size.lo++;
-	DEBUG_MSG("Modifying hi_lo_size (hi,lo):(%d,%d)\n", hi_lo_size.hi, hi_lo_size.lo);
-    }
-    
+       Setting sizeEstimate.lo = 1 when archiving an empty file seems to fix the problem.
+    */
     objAttrArea.sizeEstimate.hi = hi_lo_size.hi;
-    objAttrArea.sizeEstimate.lo = hi_lo_size.lo;
+    objAttrArea.sizeEstimate.lo = (hi_lo_size.hi == 0 && hi_lo_size.lo == 0) ? 1 : hi_lo_size.lo;
     objAttrArea.objCompressed = bFalse; /* Note: Currently no compression is supported. */
     
     obj_info = malloc(sizeof(obj_info_t));

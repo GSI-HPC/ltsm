@@ -152,14 +152,8 @@ Whenever you are using the low-level library `libApiTSM64.so` make sure to catch
 ```
 dsStruct64_t hi_lo_size = to_dsStruct64_t(st_buf.st_size);
 
-if (hi_lo_size.hi == 0 && hi_lo_size.lo == 0) {
-	hi_lo_size.lo++;
-	DEBUG_MSG("Modifying hi_lo_size (hi,lo):(%d,%d)\n", hi_lo_size.hi, hi_lo_size.lo);
-}
-
 objAttrArea.sizeEstimate.hi = hi_lo_size.hi;
-objAttrArea.sizeEstimate.lo = hi_lo_size.lo;
-
+objAttrArea.sizeEstimate.lo = (hi_lo_size.hi == 0 && hi_lo_size.lo == 0) ? 1 : hi_lo_size.lo;
 ```
 ### Directories containing more than `DSM_MAX_GET_OBJ` files
 Before you can retrieve archived data, calling function `dsmBeginQuery(...)` is required. Subsequently filling e.g. an array
