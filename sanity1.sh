@@ -2,7 +2,7 @@
 
 # Exit on error.
 set -e
-VERBOSE=1
+VERBOSE=0
 
 __log() {
     [[ ${VERBOSE} -eq 1 ]] && echo "$@"
@@ -59,9 +59,9 @@ __rnd_files()
 # main
 ##########################################################
 PATH_PREFIX="/tmp/ltsm/"
-MAX_NUM_FILES=5
-MAX_NESTED_DIRS=10
-MAX_DIR_LEN=8
+MAX_NUM_FILES=35
+MAX_NESTED_DIRS=16
+MAX_DIR_LEN=6
 
 echo "Creating sanity data ... please wait" && rm -rf ${PATH_PREFIX}
 
@@ -77,7 +77,7 @@ MAX_DIR_LEN=7
 ##########################################################
 # Create directories with empty files
 ##########################################################
-MAX_DIRS=2
+MAX_DIRS=4
 for r in $(seq 1 ${MAX_DIRS}); do
     DIR=$(__rnd_dirs ${MAX_NESTED_DIRS} ${MAX_DIR_LEN})
     mkdir -p ${DIR}
@@ -113,14 +113,14 @@ find ${PATH_PREFIX} -exec md5sum -b '{}' \; &> ${MD5_ORIG}
 ##########################################################
 # LTSM action
 ##########################################################
-TSM_NAME="lxdv81"
+TSM_NAME=${1-lxdv81}
 LTSM_BIN="bin/ltsmc"
 LTSM_NODE=${TSM_NAME}
 LTSM_PASSWORD=${TSM_NAME}
 export DSMI_CONFIG=`pwd`/dsmopt/dsm.opt
 
 # Build binary
-make clean && DEBUG=1 VERBOSE=1 make > /dev/null
+make clean && DEBUG=0 VERBOSE=0 make > /dev/null
 
 # Archive data
 echo "Archiving data ... please wait"
