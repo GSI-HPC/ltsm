@@ -38,7 +38,7 @@ __calc_md5sum() {
 __ltsm_archive() {
     echo "##### Archiving files #####"
     set -x
-    ${LTSM_BIN} ${LTSM_VERBOSE} -a -f / -n ${LTSM_NODE} -p ${LTSM_PASSWORD} ${1}
+    ${LTSM_BIN} ${LTSM_VERBOSE} -a -f / -n ${LTSM_NODE} -p ${LTSM_PASSWORD} -s ${LTSM_SERVERNAME} ${1}
     set +x    
     echo "##### Archiving done #####"
 
@@ -49,7 +49,7 @@ __ltsm_hl_ll_star() {
     local cmd=${1}
     local hl_param=${2}
     set -x
-    ${LTSM_BIN} ${LTSM_VERBOSE} --${cmd} -f / --node ${LTSM_NODE} --password ${LTSM_PASSWORD} --hl ${hl_param} --l "/*"
+    ${LTSM_BIN} ${LTSM_VERBOSE} --${cmd} -f / --node ${LTSM_NODE} --password ${LTSM_PASSWORD} -s ${LTSM_SERVERNAME} --hl ${hl_param} --l "/*"
     set +x
 
     return 0
@@ -91,7 +91,7 @@ __ltsm_file() {
     local cmd=${1}
     local file=${2}
     set -x    
-    ${LTSM_BIN} ${LTSM_VERBOSE} --${cmd} -f / --node ${LTSM_NODE} --password ${LTSM_PASSWORD} ${file}
+    ${LTSM_BIN} ${LTSM_VERBOSE} --${cmd} -f / --node ${LTSM_NODE} --password ${LTSM_PASSWORD} -s ${LTSM_SERVERNAME} ${file}
     set +x
 
     return 0
@@ -215,11 +215,12 @@ __create_letters() {
 ##############################################################
 # main
 ##############################################################
-TSM_NAME="lxdv81"
+TSM_NAME=${1-lxdv81}
 LTSM_BIN="bin/ltsmc"
 LTSM_NODE=${TSM_NAME}
 LTSM_PASSWORD=${TSM_NAME}
-export DSMI_CONFIG=`pwd`/dsmopt/dsm.opt
+LTSM_SERVERNAME=${2-lxdv81-kvm-tsm-server}
+export DSMI_CONFIG=`pwd`/dsmopt/dsm.sys
 
 make clean
 DEBUG=1 VERBOSE=1 make
