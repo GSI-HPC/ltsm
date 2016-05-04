@@ -36,11 +36,12 @@ static char c_arg[DSM_MAX_DESCR_LENGTH + 1] = {0};
 static char n_arg[DSM_MAX_NODE_LENGTH + 1] = {0};
 static char u_arg[MAX_USERNAME_LENGTH + 1] = {0};
 static char p_arg[MAX_PASSWORD_LENGTH + 1] = {0};
+static char s_arg[MAX_OPTIONS_LENGTH + 1] = {0};
 static char **files_dirs_arg = NULL;
 
 void usage(const char *prg_name)
 {
-    printf("syntax: %s\n"
+    printf("Syntax: %s\n"
 	   "\t-a, --archive\n"
 	   "\t-r, --retrieve\n"
 	   "\t-q, --query\n"
@@ -52,7 +53,8 @@ void usage(const char *prg_name)
 	   "\t-n, --node <STRING>\n"
 	   "\t-u, --username <STRING>\n"
 	   "\t-p, --password <STRING>\n"
-	   "version: %s, written by Thomas Stibor <t.stibor@gsi.de>\n",
+	   "\t-s, --servername <STRING>\n"
+	   "\nVersion: %s,© Thomas Stibor <t.stibor@gsi.de>\n",
 	   prg_name, VERSION);
 
     exit(DSM_RC_UNSUCCESSFUL);
@@ -85,6 +87,9 @@ void sanity_arg_check(const char *prg_name)
 	usage(prg_name);
     } else if (strlen(p_arg) == 0) {
 	printf("missing argument: -p, --password\n");
+	usage(prg_name);
+    } else if (strlen(s_arg) == 0) {
+	printf("missing argument: -s, --servername\n");
 	usage(prg_name);
     } /* Username (arg_u) is not necessarily required. */
 }
@@ -142,12 +147,13 @@ int main(int argc, char *argv[])
 	  {"node",        required_argument, 0, 'n'},
 	  {"username",    required_argument, 0, 'u'},
 	  {"password",    required_argument, 0, 'p'},
+	  {"servername",  required_argument, 0, 's'},
           {0, 0, 0, 0}
       };
       /* getopt_long stores the option index here. */
       int option_index = 0;
 
-      c = getopt_long (argc, argv, "arqdf:h:l:c:n:u:p:",
+      c = getopt_long (argc, argv, "arqdf:h:l:c:n:u:p:s:",
                        long_options, &option_index);
 
       /* Detect the end of the options. */
@@ -199,6 +205,10 @@ int main(int argc, char *argv[])
 	  VERBOSE_MSG("option -p, --password=%s\n", optarg);
 	  strncpy(p_arg, optarg, strlen(optarg) < MAX_PASSWORD_LENGTH ? strlen(optarg) : MAX_PASSWORD_LENGTH);
           break;
+      case 's':			/* servername */
+	  VERBOSE_MSG("option -s, --servername=%s\n", optarg);
+	  strncpy(s_arg, optarg, strlen(optarg) < MAX_OPTIONS_LENGTH ? strlen(optarg) : MAX_OPTIONS_LENGTH);
+          break;
       default:
 	  usage(argv[0]);
       }
@@ -227,6 +237,13 @@ int main(int argc, char *argv[])
     strcpy(login.password, p_arg);
     strcpy(login.username, u_arg);
     strcpy(login.platform, "GNU/Linux");
+    const unsigned short s_arg_len = 1 + strlen(s_arg) + strlen("-se=");
+    if (s_arg_len < MAX_OPTIONS_LENGTH)
+	snprintf(login.options, s_arg_len, "-se=%s", s_arg);
+    else
+	WARN_MSG("Option parameter \'-se=%s\' is larger than "
+		 "MAX_OPTIONS_LENGTH: %d and is ignored\n",
+		 s_arg, MAX_OPTIONS_LENGTH);
 
     dsInt16_t rc;
     rc = tsm_init(&login);

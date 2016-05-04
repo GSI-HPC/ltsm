@@ -341,7 +341,7 @@ dsInt16_t tsm_init(login_t *login)
     initIn.clientPasswordP  = login->password;
     initIn.applicationTypeP = login->platform;
     initIn.configfile       = NULL;
-    initIn.options          = NULL;
+    initIn.options          = login->options;
     initIn.userNameP        = NULL; /* Administrative user. */
     initIn.userPasswordP    = NULL; /* Administrative password. */
 

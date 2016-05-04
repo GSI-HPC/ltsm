@@ -57,7 +57,7 @@ gcc -m64 -DLINUX_CLIENT -std=c99 -Wall -D_FILE_OFFSET_BITS=64 -D_LARGEFILE64_SOU
 ### Executable and Testing
 After successful compiling you will find two binaries: `bin/ltsmc_testsuite` and `bin/ltsmc`. The former is a simple test suite, the latter the console client:
 ```
-syntax: bin/ltsmc
+Syntax: ./bin/ltsmc
 	-a, --archive
 	-r, --retrieve
 	-q, --query
@@ -69,12 +69,14 @@ syntax: bin/ltsmc
 	-n, --node <STRING>
 	-u, --username <STRING>
 	-p, --password <STRING>
-version: 0.0.1-19-g3f7bbbe, written by Thomas Stibor <t.stibor@gsi.de>
+	-s, --servername <STRING>
+
+Version: 0.0.5-1-gb460ddf,© Thomas Stibor <t.stibor@gsi.de>
 ```
 
 ## Examples of Core TSM Operations <a id="example.of.core.tsm.operations"></a>
-Make sure to setup proper TSM server and nodename entries in file `/opt/tivoli/tsm/client/api/bin64/dsm.sys`. For the 
-[TSM Server Installation Guide](http://web-docs.gsi.de/~tstibor/tsm/) setup the following entries are working:
+Make sure to setup proper TSM servername, nodename and IP address entries in file `dsmopt/dsm.sys` or in the default file
+`/opt/tivoli/tsm/client/api/bin64/dsm.sys`. For [TSM Server Installation Guide](http://web-docs.gsi.de/~tstibor/tsm/) the following entries are working:
 ```
 SErvername              lxdv81-kvm-tsm-server
    Nodename             lxdv81
@@ -82,15 +84,11 @@ SErvername              lxdv81-kvm-tsm-server
 
 SErvername              polaris-kvm-tsm-server
    Nodename             polaris
-   TCPServeraddress     192.168.254.101
+   TCPServeraddress     192.168.254.102
 ```
 
-In addition setup `ENV` variable `export DSMI_CONFIG=ltsm/dsmopt/dsm.opt` with file content
-```
-SERVERNAME lxdv81-kvm-tsm-server
-* SERVERNAME polaris-kvm-tsm-server
-```
-where `*` denote a comment. See also the [sanity script](https://github.com/tstibor/ltsm/blob/master/sanity.sh) fore more details.
+In addition make sure to set variable `DSMI_CONFIG` pointing to the file `dsm.sys`, that is: ```export DSMI_CONFIG=`pwd`/dsmopt/dsm.sys``` or ```export DSMI_CONFIG=/opt/tivoli/tsm/client/api/bin64/dsm.sys```.
+See also the [sanity script](https://github.com/tstibor/ltsm/blob/master/sanity1.sh) fore more details.
 
 ### Archiving data
 For demonstrating of how to archive files and directories we first create an *archive* directories and place there some data.
@@ -100,35 +98,35 @@ mkdir -p /tmp/archives && wget --directory-prefix /tmp/archives https://www.kern
 
 First we archive the single file `/tmp/archives/linux/Makefile`
 ```
-bin/ltsmc --archive --fsname '/' -c 'Historic Linux Kernel Makefile' --node lxdv81 --password lxdv81 /tmp/archives/linux/Makefile
+bin/ltsmc --archive --fsname '/' -c 'Historic Linux Kernel Makefile' --node lxdv81 --password lxdv81 --servername=lxdv81-kvm-tsm-server /tmp/archives/linux/Makefile
 ```
 
 For archiving the complete `/tmp/archives/linux` directory (with all sub-directories) perform following command:
 ```
-bin/ltsmc --archive --fsname '/' -c 'Complete Historic Linux Kernel' --node lxdv81 --password lxdv81 /tmp/archives/linux
+bin/ltsmc --archive --fsname '/' -c 'Complete Historic Linux Kernel' --node lxdv81 --password lxdv81 --servername=lxdv81-kvm-tsm-server /tmp/archives/linux
 ```
 ### Querying Data
 For querying all data stored in directory `/tmp/archives/linux`
 ```
-bin/ltsmc --query --fsname '/' --node lxdv81 --password lxdv81 --hl '/tmp/archives/linux/*' --ll '/*'
+bin/ltsmc --query --fsname '/' --node lxdv81 --password lxdv81 --servername=lxdv81-kvm-tsm-server --hl '/tmp/archives/linux/*' --ll '/*'
 ```
 Querying the single file `/tmp/archives/linux/Makefile`
 ```
-bin/ltsmc --query --fsname '/' --node lxdv81 --password lxdv81 --hl '/tmp/archives/linux' --ll '/Makefile'
+bin/ltsmc --query --fsname '/' --node lxdv81 --password lxdv81 --servername=lxdv81-kvm-tsm-server --hl '/tmp/archives/linux' --ll '/Makefile'
 ```
 ### Retrieving Data
 We first delete all data in `/tmp/archives/linux` and the restore the data to that directory:
 ```
-rm -rf /tmp/archives/linux && bin/ltsmc --retrieve --fsname '/' --node lxdv81 --password lxdv81 --hl '/tmp/archives/linux/*' --ll '/*'
+rm -rf /tmp/archives/linux && bin/ltsmc --retrieve --fsname '/' --node lxdv81 --password lxdv81 --servername=lxdv81-kvm-tsm-server --hl '/tmp/archives/linux/*' --ll '/*'
 ```
 ### Deleting Data
 To delete data on the TSM perform the following command:
 ```
-bin/ltsmc --delete --fsname '/' --node lxdv81 --password lxdv81 --hl '/tmp/archives/linux/*' --ll '/*'
+bin/ltsmc --delete --fsname '/' --node lxdv81 --password lxdv81 --servername=lxdv81-kvm-tsm-server --hl '/tmp/archives/linux/*' --ll '/*'
 ```
 A subsequent *delete* or *query* command shows that there is no data left on the TSM side.
 ```
-bin/ltsmc --delete --fsname '/' --node lxdv81 --password lxdv81 --hl '/tmp/archives/linux/*' --ll '/*'
+bin/ltsmc --delete --fsname '/' --node lxdv81 --password lxdv81 --servername=lxdv81-kvm-tsm-server --hl '/tmp/archives/linux/*' --ll '/*'
 ```
 
 ### Screenshot and Screencast
@@ -171,16 +169,19 @@ If you experience the error
 ```
 then the environment variable `DSMI_CONFIG` is either not set or is pointing to an improper option file. When you checkout the repository, e.g. make sure to set `DSMI_CONFIG` as follows
 ```
-export DSMI_CONFIG=`pwd`/dsmopt/dsm.opt
+export DSMI_CONFIG=`pwd`/dsmopt/dsm.sys
 ```
-The error can also be triggered by not existing or improper setup system file `/opt/tivoli/tsm/client/api/bin64/dsm.sys`. Make sure the `dsm.sys` file exists in directory `/opt/tivoli/tsm/client/api/bin64/` and contain proper settings such as
-listed in [Examples of Core TSM Operations](#example.of.core.tsm.operations).
+If you see the error
+```
+[ERROR] (src/tsmapi.c) dsmInitEx: handle: 0 ANS1217E (RC409)  Server name not found in System Options File
+```
+then as the message suggests the specified servername e.g. `--servername=<lxdv81-kvm-tsm-non-server>`does not exists in the option file `dsm.sys`.
 
 ### Recursive query
 
 Suppose you want to query and list all archived data, however you don't know exactly the file paths. The following simple command query all archived data for the registered node
 ```
-bin/ltsmc --query --fsname '/' --node lxdv81 --password lxdv81 --hl '*' --ll '/*'
+bin/ltsmc --query --fsname '/' --node lxdv81 --password lxdv81 --servername=lxdv81-kvm-tsm-server --hl '*' --ll '/*'
 ```
 
 ## References

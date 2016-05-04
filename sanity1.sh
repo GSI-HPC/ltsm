@@ -63,7 +63,7 @@ MAX_NUM_FILES=35
 MAX_NESTED_DIRS=16
 MAX_DIR_LEN=6
 
-echo "Creating sanity data ... please wait" && rm -rf ${PATH_PREFIX}
+echo "Creating sanity data in ${PATH_PREFIX} please wait ..." && rm -rf ${PATH_PREFIX}
 
 ##########################################################
 # Create directories and files
@@ -117,24 +117,25 @@ TSM_NAME=${1-lxdv81}
 LTSM_BIN="bin/ltsmc"
 LTSM_NODE=${TSM_NAME}
 LTSM_PASSWORD=${TSM_NAME}
-export DSMI_CONFIG=`pwd`/dsmopt/dsm.opt
+LTSM_SERVERNAME=${2-lxdv81-kvm-tsm-server}
+export DSMI_CONFIG=`pwd`/dsmopt/dsm.sys
 
 # Build binary
 make clean && DEBUG=0 VERBOSE=0 make > /dev/null
 
 # Archive data
-echo "Archiving data ... please wait"
-${LTSM_BIN} -a -f '/' -n ${LTSM_NODE} -p ${LTSM_PASSWORD} ${PATH_PREFIX}
+echo "Archiving data please wait ..."
+${LTSM_BIN} -a -f '/' -n ${LTSM_NODE} -p ${LTSM_PASSWORD} -s ${LTSM_SERVERNAME} ${PATH_PREFIX}
 
 # Remove locally and retrieve
 rm -rf ${PATH_PREFIX}
-${LTSM_BIN} -r -f '/' -n ${LTSM_NODE} -p ${LTSM_PASSWORD} -h '/*' -l '/*'
+${LTSM_BIN} -r -f '/' -n ${LTSM_NODE} -p ${LTSM_PASSWORD} -s ${LTSM_SERVERNAME} -h '/*' -l '/*'
 
 echo "Creating MD5 sum file of retrieved data: ${MD5_RETR}"
 find ${PATH_PREFIX} -exec md5sum -b '{}' \; &> ${MD5_RETR}
 
 # Remove data
-${LTSM_BIN} -d -f '/' -n ${LTSM_NODE} -p ${LTSM_PASSWORD} -h '/*' -l '/*'
+${LTSM_BIN} -d -f '/' -n ${LTSM_NODE} -p ${LTSM_PASSWORD} -s ${LTSM_SERVERNAME} -h '/*' -l '/*'
 
 # Check for equality
 ARE_EQUAL=1 # FALSE

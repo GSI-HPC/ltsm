@@ -34,6 +34,7 @@
 #define TSM_BUF_LENGTH 65536
 #define MAX_PASSWORD_LENGTH 32
 #define MAX_USERNAME_LENGTH 32
+#define MAX_OPTIONS_LENGTH 256
 #define MAX_OFF_T_DS64 20
 
 #define MAGIC_ID 71147
@@ -43,6 +44,7 @@ typedef struct {
     char password[MAX_PASSWORD_LENGTH + 1];
     char username[MAX_USERNAME_LENGTH + 1];
     char platform[DSM_MAX_PLATFORM_LENGTH + 1];
+    char options[MAX_OPTIONS_LENGTH + 1];
 } login_t;
 
 typedef struct {
