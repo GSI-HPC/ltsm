@@ -38,7 +38,6 @@ void test_dsstruct64_off_t(CuTest *tc)
 	printf("size_off_t: %20jd, size_off_t(dsStruct64_t): %20jd\n", size_off_t, size_off_t_res);
 	CuAssertIntEquals_Msg(tc, "off_t -> dsStruct64_t -> off_t", size_off_t, size_off_t_res);
 
-	size_off_t_res = 0;
 	size_off_t_res = to_off_t(size_ds_struct64_t);
 	CuAssertIntEquals_Msg(tc, "dsStruct64_t -> off_t", size_off_t, size_off_t_res);
 	
