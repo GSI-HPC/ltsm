@@ -24,6 +24,12 @@
 #include "tsmapi.h"
 #include "log.h"
 
+/* If version tag can not be obtained via Makefile
+   and `git describe`, set it to not available. */
+#ifndef VERSION
+#define VERSION "NA"
+#endif
+
 /* Arguments */
 static dsBool_t a_arg = bFalse;
 static dsBool_t r_arg = bFalse;
@@ -54,7 +60,7 @@ void usage(const char *prg_name)
 	   "\t-u, --username <STRING>\n"
 	   "\t-p, --password <STRING>\n"
 	   "\t-s, --servername <STRING>\n"
-	   "\nVersion: %s,© Thomas Stibor <t.stibor@gsi.de>\n",
+	   "\nVersion: %s © by Thomas Stibor <t.stibor@gsi.de>\n",
 	   prg_name, VERSION);
 
     exit(DSM_RC_UNSUCCESSFUL);
@@ -266,6 +272,8 @@ int main(int argc, char *argv[])
 	    printf("Arguments --hl and --ll provided however --query, --delete or --retrieve is missing\n");
 	    usage(argv[0]);
 	}
+	if (rc)
+	    WARN_MSG("Operation failed with result: %d\n", rc);
     } else { /* Handle operations on files and directories resp. */
 	for (size_t i = 0; i < num_files_dirs && files_dirs_arg[i]; i++) {
 	    if (q_arg)		/* Query. */
@@ -293,5 +301,7 @@ clean_up:
     }
 
     tsm_quit();
+
+    return rc;
 }
 
