@@ -113,11 +113,12 @@ find ${PATH_PREFIX} -exec md5sum -b '{}' \; &> ${MD5_ORIG}
 ##########################################################
 # LTSM action
 ##########################################################
-TSM_NAME=${1-lxdv81}
+TSM_NAME=${1-polaris}
 LTSM_BIN="bin/ltsmc"
+LTSM_VERBOSE="-v"
 LTSM_NODE=${TSM_NAME}
 LTSM_PASSWORD=${TSM_NAME}
-LTSM_SERVERNAME=${2-lxdv81-kvm-tsm-server}
+LTSM_SERVERNAME=${2-polaris-kvm-tsm-server}
 export DSMI_CONFIG=`pwd`/dsmopt/dsm.sys
 
 # Build binary
@@ -125,17 +126,17 @@ make clean && DEBUG=0 VERBOSE=0 make > /dev/null
 
 # Archive data
 echo "Archiving data please wait ..."
-${LTSM_BIN} -a -f '/' -n ${LTSM_NODE} -p ${LTSM_PASSWORD} -s ${LTSM_SERVERNAME} ${PATH_PREFIX}
+${LTSM_BIN} ${LTSM_VERBOSE} -a -f '/' -n ${LTSM_NODE} -p ${LTSM_PASSWORD} -s ${LTSM_SERVERNAME} ${PATH_PREFIX}
 
 # Remove locally and retrieve
 rm -rf ${PATH_PREFIX}
-${LTSM_BIN} -r -f '/' -n ${LTSM_NODE} -p ${LTSM_PASSWORD} -s ${LTSM_SERVERNAME} -h '/*' -l '/*'
+${LTSM_BIN} ${LTSM_VERBOSE} -r -f '/' -n ${LTSM_NODE} -p ${LTSM_PASSWORD} -s ${LTSM_SERVERNAME} -h '/*' -l '/*'
 
 echo "Creating MD5 sum file of retrieved data: ${MD5_RETR}"
 find ${PATH_PREFIX} -exec md5sum -b '{}' \; &> ${MD5_RETR}
 
 # Remove data
-${LTSM_BIN} -d -f '/' -n ${LTSM_NODE} -p ${LTSM_PASSWORD} -s ${LTSM_SERVERNAME} -h '/*' -l '/*'
+${LTSM_BIN} ${LTSM_VERBOSE} -d -f '/' -n ${LTSM_NODE} -p ${LTSM_PASSWORD} -s ${LTSM_SERVERNAME} -h '/*' -l '/*'
 
 # Check for equality
 ARE_EQUAL=1 # FALSE
