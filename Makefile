@@ -17,8 +17,8 @@ _OBJ            = $(subst $(OBJDIR)/$(SRCDIR)/$(EXE_LTSM_NAME).o,, $(OBJ))
 OBJTEST         = $(patsubst %.c, $(OBJDIR)/%.o, $(SRCTEST))
 # --------------- Compiler settings, include and library paths.
 CC              = gcc
-DFLAGS          = -D_FILE_OFFSET_BITS=64 -D_LARGEFILE64_SOURCE
-CFLAGS          = -m64 -DLINUX_CLIENT -std=c99 -Wall -Wextra $(DFLAGS)
+DFLAGS          = -D_LARGEFILE64_SOURCE # -D_FILE_OFFSET_BITS=64
+CFLAGS          = -m64 -DLINUX_CLIENT -std=c99 -Wall -Wextra -Werror $(DFLAGS)
 INCS_IBMTSM     = -I ibmtsm -I $(TSM_CL_API_INCS)
 INCS_CUTEST     = -I cutest
 INC_TSMAPI      = -I $(SRCDIR)

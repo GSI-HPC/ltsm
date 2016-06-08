@@ -28,6 +28,7 @@
 #include <libgen.h>
 #include <dirent.h>
 #include <ftw.h>
+#include <fts.h>
 #include <math.h>
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -1037,26 +1038,55 @@ clean_up:
 	return rc;
 }
 
-
 static dsInt16_t dir_walk(const char *fs, const char *directory, const char *desc)
 {
-	dsInt16_t rc;
+	FTS *fts;
+	int fts_options = FTS_COMFOLLOW | FTS_LOGICAL | FTS_NOCHDIR;
+	char *paths[] = { (char *)directory, NULL };
+	FTSENT *ftsent;
+	int rc;
 
-	int dir_trav(const char *fpath, const struct stat *sb, int tflag)
-	{
-		dsInt16_t rc;
-
-		if (tflag == FTW_D)
-			rc = tsm_archive(fs, fpath, desc, bFalse);
-		else if (tflag == FTW_F)
-			rc = tsm_archive(fs, fpath, desc, bTrue);
-		else
-			rc = DSM_RC_UNSUCCESSFUL;
-
+	fts = fts_open(paths, fts_options, NULL);
+	if (fts == NULL) {
+		rc = errno;
+		CT_ERROR(rc, "fts_open");
 		return rc;
 	}
 
-	rc = ftw(directory, dir_trav, 0);
+	while (1) {
+		ftsent = fts_read(fts);
+		if (ftsent == NULL) {
+			if (errno == 0)
+				break;
+			else {
+				rc = errno;
+				CT_ERROR(rc, "fts_read");
+				goto cleanup;
+			}
+		}
+
+		switch (ftsent->fts_info) {
+		case FTS_D:
+			rc = tsm_archive(fs, ftsent->fts_path, desc, bFalse);
+			break;
+		case FTS_F:
+			rc = tsm_archive(fs, ftsent->fts_path, desc, bTrue);
+			break;
+		default:
+			rc = DSM_RC_UNSUCCESSFUL;
+			break;
+		}
+
+		if (rc)
+			CT_ERROR(rc, "failed tsm_archive: %s", ftsent->fts_path);
+	}
+
+cleanup:
+	rc = fts_close(fts);
+	if (rc) {
+		rc = errno;
+		CT_ERROR(rc, "fts_close");
+	}
 
 	return rc;
 }
@@ -1066,3 +1096,60 @@ dsInt16_t tsm_archive_dir(const char *fs, const char *directory, const char *des
 	CT_DEBUG("fs: %s, directory: %s, desc: %s\n", fs, directory, desc);
 	return dir_walk(fs, directory, desc);
 }
+
+#if 0
+static dsInt16_t dir_walk_testing(const char *fs, const char *directory, const char *desc)
+{
+	dsInt16_t rc;
+	DIR *dir;
+	struct dirent *entry = NULL;
+	char path[PATH_MAX] = {0};
+	int path_len;
+
+	dir = opendir(directory);
+	if (!dir) {
+		rc = errno;
+		CT_ERROR(rc, "opendir: %s", directory);
+		return rc;
+	}
+	while (1) {
+		entry = readdir(dir);
+		if (!entry) {
+			if (errno == 0)
+				break;
+			else {
+				rc = errno;
+				CT_ERROR(rc, "fts_read");
+				goto cleanup;
+			}
+		}
+		path_len = snprintf(path, PATH_MAX, "%s/%s", directory, entry->d_name);
+		if (path_len >= PATH_MAX) {
+			/* TODO: Show CT_WARN and continue, rather than exiting? */
+			rc = ENAMETOOLONG;
+			CT_ERROR(rc, "snprintf path too long");
+			goto cleanup;
+		}
+		if (entry->d_type & DT_REG)
+			rc = tsm_archive(fs, path, desc, bTrue);
+		else if (entry->d_type & DT_DIR &&
+			 strcmp(entry->d_name, ".") != 0 &&
+			 strcmp(entry->d_name, "..") != 0)
+			rc = tsm_archive(fs, path, desc, bFalse);
+		else
+			continue;
+		if (rc) {
+			/* TODO: Show CT_WARN and continue, rather than exiting? */
+			CT_ERROR(rc, "tsm_archive");
+			goto cleanup;
+		}
+		rc = dir_walk_new(fs, path, desc);
+	}
+cleanup:
+	rc = closedir(dir);
+	if (rc)
+		CT_ERROR(rc, "closedir");
+
+	return rc;
+}
+#endif

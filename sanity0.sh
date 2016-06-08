@@ -215,11 +215,11 @@ __create_letters() {
 ##############################################################
 # main
 ##############################################################
-TSM_NAME=${1-lxdv81}
+TSM_NAME=${1-polaris}
 LTSM_BIN="bin/ltsmc"
 LTSM_NODE=${TSM_NAME}
 LTSM_PASSWORD=${TSM_NAME}
-LTSM_SERVERNAME=${2-lxdv81-kvm-tsm-server}
+LTSM_SERVERNAME=${2-polaris-kvm-tsm-server}
 export DSMI_CONFIG=`pwd`/dsmopt/dsm.sys
 
 make clean
