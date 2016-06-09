@@ -27,8 +27,6 @@
 #include <errno.h>
 #include <libgen.h>
 #include <dirent.h>
-#include <ftw.h>
-#include <fts.h>
 #include <math.h>
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -1038,6 +1036,7 @@ clean_up:
 	return rc;
 }
 
+#if 0
 static dsInt16_t dir_walk(const char *fs, const char *directory, const char *desc)
 {
 	FTS *fts;
@@ -1078,7 +1077,7 @@ static dsInt16_t dir_walk(const char *fs, const char *directory, const char *des
 		}
 
 		if (rc)
-			CT_ERROR(rc, "failed tsm_archive: %s", ftsent->fts_path);
+			CT_ERROR(rc, "tsm_archive failed: %s", ftsent->fts_path);
 	}
 
 cleanup:
@@ -1090,66 +1089,79 @@ cleanup:
 
 	return rc;
 }
+#endif
 
-dsInt16_t tsm_archive_dir(const char *fs, const char *directory, const char *desc)
+static dsInt16_t dir_walk(const char *fs, const char *fpath, const char *desc)
 {
-	CT_DEBUG("fs: %s, directory: %s, desc: %s\n", fs, directory, desc);
-	return dir_walk(fs, directory, desc);
-}
+	int rc;
+        DIR *dir;
+        struct dirent *entry = NULL;
+        char path[PATH_MAX] = {0};
+        int path_len;
+	int old_errno;
 
-#if 0
-static dsInt16_t dir_walk_testing(const char *fs, const char *directory, const char *desc)
-{
-	dsInt16_t rc;
-	DIR *dir;
-	struct dirent *entry = NULL;
-	char path[PATH_MAX] = {0};
-	int path_len;
-
-	dir = opendir(directory);
-	if (!dir) {
+        dir = opendir(fpath);
+        if (!dir) {
 		rc = errno;
-		CT_ERROR(rc, "opendir: %s", directory);
+		CT_ERROR(rc, "opendir: %s\n", fpath);
 		return rc;
-	}
-	while (1) {
-		entry = readdir(dir);
-		if (!entry) {
-			if (errno == 0)
+        }
+        while (1) {
+		old_errno = errno;
+                entry = readdir(dir);
+                if (!entry) {
+			/* End of dir stream, NULL is returned and errno
+			   is not changed. */
+			if (errno == old_errno) {
+				rc = DSM_RC_SUCCESSFUL;
 				break;
+			}
 			else {
 				rc = errno;
-				CT_ERROR(rc, "fts_read");
-				goto cleanup;
+				CT_ERROR(rc, "readdir: %s\n", fpath);
+				break;
 			}
-		}
-		path_len = snprintf(path, PATH_MAX, "%s/%s", directory, entry->d_name);
-		if (path_len >= PATH_MAX) {
-			/* TODO: Show CT_WARN and continue, rather than exiting? */
-			rc = ENAMETOOLONG;
-			CT_ERROR(rc, "snprintf path too long");
-			goto cleanup;
-		}
-		if (entry->d_type & DT_REG)
-			rc = tsm_archive(fs, path, desc, bTrue);
-		else if (entry->d_type & DT_DIR &&
-			 strcmp(entry->d_name, ".") != 0 &&
-			 strcmp(entry->d_name, "..") != 0)
-			rc = tsm_archive(fs, path, desc, bFalse);
-		else
+                }
+                path_len = snprintf(path, PATH_MAX, "%s/%s", fpath, entry->d_name);
+                if (path_len >= PATH_MAX) {
+                        CT_ERROR(ENAMETOOLONG, "path too long, ignoring: %s/%s", fpath, entry->d_name);
 			continue;
-		if (rc) {
-			/* TODO: Show CT_WARN and continue, rather than exiting? */
-			CT_ERROR(rc, "tsm_archive");
-			goto cleanup;
+                }
+
+                if (entry->d_type == DT_REG) {
+			rc = tsm_archive(fs, path, desc, bTrue);
+			if (rc)
+				CT_ERROR(rc, "tsm_archive file failed: %s", path);
 		}
-		rc = dir_walk_new(fs, path, desc);
-	}
-cleanup:
-	rc = closedir(dir);
-	if (rc)
-		CT_ERROR(rc, "closedir");
+                else if (entry->d_type == DT_DIR &&
+                         strcmp(entry->d_name, ".") != 0 &&
+                         strcmp(entry->d_name, "..") != 0) {
+			rc = tsm_archive(fs, path, desc, bFalse);
+			if (rc)
+				CT_ERROR(rc, "tsm_archive directory failed: %s", path);
+
+			rc = dir_walk(fs, path, desc);
+		}
+                else {	/* Ignore fifos, block/character devices, links, etc. */
+			rc = DSM_RC_SUCCESSFUL;
+                        continue;
+		}
+        }
+        closedir(dir);
+
+        return rc;
+}
+
+dsInt16_t tsm_archive_dir(const char *fs, const char *fpath, const char *desc)
+{
+	dsInt16_t rc;
+	char *fpath_r = strdup(fpath);
+
+	if (strlen(fpath_r) > 1 && strncmp(&fpath_r[strlen(fpath_r)-1], "/", 1) == 0)
+		fpath_r[strlen(fpath_r)-1] = '\0';
+
+	CT_DEBUG("fs: %s, fpath: %s, desc: %s\n", fs, fpath_r, desc);
+	rc = dir_walk(fs, fpath_r, desc);
 
 	return rc;
 }
-#endif

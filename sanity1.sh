@@ -113,12 +113,12 @@ find ${PATH_PREFIX} -exec md5sum -b '{}' \; &> ${MD5_ORIG}
 ##########################################################
 # LTSM action
 ##########################################################
-TSM_NAME=${1-polaris}
+TSM_NAME=${1-lxdv81}
 LTSM_BIN="bin/ltsmc"
 LTSM_VERBOSE="-v"
 LTSM_NODE=${TSM_NAME}
 LTSM_PASSWORD=${TSM_NAME}
-LTSM_SERVERNAME=${2-polaris-kvm-tsm-server}
+LTSM_SERVERNAME=${2-lxdv81-kvm-tsm-server}
 export DSMI_CONFIG=`pwd`/dsmopt/dsm.sys
 
 # Build binary
