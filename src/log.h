@@ -56,27 +56,37 @@ void api_msg_set_level(int level);
 void api_error(enum api_message_level level, int err, const char *fmt, ...);
 double ct_now(void);
 
+#define NRM  "\x1B[0m"
+#define RED  "\x1B[31m"
+#define GRN  "\x1B[32m"
+#define YEL  "\x1B[33m"
+#define BLU  "\x1B[34m"
+#define MAG  "\x1B[35m"
+#define CYN  "\x1B[36m"
+#define WHT  "\x1B[37m"
+#define RESET "\033[0m"
+
 #define CT_ERROR(_rc, _format, ...)				     \
 	api_error(API_MSG_ERROR, _rc,				     \
-		  "%f [%ld] %s:%d "_format,			     \
+		  RED "[ERROR] " RESET "%f [%ld] %s:%d "_format,     \
 		  ct_now(), syscall(SYS_gettid), __FILE__, __LINE__, \
 		  ## __VA_ARGS__)
 
 #define CT_DEBUG(_format, ...)					     \
 	api_error(API_MSG_DEBUG | API_MSG_NO_ERRNO, 0,		     \
-		  "%f [%ld] %s:%d "_format,			     \
+		  YEL "[DEBUG] " RESET "%f [%ld] %s:%d "_format,     \
 		  ct_now(), syscall(SYS_gettid), __FILE__, __LINE__, \
 		  ## __VA_ARGS__)
 
 #define CT_WARN(_format, ...)					     \
 	api_error(API_MSG_WARN | API_MSG_NO_ERRNO, 0,		     \
-		  "%f [%ld] %s:%d "_format,			     \
+		  RED "[WARN] " RESET "%f [%ld] %s:%d "_format,	     \
 		  ct_now(), syscall(SYS_gettid), __FILE__, __LINE__, \
 		  ## __VA_ARGS__)
 
 #define CT_TRACE(_format, ...)					     \
 	api_error(API_MSG_INFO | API_MSG_NO_ERRNO, 0,		     \
-		  "%f [%ld] %s:%d "_format,			     \
+		  BLU "[TRACE] " RESET "%f [%ld] %s:%d "_format,     \
 		  ct_now(), syscall(SYS_gettid), __FILE__, __LINE__, \
 		  ## __VA_ARGS__)
 

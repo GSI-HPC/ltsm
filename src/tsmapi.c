@@ -151,14 +151,6 @@ static dsInt16_t tsm_open_fstream(const char *fs, const char *hl, const char *ll
 		goto clean_up;
 	}
 
-#if 0 /* File already exists. */   
-	struct stat st_buf;
-	rc = stat(filename, &st_buf);
-	if (rc == 0) {
-		/* TODO: How about modifying the filename to __filename__ ? */
-	} 
-#endif
-    
 	*fstream = fopen(filename, "w");
 	if (!fstream) {
 		rc = DSM_RC_UNSUCCESSFUL;
@@ -582,10 +574,22 @@ static dsInt16_t tsm_archive(const char *fs, const char *filename, const char *d
 	size_t rbytes;
 	dsUint16_t reason;
 	dsBool_t success = bFalse;
-    
+	struct stat st_buf;
+
 	dataBlkArea.bufferPtr = NULL;
 	objAttrArea.objInfo = NULL;
-    
+
+	rc = lstat(filename, &st_buf);
+	if (rc) {
+		CT_ERROR(rc, "stat");
+		return rc;
+	}
+	if (!(S_ISREG(st_buf.st_mode) || S_ISDIR(st_buf.st_mode))) {
+		rc = EPERM;
+		CT_ERROR(rc, "no regular file or directory: %s", filename);
+		return rc;
+	}
+
 	rc = extract_hl_ll(filename, hl, ll);
 	if (rc != DSM_RC_SUCCESSFUL)
 		goto clean_up;
@@ -596,7 +600,7 @@ static dsInt16_t tsm_archive(const char *fs, const char *filename, const char *d
 		CT_ERROR(rc, "fopen");
 		goto clean_up;
 	}
-    
+
 	memset(objName.fs, 0, DSM_MAX_FSNAME_LENGTH + 1);
 	memset(objName.hl, 0, DSM_MAX_HL_LENGTH + 1);
 	memset(objName.ll, 0, DSM_MAX_LL_LENGTH + 1);
@@ -630,14 +634,8 @@ static dsInt16_t tsm_archive(const char *fs, const char *filename, const char *d
 	if (desc && strlen(desc) <= DSM_MAX_DESCR_LENGTH)
 		archData.descr = (char *)desc;
 	else
-		archData.descr = '\0';
+		archData.descr = "\0";
 
-	struct stat st_buf;
-	rc = stat(filename, &st_buf);
-	if (rc) {
-		CT_ERROR(rc, "stat");
-		goto clean_up_transaction;
-	}
 #if 0
 	/* TODO: Writing on the true TSM tape gives result:
 	   ANS0226E (RC2019) The object owner is invalid.
@@ -758,6 +756,7 @@ clean_up:
 
 dsInt16_t tsm_archive_file(const char *fs, const char *filename, const char *desc)
 {
+	CT_DEBUG("fs: %s, filename: %s, desc: %s", fs, filename, desc);
 	return tsm_archive(fs, filename, desc, bTrue);
 }
 
@@ -1103,7 +1102,7 @@ static dsInt16_t dir_walk(const char *fs, const char *fpath, const char *desc)
         dir = opendir(fpath);
         if (!dir) {
 		rc = errno;
-		CT_ERROR(rc, "opendir: %s\n", fpath);
+		CT_ERROR(rc, "opendir: %s", fpath);
 		return rc;
         }
         while (1) {
@@ -1128,23 +1127,28 @@ static dsInt16_t dir_walk(const char *fs, const char *fpath, const char *desc)
 			continue;
                 }
 
-                if (entry->d_type == DT_REG) {
+		switch (entry->d_type) {
+		case DT_REG: {
 			rc = tsm_archive(fs, path, desc, bTrue);
 			if (rc)
 				CT_ERROR(rc, "tsm_archive file failed: %s", path);
+			break;
 		}
-                else if (entry->d_type == DT_DIR &&
-                         strcmp(entry->d_name, ".") != 0 &&
-                         strcmp(entry->d_name, "..") != 0) {
+		case DT_DIR: {
+			if (strcmp(entry->d_name, ".") == 0 ||
+			    strcmp(entry->d_name, "..") == 0)
+				continue;
 			rc = tsm_archive(fs, path, desc, bFalse);
 			if (rc)
 				CT_ERROR(rc, "tsm_archive directory failed: %s", path);
-
 			rc = dir_walk(fs, path, desc);
+			break;
 		}
-                else {	/* Ignore fifos, block/character devices, links, etc. */
-			rc = DSM_RC_SUCCESSFUL;
-                        continue;
+		default: /* Flag error on fifos, block/character devices, links, etc. */
+			rc = EPERM;
+			CT_ERROR(rc, "no regular file or directory: %s", path);
+			continue;
+			break;
 		}
         }
         closedir(dir);
