@@ -72,12 +72,6 @@ double ct_now(void);
 		  ct_now(), syscall(SYS_gettid), __FILE__, __LINE__, \
 		  ## __VA_ARGS__)
 
-#define CT_DEBUG(_format, ...)					     \
-	api_error(API_MSG_DEBUG | API_MSG_NO_ERRNO, 0,		     \
-		  YEL "[DEBUG] " RESET "%f [%ld] %s:%d "_format,     \
-		  ct_now(), syscall(SYS_gettid), __FILE__, __LINE__, \
-		  ## __VA_ARGS__)
-
 #define CT_WARN(_format, ...)					     \
 	api_error(API_MSG_WARN | API_MSG_NO_ERRNO, 0,		     \
 		  RED "[WARN] " RESET "%f [%ld] %s:%d "_format,	     \
@@ -90,5 +84,9 @@ double ct_now(void);
 		  ct_now(), syscall(SYS_gettid), __FILE__, __LINE__, \
 		  ## __VA_ARGS__)
 
-
+#define CT_INFO(_format, ...)					     \
+	api_error(API_MSG_INFO | API_MSG_NO_ERRNO, 0,		     \
+		  YEL "[INFO] " RESET "%f [%ld] %s:%d "_format,	     \
+		  ct_now(), syscall(SYS_gettid), __FILE__, __LINE__, \
+		  ## __VA_ARGS__)
 #endif /* LOG_H */

@@ -140,7 +140,7 @@ static dsInt16_t tsm_open_fstream(const char *fs, const char *hl, const char *ll
 	}
 
 	snprintf(filename, str_length, "%s%s%s", fs, hl, ll);
-	CT_DEBUG("fs/hl/ll filename: %s\n", filename);
+	CT_INFO("fs/hl/ll filename: %s\n", filename);
 
 	rc = mkdir_p(hl);
 	if (rc) {
@@ -377,7 +377,7 @@ dsInt16_t tsm_query_session_info()
 		return rc;
 	}
 
-	CT_DEBUG("DSMI_DIR \t: %s\n"
+	CT_INFO("DSMI_DIR \t: %s\n"
 		 "DSMI_CONFIG \t: %s\n"
 		 "serverName \t: %s\n"
 		 "commMethod \t: %d\n"
@@ -405,13 +405,13 @@ dsInt16_t tsm_query_session_info()
 	max_obj_per_txn = dsmSessInfo.maxObjPerTxn;
 	max_bytes_per_txn = dsmSessInfo.maxBytesPerTxn;
 
-	CT_DEBUG("\n"
+	CT_INFO("\n"
 		 "Server's ver.rel.lev       : %d.%d.%d.%d\n"
 		 "ArchiveRetentionProtection : %s\n",
 		 dsmSessInfo.serverVer, dsmSessInfo.serverRel, 
 		 dsmSessInfo.serverLev, dsmSessInfo.serverSubLev,
 		 dsmSessInfo.archiveRetentionProtection ? "Yes" : "No");
-	CT_DEBUG("\n"
+	CT_INFO("\n"
 		 "Max number of multiple objects per transaction: %d\n"
 		 "Max number of Bytes per transaction: %d\n"
 		 "dsmSessInfo.fsdelim: %c\ndsmSessInfo.hldelim: %c\n",
@@ -466,7 +466,7 @@ dsInt16_t tsm_query_hl_ll(const char *fs, const char *hl, const char *ll, const 
 	qry_ar_data.owner = "";  /* Omit owner. */
 	qry_ar_data.objName = &obj_name;
 
-	CT_DEBUG("tsm_query_archive with settings\n"
+	CT_INFO("tsm_query_archive with settings\n"
 		 "fs: %s\n"
 		 "hl: %s\n"
 		 "ll: %s\n"
@@ -756,7 +756,7 @@ clean_up:
 
 dsInt16_t tsm_archive_file(const char *fs, const char *filename, const char *desc)
 {
-	CT_DEBUG("fs: %s, filename: %s, desc: %s", fs, filename, desc);
+	CT_INFO("fs: %s, filename: %s, desc: %s", fs, filename, desc);
 	return tsm_archive(fs, filename, desc, bTrue);
 }
 
@@ -810,7 +810,7 @@ dsInt16_t tsm_delete_hl_ll(const char *fs, const char *hl, const char *ll)
     
 	for (unsigned long n = 0; n < qarray_size(); n++) {
 		rc = get_query(&query_data, n);
-		CT_DEBUG("get_query: %lu, rc: %d\n", n, rc);
+		CT_INFO("get_query: %lu, rc: %d\n", n, rc);
 		if (rc != DSM_RC_SUCCESSFUL) {
 			errno = ENODATA; /* No data available */
 			CT_ERROR(errno, "get_query");
@@ -929,7 +929,7 @@ dsInt16_t tsm_retrieve_hl_ll(const char *fs, const char *hl, const char *ll, con
 		for (unsigned long c_iter = c_begin; c_iter <= c_end; c_iter++) {
 
 			rc = get_query(&query_data, c_iter);
-			CT_DEBUG("get_query: %lu, rc: %d\n", c_iter, rc);
+			CT_INFO("get_query: %lu, rc: %d\n", c_iter, rc);
 			if (rc != DSM_RC_SUCCESSFUL) {
 				errno = ENODATA; /* No data available */
 				CT_ERROR(errno, "get_query");
@@ -949,7 +949,7 @@ dsInt16_t tsm_retrieve_hl_ll(const char *fs, const char *hl, const char *ll, con
 		for (unsigned long c_iter = c_begin; c_iter <= c_end; c_iter++) {
 
 			rc = get_query(&query_data, c_iter);
-			CT_DEBUG("get_query: %lu, rc: %d\n", c_iter, rc);
+			CT_INFO("get_query: %lu, rc: %d\n", c_iter, rc);
 			if (rc != DSM_RC_SUCCESSFUL) {
 				errno = ENODATA; /* No data available */
 				CT_ERROR(errno, "get_query");
@@ -985,7 +985,7 @@ dsInt16_t tsm_retrieve_hl_ll(const char *fs, const char *hl, const char *ll, con
 			switch (query_data.objName.objType) {
 			case DSM_OBJ_FILE: {
 				rc = retrieve_file_obj(&query_data, &obj_info);
-				CT_DEBUG("retrieve_file_obj, rc: %d\n", rc);
+				CT_INFO("retrieve_file_obj, rc: %d\n", rc);
 				if (rc != DSM_RC_SUCCESSFUL) {
 					CT_ERROR(0, "retrieve_file_obj");
 				}
@@ -1001,7 +1001,7 @@ dsInt16_t tsm_retrieve_hl_ll(const char *fs, const char *hl, const char *ll, con
 					 query_data.objName.hl,
 					 query_data.objName.ll);
 				rc = mkdir_p(directory);
-				CT_DEBUG("mkdir_p(%s)\n", directory);
+				CT_INFO("mkdir_p(%s)\n", directory);
 				if (rc) {
 					CT_ERROR(rc, "mkdir_p");
 				}
@@ -1164,7 +1164,7 @@ dsInt16_t tsm_archive_dir(const char *fs, const char *fpath, const char *desc)
 	if (strlen(fpath_r) > 1 && strncmp(&fpath_r[strlen(fpath_r)-1], "/", 1) == 0)
 		fpath_r[strlen(fpath_r)-1] = '\0';
 
-	CT_DEBUG("fs: %s, fpath: %s, desc: %s\n", fs, fpath_r, desc);
+	CT_INFO("fs: %s, fpath: %s, desc: %s\n", fs, fpath_r, desc);
 	rc = dir_walk(fs, fpath_r, desc);
 
 	return rc;
