@@ -51,7 +51,7 @@ static void error_callback_default(enum api_message_level level, int err,
 				   const char *fmt, va_list ap)
 {
 	vfprintf(stderr, fmt, ap);
-	if (level & API_MSG_NO_ERRNO)
+	if (level & API_MSG_NO_ERRNO || !err)
 		fprintf(stderr, "\n");
 	else
 		fprintf(stderr, ": %s (%d)\n", strerror(err), err);
