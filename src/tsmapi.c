@@ -575,26 +575,34 @@ static dsInt16_t tsm_archive(const char *fs, const char *filename, const char *d
 	dsUint16_t reason;
 	dsBool_t success = bFalse;
 	struct stat st_buf;
+	char *resolved_filename = NULL;
 
 	dataBlkArea.bufferPtr = NULL;
 	objAttrArea.objInfo = NULL;
 
-	rc = lstat(filename, &st_buf);
+	resolved_filename = realpath(filename, resolved_filename);
+	if (resolved_filename == NULL) {
+		rc = errno;
+		CT_ERROR(rc, "realpath failed: %s\n", filename);
+		return rc;
+	}
+
+	rc = lstat(resolved_filename, &st_buf);
 	if (rc) {
 		CT_ERROR(rc, "stat");
 		return rc;
 	}
 	if (!(S_ISREG(st_buf.st_mode) || S_ISDIR(st_buf.st_mode))) {
 		rc = EPERM;
-		CT_ERROR(rc, "no regular file or directory: %s", filename);
+		CT_ERROR(rc, "no regular file or directory: %s", resolved_filename);
 		return rc;
 	}
 
-	rc = extract_hl_ll(filename, hl, ll);
+	rc = extract_hl_ll(resolved_filename, hl, ll);
 	if (rc != DSM_RC_SUCCESSFUL)
 		goto clean_up;
 
-	file = fopen(filename, "r");
+	file = fopen(resolved_filename, "r");
 	if (file == NULL) {
 		rc = DSM_RC_UNSUCCESSFUL;		
 		CT_ERROR(rc, "fopen");
@@ -729,7 +737,15 @@ clean_up_transaction:
 			 "hl: %s\n"
 			 "ll: %s\n"
 			 "desc: %s\n",
-			 filename, total_bytes, objName.fs, objName.hl, objName.ll, desc);
+			 resolved_filename, total_bytes, objName.fs, objName.hl, objName.ll, desc);
+	}
+	if (success) {
+		CT_TRACE("\n*** successfully archived file: %s of size: %lu bytes with settings ***\n"
+			 "fs: %s\n"
+			 "hl: %s\n"
+			 "ll: %s\n"
+			 "desc: %s\n",
+			 resolved_filename, total_bytes, objName.fs, objName.hl, objName.ll, desc);
 	}
 
 clean_up:
@@ -741,16 +757,9 @@ clean_up:
 		free(objAttrArea.objInfo);
 	if (dataBlkArea.bufferPtr)
 		free(dataBlkArea.bufferPtr);
+	if (resolved_filename)
+		free(resolved_filename);
 
-	if (success) {
-		CT_TRACE("\n*** successfully archived file: %s of size: %lu bytes with settings ***\n"
-			 "fs: %s\n"
-			 "hl: %s\n"
-			 "ll: %s\n"
-			 "desc: %s\n",
-			 filename, total_bytes, objName.fs, objName.hl, objName.ll, desc);
-	}
-	
 	return rc;
 }
 
