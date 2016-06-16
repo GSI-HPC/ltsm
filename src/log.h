@@ -78,10 +78,10 @@ double ct_now(void);
 		  ct_now(), syscall(SYS_gettid), __FILE__, __LINE__, \
 		  ## __VA_ARGS__)
 
-#define CT_TRACE(_format, ...)					     \
-	api_error(API_MSG_INFO | API_MSG_NO_ERRNO, 0,		     \
-		  BLU "[TRACE] " RESET "%f [%ld] %s:%d "_format,     \
-		  ct_now(), syscall(SYS_gettid), __FILE__, __LINE__, \
+#define CT_MESSAGE(_format, ...)					\
+	api_error(API_MSG_NORMAL | API_MSG_NO_ERRNO, 0,			\
+		  MAG "[RESULT] " RESET "%f [%ld] %s:%d "_format,	\
+		  ct_now(), syscall(SYS_gettid), __FILE__, __LINE__,	\
 		  ## __VA_ARGS__)
 
 #define CT_INFO(_format, ...)					     \
@@ -89,4 +89,11 @@ double ct_now(void);
 		  YEL "[INFO] " RESET "%f [%ld] %s:%d "_format,	     \
 		  ct_now(), syscall(SYS_gettid), __FILE__, __LINE__, \
 		  ## __VA_ARGS__)
+
+#define CT_TRACE(_format, ...)					     \
+	api_error(API_MSG_DEBUG | API_MSG_NO_ERRNO, 0,		     \
+		  BLU "[TRACE] " RESET "%f [%ld] %s:%d "_format,     \
+		  ct_now(), syscall(SYS_gettid), __FILE__, __LINE__, \
+		  ## __VA_ARGS__)
+
 #endif /* LOG_H */

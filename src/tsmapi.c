@@ -264,41 +264,41 @@ void tsm_print_query_node(const qryRespArchiveData *qry_resp_arv_data,
 	obj_info_t obj_info;
 	memcpy(&obj_info, (char *)qry_resp_arv_data->objInfo, qry_resp_arv_data->objInfolen);
 
-	printf("object # %lu\n"
-	       "fs: %s, hl: %s, ll: %s\n"
-	       "object id (hi,lo)                          : (%u,%u)\n"
-	       "object info length                         : %d\n"
-	       "object info size (hi,lo)                   : (%u,%u)\n"
-	       "object type                                : %s\n"
-	       "object magic id                            : %d\n"
-	       "archive description                        : %s\n"
-	       "owner                                      : %s\n"
-	       "insert date                                : %s\n"
-	       "expiration date                            : %s\n"
-	       "restore order (top,hi_hi,hi_lo,lo_hi,lo_lo): (%u,%u,%u,%u,%u)\n"
-	       "estimated size (hi,lo)                     : (%u,%u)\n",
-	       n,
-	       qry_resp_arv_data->objName.fs,
-	       qry_resp_arv_data->objName.hl,
-	       qry_resp_arv_data->objName.ll,
-	       qry_resp_arv_data->objId.hi,
-	       qry_resp_arv_data->objId.lo,
-	       qry_resp_arv_data->objInfolen,
-	       obj_info.size.hi,
-	       obj_info.size.lo,
-	       OBJ_TYPE(qry_resp_arv_data->objName.objType),
-	       obj_info.magic,
-	       qry_resp_arv_data->descr,
-	       qry_resp_arv_data->owner,
-	       ins_str_date,
-	       exp_str_date,
-	       qry_resp_arv_data->restoreOrderExt.top,
-	       qry_resp_arv_data->restoreOrderExt.hi_hi,
-	       qry_resp_arv_data->restoreOrderExt.hi_lo,
-	       qry_resp_arv_data->restoreOrderExt.lo_hi,
-	       qry_resp_arv_data->restoreOrderExt.lo_lo,
-	       qry_resp_arv_data->sizeEstimate.hi,
-	       qry_resp_arv_data->sizeEstimate.lo);
+	CT_INFO("object # %lu\n"
+		"fs: %s, hl: %s, ll: %s\n"
+		"object id (hi,lo)                          : (%u,%u)\n"
+		"object info length                         : %d\n"
+		"object info size (hi,lo)                   : (%u,%u)\n"
+		"object type                                : %s\n"
+		"object magic id                            : %d\n"
+		"archive description                        : %s\n"
+		"owner                                      : %s\n"
+		"insert date                                : %s\n"
+		"expiration date                            : %s\n"
+		"restore order (top,hi_hi,hi_lo,lo_hi,lo_lo): (%u,%u,%u,%u,%u)\n"
+		"estimated size (hi,lo)                     : (%u,%u)\n",
+		n,
+		qry_resp_arv_data->objName.fs,
+		qry_resp_arv_data->objName.hl,
+		qry_resp_arv_data->objName.ll,
+		qry_resp_arv_data->objId.hi,
+		qry_resp_arv_data->objId.lo,
+		qry_resp_arv_data->objInfolen,
+		obj_info.size.hi,
+		obj_info.size.lo,
+		OBJ_TYPE(qry_resp_arv_data->objName.objType),
+		obj_info.magic,
+		qry_resp_arv_data->descr,
+		qry_resp_arv_data->owner,
+		ins_str_date,
+		exp_str_date,
+		qry_resp_arv_data->restoreOrderExt.top,
+		qry_resp_arv_data->restoreOrderExt.hi_hi,
+		qry_resp_arv_data->restoreOrderExt.hi_lo,
+		qry_resp_arv_data->restoreOrderExt.lo_hi,
+		qry_resp_arv_data->restoreOrderExt.lo_lo,
+		qry_resp_arv_data->sizeEstimate.hi,
+		qry_resp_arv_data->sizeEstimate.lo);
 }
 
 dsInt16_t tsm_init(login_t *login)
@@ -466,12 +466,12 @@ dsInt16_t tsm_query_hl_ll(const char *fs, const char *hl, const char *ll, const 
 	qry_ar_data.owner = "";  /* Omit owner. */
 	qry_ar_data.objName = &obj_name;
 
-	CT_INFO("tsm_query_archive with settings\n"
+	CT_INFO("query structure\n"
 		 "fs: %s\n"
 		 "hl: %s\n"
 		 "ll: %s\n"
 		 "owner: %s\n"
-		 "descr: %s\n",
+		 "descr: %s",
 		 qry_ar_data.objName->fs,
 		 qry_ar_data.objName->hl,
 		 qry_ar_data.objName->ll,
@@ -515,7 +515,7 @@ dsInt16_t tsm_query_hl_ll(const char *fs, const char *hl, const char *ll, const 
 		} else {
 			done = bTrue;
 			if (rc == DSM_RC_ABORT_NO_MATCH)
-				printf("tsm query has no match\n");
+				CT_MESSAGE("query has no match");
 			else if (rc != DSM_RC_FINISHED)
 				TSM_ERROR(rc, "dsmGetNextQObj");
 		}
@@ -718,7 +718,6 @@ clean_up_sendobj:
 	if (rc) {
 		TSM_ERROR(rc, "dsmEndSendObj");
 		success = bFalse;
-		goto clean_up_transaction;
 	}
 
 clean_up_transaction:
@@ -731,12 +730,12 @@ clean_up_transaction:
 	}
 
 	if (success) {
-		CT_TRACE("\n*** successfully archived file: %s of size: %lu bytes with settings ***\n"
-			 "fs: %s\n"
-			 "hl: %s\n"
-			 "ll: %s\n"
-			 "desc: %s\n",
-			 resolved_filename, total_bytes, objName.fs, objName.hl, objName.ll, desc);
+		CT_INFO("\n*** successfully archived file: %s of size: %lu bytes with settings ***\n"
+			"fs: %s\n"
+			"hl: %s\n"
+			"ll: %s\n"
+			"desc: %s\n",
+			resolved_filename, total_bytes, objName.fs, objName.hl, objName.ll, desc);
 	}
 
 clean_up:
@@ -810,7 +809,7 @@ dsInt16_t tsm_delete_hl_ll(const char *fs, const char *hl, const char *ll)
     
 	for (unsigned long n = 0; n < qarray_size(); n++) {
 		rc = get_query(&query_data, n);
-		CT_INFO("get_query: %lu, rc: %d\n", n, rc);
+		CT_INFO("get_query: %lu, rc: %d", n, rc);
 		if (rc != DSM_RC_SUCCESSFUL) {
 			errno = ENODATA; /* No data available */
 			CT_ERROR(errno, "get_query");
@@ -820,14 +819,14 @@ dsInt16_t tsm_delete_hl_ll(const char *fs, const char *hl, const char *ll)
 		if (rc != DSM_RC_SUCCESSFUL) {
 			CT_WARN("\ncannot delete obj fs: %s\n"
 				"                  hl: %s\n"
-				"                  ll: %s\n",
+				"                  ll: %s",
 				query_data.objName.fs,
 				query_data.objName.hl,
 				query_data.objName.ll);
 		} else {
-			CT_TRACE("\ndeleted obj fs: %s\n"
+			CT_INFO("\ndeleted obj fs: %s\n"
 				"            hl: %s\n"
-				"            ll: %s\n",
+				"            ll: %s",
 				query_data.objName.fs,
 				query_data.objName.hl,
 				query_data.objName.ll);
