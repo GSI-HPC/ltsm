@@ -31,7 +31,7 @@ dsInt16_t init_qarray()
 
 	qarray = malloc(sizeof(query_arr_t));
 	if (!qarray) {
-		rc = DSM_RC_NO_MEMORY;
+		rc = errno;
 		CT_ERROR(rc, "malloc");
 		return rc;
 	}
@@ -39,7 +39,7 @@ dsInt16_t init_qarray()
 	qarray->data = malloc(sizeof(qryRespArchiveData) * INITIAL_CAPACITY);
 	if (!qarray->data) {
 		free(qarray);
-		rc = DSM_RC_NO_MEMORY;
+		rc = errno;
 		CT_ERROR(rc, "malloc");
 		return rc;
 	}

@@ -680,7 +680,13 @@ static dsInt16_t tsm_archive(const char *fs, const char *filename, const char *d
 
 	/* Note: We have to make sure that
 	   sizeof(obj_info_t) <= DSM_MAX_OBJINFO_LENGTH. */
-	objAttrArea.objInfo = (char *)malloc(DSM_MAX_OBJINFO_LENGTH) ; 
+	objAttrArea.objInfo = (char *)malloc(DSM_MAX_OBJINFO_LENGTH);
+	if (!objAttrArea.objInfo) {
+		rc = errno;
+		CT_ERROR(rc, "malloc");
+		goto clean_up_transaction;
+	}
+
 	objAttrArea.objInfoLength = sizeof(obj_info_t);
 	memcpy(objAttrArea.objInfo, (char *)obj_info, objAttrArea.objInfoLength);
 
@@ -695,6 +701,11 @@ static dsInt16_t tsm_archive(const char *fs, const char *filename, const char *d
 	}
    
 	dataBlkArea.bufferPtr = (char *)malloc(sizeof(buf));
+	if (!dataBlkArea.bufferPtr) {
+		rc = errno;
+		CT_ERROR(rc, "malloc");
+		goto clean_up_sendobj;
+	}
 	dataBlkArea.stVersion = DataBlkVersion;
 	dataBlkArea.bufferLen = sizeof(buf);
     
