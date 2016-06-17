@@ -48,8 +48,8 @@
 
 static dsUint32_t handle;
 static char rcmsg[DSM_MAX_RC_MSG_LENGTH + 1] = {0};
-static dsUint16_t  max_obj_per_txn;
-static dsUint32_t  max_bytes_per_txn;
+static dsUint16_t max_obj_per_txn;
+static dsUint32_t max_bytes_per_txn;
 
 #define TSM_GET_MSG(rc)					\
 do {							\
@@ -264,7 +264,7 @@ void tsm_print_query_node(const qryRespArchiveData *qry_resp_arv_data,
 	obj_info_t obj_info;
 	memcpy(&obj_info, (char *)qry_resp_arv_data->objInfo, qry_resp_arv_data->objInfolen);
 
-	CT_INFO("object # %lu\n"
+	CT_INFO("\nobject # %lu\n"
 		"fs: %s, hl: %s, ll: %s\n"
 		"object id (hi,lo)                          : (%u,%u)\n"
 		"object info length                         : %d\n"
@@ -276,7 +276,7 @@ void tsm_print_query_node(const qryRespArchiveData *qry_resp_arv_data,
 		"insert date                                : %s\n"
 		"expiration date                            : %s\n"
 		"restore order (top,hi_hi,hi_lo,lo_hi,lo_lo): (%u,%u,%u,%u,%u)\n"
-		"estimated size (hi,lo)                     : (%u,%u)\n",
+		"estimated size (hi,lo)                     : (%u,%u)",
 		n,
 		qry_resp_arv_data->objName.fs,
 		qry_resp_arv_data->objName.hl,
@@ -554,7 +554,7 @@ dsInt16_t extract_hl_ll(const char *filename, char *hl, char *ll)
 	return DSM_RC_SUCCESSFUL;
 }
 
-static dsInt16_t tsm_archive(const char *fs, const char *filename, const char *desc, const dsBool_t is_file)
+static dsInt16_t tsm_archive(const char *fs, const char *filename, const char *desc)
 {
 	dsInt16_t rc;
 	char hl[DSM_MAX_HL_LENGTH + 1] = {0};
@@ -589,8 +589,13 @@ static dsInt16_t tsm_archive(const char *fs, const char *filename, const char *d
 		CT_ERROR(rc, "stat");
 		return rc;
 	}
-	if (!(S_ISREG(st_buf.st_mode) || S_ISDIR(st_buf.st_mode))) {
-		rc = EPERM;
+
+	if (S_ISREG(st_buf.st_mode))
+		objName.objType = DSM_OBJ_FILE;
+	else if (S_ISDIR(st_buf.st_mode))
+		objName.objType = DSM_OBJ_DIRECTORY;
+	else {
+		rc = EINVAL;
 		CT_ERROR(rc, "no regular file or directory: %s", resolved_filename);
 		return rc;
 	}
@@ -612,7 +617,6 @@ static dsInt16_t tsm_archive(const char *fs, const char *filename, const char *d
 	strcpy(objName.fs, fs);
 	strcpy(objName.hl, hl);
 	strcpy(objName.ll, ll);
-	objName.objType = is_file ? DSM_OBJ_FILE : DSM_OBJ_DIRECTORY;
 
 	/* A single transaction is an atomic action. Data sent within the
 	   boundaries of a transaction is either committed to the system at the end of the
@@ -629,7 +633,7 @@ static dsInt16_t tsm_archive(const char *fs, const char *filename, const char *d
 
 	mcBindKey.stVersion = mcBindKeyVersion;
 	rc = dsmBindMC(handle, &objName, stArchive, &mcBindKey);
-	TSM_TRACE(rc, "dsmBeginMC");
+	TSM_TRACE(rc, "dsmBindMC");
 	if (rc) {
 		TSM_ERROR(rc, "dsmBindMC");
 		goto clean_up_transaction;
@@ -694,7 +698,7 @@ static dsInt16_t tsm_archive(const char *fs, const char *filename, const char *d
 	dataBlkArea.stVersion = DataBlkVersion;
 	dataBlkArea.bufferLen = sizeof(buf);
     
-	while (is_file && !feof(file)) {
+	while (objName.objType == DSM_OBJ_FILE && !feof(file)) {
 		rbytes = fread(dataBlkArea.bufferPtr, 1, dataBlkArea.bufferLen, file);
 		if (ferror(file)) {
 			rc = EBADF;
@@ -730,11 +734,12 @@ clean_up_transaction:
 	}
 
 	if (success) {
-		CT_INFO("\n*** successfully archived file: %s of size: %lu bytes with settings ***\n"
+		CT_INFO("\n*** successfully archived: %s %s of size: %lu bytes with settings ***\n"
 			"fs: %s\n"
 			"hl: %s\n"
 			"ll: %s\n"
 			"desc: %s\n",
+			OBJ_TYPE(objName.objType),
 			resolved_filename, total_bytes, objName.fs, objName.hl, objName.ll, desc);
 	}
 
@@ -751,12 +756,6 @@ clean_up:
 		free(resolved_filename);
 
 	return rc;
-}
-
-dsInt16_t tsm_archive_file(const char *fs, const char *filename, const char *desc)
-{
-	CT_INFO("fs: %s, filename: %s, desc: %s", fs, filename, desc);
-	return tsm_archive(fs, filename, desc, bTrue);
 }
 
 static dsInt16_t tsm_del_obj(const qryRespArchiveData *qry_resp_ar_data)
@@ -817,16 +816,20 @@ dsInt16_t tsm_delete_hl_ll(const char *fs, const char *hl, const char *ll)
 		}
 		rc = tsm_del_obj(&query_data);
 		if (rc != DSM_RC_SUCCESSFUL) {
-			CT_WARN("\ncannot delete obj fs: %s\n"
-				"                  hl: %s\n"
-				"                  ll: %s",
+			CT_WARN("\ncannot delete obj %s\n"
+				"\t\tfs: %s\n"
+				"\t\thl: %s\n"
+				"\t\tll: %s",
+				OBJ_TYPE(query_data.objName.objType),
 				query_data.objName.fs,
 				query_data.objName.hl,
 				query_data.objName.ll);
 		} else {
 			CT_INFO("\ndeleted obj fs: %s\n"
-				"            hl: %s\n"
-				"            ll: %s",
+				"\t\tfs: %s\n"
+				"\t\thl: %s\n"
+				"\t\tll: %s",
+				OBJ_TYPE(query_data.objName.objType),
 				query_data.objName.fs,
 				query_data.objName.hl,
 				query_data.objName.ll);
@@ -1034,61 +1037,6 @@ clean_up:
 	return rc;
 }
 
-#if 0
-static dsInt16_t dir_walk(const char *fs, const char *directory, const char *desc)
-{
-	FTS *fts;
-	int fts_options = FTS_COMFOLLOW | FTS_LOGICAL | FTS_NOCHDIR;
-	char *paths[] = { (char *)directory, NULL };
-	FTSENT *ftsent;
-	int rc;
-
-	fts = fts_open(paths, fts_options, NULL);
-	if (fts == NULL) {
-		rc = errno;
-		CT_ERROR(rc, "fts_open");
-		return rc;
-	}
-
-	while (1) {
-		ftsent = fts_read(fts);
-		if (ftsent == NULL) {
-			if (errno == 0)
-				break;
-			else {
-				rc = errno;
-				CT_ERROR(rc, "fts_read");
-				goto cleanup;
-			}
-		}
-
-		switch (ftsent->fts_info) {
-		case FTS_D:
-			rc = tsm_archive(fs, ftsent->fts_path, desc, bFalse);
-			break;
-		case FTS_F:
-			rc = tsm_archive(fs, ftsent->fts_path, desc, bTrue);
-			break;
-		default:
-			rc = DSM_RC_UNSUCCESSFUL;
-			break;
-		}
-
-		if (rc)
-			CT_ERROR(rc, "tsm_archive failed: %s", ftsent->fts_path);
-	}
-
-cleanup:
-	rc = fts_close(fts);
-	if (rc) {
-		rc = errno;
-		CT_ERROR(rc, "fts_close");
-	}
-
-	return rc;
-}
-#endif
-
 static dsInt16_t dir_walk(const char *fs, const char *fpath, const char *desc)
 {
 	int rc;
@@ -1125,10 +1073,9 @@ static dsInt16_t dir_walk(const char *fs, const char *fpath, const char *desc)
                         CT_ERROR(ENAMETOOLONG, "path too long, ignoring: %s/%s", fpath, entry->d_name);
 			continue;
                 }
-
 		switch (entry->d_type) {
 		case DT_REG: {
-			rc = tsm_archive(fs, path, desc, bTrue);
+			rc = tsm_archive(fs, path, desc);
 			if (rc)
 				CT_ERROR(0, "tsm_archive file failed: %s", path);
 			break;
@@ -1137,14 +1084,14 @@ static dsInt16_t dir_walk(const char *fs, const char *fpath, const char *desc)
 			if (strcmp(entry->d_name, ".") == 0 ||
 			    strcmp(entry->d_name, "..") == 0)
 				continue;
-			rc = tsm_archive(fs, path, desc, bFalse);
+			rc = tsm_archive(fs, path, desc);
 			if (rc)
 				CT_ERROR(0, "tsm_archive directory failed: %s", path);
 			rc = dir_walk(fs, path, desc);
 			break;
 		}
 		default: /* Flag error on fifos, block/character devices, links, etc. */
-			rc = EPERM;
+			rc = EINVAL;
 			CT_ERROR(rc, "no regular file or directory: %s", path);
 			continue;
 			break;
@@ -1155,7 +1102,7 @@ static dsInt16_t dir_walk(const char *fs, const char *fpath, const char *desc)
         return rc;
 }
 
-dsInt16_t tsm_archive_dir(const char *fs, const char *fpath, const char *desc)
+static dsInt16_t tsm_archive_rec_dir(const char *fs, const char *fpath, const char *desc)
 {
 	dsInt16_t rc;
 	char *fpath_r = strdup(fpath);
@@ -1165,6 +1112,25 @@ dsInt16_t tsm_archive_dir(const char *fs, const char *fpath, const char *desc)
 
 	CT_INFO("fs: %s, fpath: %s, desc: %s\n", fs, fpath_r, desc);
 	rc = dir_walk(fs, fpath_r, desc);
+
+	return rc;
+}
+
+dsInt16_t tsm_archive_file(const char *fs, const char *filename, const char *desc)
+{
+	int rc;
+	struct stat st_buf;
+	CT_INFO("fs: %s, filename: %s, desc: %s", fs, filename, desc);
+
+	rc = stat(filename, &st_buf);
+	if (rc) {
+		CT_ERROR(rc, "stat: %s", filename);
+		return rc;
+	}
+	if (S_ISDIR(st_buf.st_mode))
+		rc = tsm_archive_rec_dir(fs, filename, desc);
+	else
+		rc = tsm_archive(fs, filename, desc);
 
 	return rc;
 }

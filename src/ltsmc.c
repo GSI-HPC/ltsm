@@ -101,22 +101,6 @@ void sanity_arg_check(const char *cmd_name)
 	} /* Username (arg_u) is not necessarily required. */
 }
 
-int is_dir(const char *filepath, dsBool_t *is_dir)
-{
-	int rc;
-	struct stat st_buf;
-
-	rc = stat(filepath, &st_buf);
-	if (rc) {
-		CT_ERROR(rc, "stat: %s", filepath);
-		return rc;
-	}
-
-	*is_dir = (S_ISDIR(st_buf.st_mode)) ? bTrue : bFalse;
-
-	return rc;
-}
-
 int main(int argc, char *argv[])
 {
 	int c;
@@ -254,7 +238,6 @@ int main(int argc, char *argv[])
 			s_arg, MAX_OPTIONS_LENGTH);
 
 	dsInt16_t rc;
-	dsBool_t is_d;
 
 	rc = tsm_init(&login);
 	if (rc)
@@ -291,15 +274,9 @@ int main(int argc, char *argv[])
 			else if (d_arg)	/* Delete. */
 				rc = tsm_delete_file(f_arg, files_dirs_arg[i]);
 			else if (a_arg) {	/* Archive. */
-				rc = is_dir(files_dirs_arg[i], &is_d);
-				if (rc)
-					continue;
-				rc = is_d ? tsm_archive_dir(f_arg,
-							    files_dirs_arg[i],
-							    c_arg) :
-					tsm_archive_file(f_arg,
-							 files_dirs_arg[i],
-							 c_arg);
+				rc = tsm_archive_file(f_arg,
+						      files_dirs_arg[i],
+						      c_arg);
 			}
 			if (rc)
 				goto clean_up;

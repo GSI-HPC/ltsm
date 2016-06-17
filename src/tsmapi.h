@@ -77,7 +77,6 @@ void tsm_quit();
 
 dsInt16_t tsm_query_session_info();
 dsInt16_t tsm_archive_file(const char *fs, const char *filename, const char *desc);
-dsInt16_t tsm_archive_dir(const char *fs, const char *directory, const char *desc);
 dsInt16_t tsm_query_hl_ll(const char *fs, const char *hl, const char *ll, const char *desc, dsBool_t display);
 dsInt16_t tsm_query_file(const char *fs, const char *filename, const char *desc, dsBool_t display);
 dsInt16_t tsm_delete_file(const char *fs, const char *filename);
