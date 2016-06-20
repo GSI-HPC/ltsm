@@ -942,10 +942,13 @@ dsInt16_t tsm_retrieve_hl_ll(const char *fs, const char *hl, const char *ll, con
 		for (unsigned long c_iter = c_begin; c_iter <= c_end; c_iter++) {
 
 			rc = get_query(&query_data, c_iter);
-			CT_INFO("get_query: %lu, rc: %d\n", c_iter, rc);
+			CT_INFO("get_query: %lu, rc: %d", c_iter, rc);
 			if (rc != DSM_RC_SUCCESSFUL) {
 				errno = ENODATA; /* No data available */
 				CT_ERROR(errno, "get_query");
+				goto clean_up;
+			} else if (qarray_size() == 0) {
+				CT_INFO("get_query has no match");
 				goto clean_up;
 			}
 			get_list.objId[i++] = query_data.objId;
@@ -962,7 +965,7 @@ dsInt16_t tsm_retrieve_hl_ll(const char *fs, const char *hl, const char *ll, con
 		for (unsigned long c_iter = c_begin; c_iter <= c_end; c_iter++) {
 
 			rc = get_query(&query_data, c_iter);
-			CT_INFO("get_query: %lu, rc: %d\n", c_iter, rc);
+			CT_INFO("get_query: %lu, rc: %d", c_iter, rc);
 			if (rc != DSM_RC_SUCCESSFUL) {
 				errno = ENODATA; /* No data available */
 				CT_ERROR(errno, "get_query");
