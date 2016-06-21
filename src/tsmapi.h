@@ -37,7 +37,7 @@
 #define MAX_OPTIONS_LENGTH 256
 #define MAX_OFF_T_DS64 20
 
-#define MAGIC_ID 71147
+#define MAGIC_ID_V1 71147
 
 typedef struct {
     char node[DSM_MAX_ID_LENGTH + 1];
@@ -53,13 +53,19 @@ typedef struct {
     dsUint32_t f_ver;	/* __u32 */
 } lu_fid_t;
 
-/* Own object description exchanged with TSM. */
+/* Custom object description. */
 typedef struct {
     unsigned int magic;
-    dsUint8_t objType;
     dsStruct64_t size;
     lu_fid_t lu_fid;
  } obj_info_t;
+
+typedef struct {
+	char fpath[PATH_MAX + 1];
+	char desc[DSM_MAX_DESCR_LENGTH + 1];
+	obj_info_t obj_info;
+	dsmObjName obj_name;
+} archive_info_t;
 
 typedef struct {
     unsigned long capacity;	/* Number of maximum elements. If max capacity is reached,
@@ -77,6 +83,7 @@ void tsm_quit();
 
 dsInt16_t tsm_query_session_info();
 dsInt16_t tsm_archive_file(const char *fs, const char *filename, const char *desc);
+dsInt16_t tsm_archive_fid(const char *fs, const char *filename, const char *desc, const lu_fid_t *lu_fid);
 dsInt16_t tsm_query_hl_ll(const char *fs, const char *hl, const char *ll, const char *desc, dsBool_t display);
 dsInt16_t tsm_query_file(const char *fs, const char *filename, const char *desc, dsBool_t display);
 dsInt16_t tsm_delete_file(const char *fs, const char *filename);
