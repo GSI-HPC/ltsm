@@ -1119,9 +1119,18 @@ static dsInt16_t tsm_rec_archive_dir(archive_info_t *archive_info)
 						 path,
 						 archive_info->desc,
 						 archive_info);
+			if (rc) {
+				CT_WARN("tsm_archive_prepare failed: \n"
+					"fs: %s, fpath: %s, hl: %s, ll: %s\n",
+					archive_info->obj_name.fs,
+					archive_info->fpath,
+					archive_info->obj_name.hl,
+					archive_info->obj_name.ll);
+				break;
+			}
 			rc = tsm_archive_generic(archive_info);
 			if (rc)
-				CT_ERROR(0, "tsm_archive file failed: %s", path);
+				CT_WARN("tsm_archive_generic failed: %s", archive_info->fpath);
 			break;
 		}
 		case DT_DIR: {
@@ -1132,9 +1141,20 @@ static dsInt16_t tsm_rec_archive_dir(archive_info_t *archive_info)
 						 path,
 						 archive_info->desc,
 						 archive_info);
+			if (rc) {
+				CT_WARN("tsm_archive_prepare failed: \n"
+					"fs: %s, fpath: %s, hl: %s, ll: %s\n",
+					archive_info->obj_name.fs,
+					archive_info->fpath,
+					archive_info->obj_name.hl,
+					archive_info->obj_name.ll);
+				break;
+			}
 			rc = tsm_archive_generic(archive_info);
-			if (rc)
-				CT_ERROR(0, "tsm_archive directory failed: %s", path);
+			if (rc) {
+				CT_WARN("tsm_archive_generic failed: %s", archive_info->fpath);
+				break;
+			}
 			snprintf(archive_info->fpath, PATH_MAX, "%s/%s", dpath, entry->d_name);
 			rc = tsm_rec_archive_dir(archive_info);
 			break;
@@ -1142,7 +1162,6 @@ static dsInt16_t tsm_rec_archive_dir(archive_info_t *archive_info)
 		default: /* Flag error on fifos, block/character devices, links, etc. */
 			rc = EINVAL;
 			CT_ERROR(rc, "no regular file or directory: %s", path);
-			continue;
 			break;
 		}
         }
@@ -1199,7 +1218,7 @@ dsInt16_t tsm_archive_fid(const char *fs, const char *fpath, const char *desc, c
 
 	rc = tsm_archive_prepare(fs, fpath, desc, &archive_info);
 	if (rc) {
-		CT_WARN("tsm_archive_fid failed: \n"
+		CT_WARN("tsm_archive_prepare failed: \n"
 			"fs: %s, fpath: %s, desc: %s\n"
 			"fseq: %lu, f_oid: %d, f_ver: %d",
 			fs, fpath, desc, lu_fid->f_seq,
