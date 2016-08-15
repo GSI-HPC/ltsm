@@ -808,13 +808,13 @@ clean_up:
 	return rc;
 }
 
-dsInt16_t tsm_delete_file(const char *fs, const char *filename)
+dsInt16_t tsm_delete_file(const char *fs, const char *fpath)
 {
 	dsInt16_t rc;
 	char hl[DSM_MAX_HL_LENGTH + 1] = {0};
 	char ll[DSM_MAX_LL_LENGTH + 1] = {0};
 
-	rc = extract_hl_ll(filename, hl, ll);
+	rc = extract_hl_ll(fpath, hl, ll);
 	if (rc != DSM_RC_SUCCESSFUL)
 		return rc;
 
@@ -823,13 +823,13 @@ dsInt16_t tsm_delete_file(const char *fs, const char *filename)
 	return rc;
 }
 
-dsInt16_t tsm_query_file(const char *fs, const char *filename, const char *desc, dsBool_t display)
+dsInt16_t tsm_query_file(const char *fs, const char *fpath, const char *desc, dsBool_t display)
 {
 	dsInt16_t rc;
 	char hl[DSM_MAX_HL_LENGTH + 1] = {0};
 	char ll[DSM_MAX_LL_LENGTH + 1] = {0};
 
-	rc = extract_hl_ll(filename, hl, ll);
+	rc = extract_hl_ll(fpath, hl, ll);
 	if (rc != DSM_RC_SUCCESSFUL)
 		return rc;
 
@@ -838,13 +838,13 @@ dsInt16_t tsm_query_file(const char *fs, const char *filename, const char *desc,
 	return rc;
 }
 
-dsInt16_t tsm_retrieve_file(const char *fs, const char *filename, const char *desc)
+dsInt16_t tsm_retrieve_file(const char *fs, const char *fpath, const char *desc)
 {
 	dsInt16_t rc;
 	char hl[DSM_MAX_HL_LENGTH + 1] = {0};
 	char ll[DSM_MAX_LL_LENGTH + 1] = {0};
 
-	rc = extract_hl_ll(filename, hl, ll);
+	rc = extract_hl_ll(fpath, hl, ll);
 	if (rc != DSM_RC_SUCCESSFUL)
 		return rc;
 

@@ -1,15 +1,15 @@
-/* 
+/*
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 only,
  * as published by the Free Software Foundation.
  *
  * This program is distributed in the hope that it will be useful, but
  * WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
  * General Public License version 2 for more details (a copy is included
  * in the LICENSE file that accompanied this code).
  * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>. 
+ * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
 /*
@@ -40,25 +40,25 @@
 #define MAGIC_ID_V1 71147
 
 typedef struct {
-    char node[DSM_MAX_ID_LENGTH + 1];
-    char password[MAX_PASSWORD_LENGTH + 1];
-    char username[MAX_USERNAME_LENGTH + 1];
-    char platform[DSM_MAX_PLATFORM_LENGTH + 1];
-    char options[MAX_OPTIONS_LENGTH + 1];
+	char node[DSM_MAX_ID_LENGTH + 1];
+	char password[MAX_PASSWORD_LENGTH + 1];
+	char username[MAX_USERNAME_LENGTH + 1];
+	char platform[DSM_MAX_PLATFORM_LENGTH + 1];
+	char options[MAX_OPTIONS_LENGTH + 1];
 } login_t;
 
 typedef struct {
-    dsUint64_t f_seq;	/* __u64 */
-    dsUint32_t f_oid;	/* __u32 */
-    dsUint32_t f_ver;	/* __u32 */
+	dsUint64_t f_seq;
+	dsUint32_t f_oid;
+	dsUint32_t f_ver;
 } lu_fid_t;
 
 /* Custom object description. */
 typedef struct {
-    unsigned int magic;
-    dsStruct64_t size;
-    lu_fid_t lu_fid;
- } obj_info_t;
+	unsigned int magic;
+	dsStruct64_t size;
+	lu_fid_t lu_fid;
+} obj_info_t;
 
 typedef struct {
 	char fpath[PATH_MAX + 1];
@@ -68,27 +68,30 @@ typedef struct {
 } archive_info_t;
 
 typedef struct {
-    unsigned long capacity;	/* Number of maximum elements. If max capacity is reached,
-				   then capacity is doubled  by means realloc. */
-    unsigned long N;		/* Number of actual elements. */
-    qryRespArchiveData *data;	/* Array of query replies from TSM. */
+	unsigned long capacity;
+	unsigned long N;
+	qryRespArchiveData *data;
 } query_arr_t;
 
-
-off_t to_off_t(const dsStruct64_t size); /* Convert dsStruct64_t to off_t required for filesize conversation. */
-dsStruct64_t to_dsStruct64_t(const off_t size); /* Convert off_t to dsStruct64. */
+off_t to_off_t(const dsStruct64_t size);
+dsStruct64_t to_dsStruct64_t(const off_t size);
 
 dsInt16_t tsm_init(login_t *login);
 void tsm_quit();
 
 dsInt16_t tsm_query_session_info();
-dsInt16_t tsm_archive_file(const char *fs, const char *filename, const char *desc);
-dsInt16_t tsm_archive_fid(const char *fs, const char *filename, const char *desc, const lu_fid_t *lu_fid);
-dsInt16_t tsm_query_hl_ll(const char *fs, const char *hl, const char *ll, const char *desc, dsBool_t display);
-dsInt16_t tsm_query_file(const char *fs, const char *filename, const char *desc, dsBool_t display);
-dsInt16_t tsm_delete_file(const char *fs, const char *filename);
+dsInt16_t tsm_archive_file(const char *fs, const char *fpath, const char *desc);
+dsInt16_t tsm_archive_fid(const char *fs, const char *fpath, const char *desc,
+			  const lu_fid_t *lu_fid);
+dsInt16_t tsm_query_hl_ll(const char *fs, const char *hl, const char *ll,
+			  const char *desc, dsBool_t display);
+dsInt16_t tsm_query_file(const char *fs, const char *fpath,
+			 const char *desc, dsBool_t display);
+dsInt16_t tsm_delete_file(const char *fs, const char *fpath);
 dsInt16_t tsm_delete_hl_ll(const char *fs, const char *hl, const char *ll);
-dsInt16_t tsm_retrieve_file(const char *fs, const char *filename, const char *desc);
-dsInt16_t tsm_retrieve_hl_ll(const char *fs, const char *hl, const char *ll, const char *desc);
+dsInt16_t tsm_retrieve_file(const char *fs, const char *fpath,
+			    const char *desc);
+dsInt16_t tsm_retrieve_hl_ll(const char *fs, const char *hl, const char *ll,
+			     const char *desc);
 
 #endif /* TSMAPI_H */
