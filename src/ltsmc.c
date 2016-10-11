@@ -1,4 +1,4 @@
-/* 
+/*
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 only,
  * as published by the Free Software Foundation.
@@ -9,20 +9,19 @@
  * General Public License version 2 for more details (a copy is included
  * in the LICENSE file that accompanied this code).
  * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>. 
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
 /*
  * Copyright (c) 2016, Thomas Stibor <t.stibor@gsi.de>
  */
 
-#include "log.h"
-#include "tsmapi.h"
 #include <string.h>
 #include <stdlib.h>
 #include <time.h>
 #include <getopt.h>
 #include <sys/stat.h>
+#include "tsmapi.h"
 
 /* If version tag can not be obtained via Makefile
    and `git describe`, set it to not available. */
@@ -207,9 +206,9 @@ int main(int argc, char *argv[])
 	}
 
 	argc == 1 ? usage(argv[0]) : sanity_arg_check(argv[0]);
-    
+
 	size_t num_files_dirs = 0;
-    
+
 	/* file or directory parameter */
 	if (optind < argc) {
 		size_t i = 0;
@@ -282,7 +281,7 @@ int main(int argc, char *argv[])
 				goto clean_up;
 		}
 	}
-    
+
 clean_up:
 	if (files_dirs_arg) {
 		for (size_t i = 0; i < num_files_dirs; i++) {
