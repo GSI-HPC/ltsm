@@ -210,36 +210,11 @@ static int fid_realpath(const char *mnt, const lustre_fid *fid,
 	return rc;
 }
 
-static int ct_path_lustre(char *buf, int sz, const char *mnt,
-			  const lustre_fid *fid)
-{
-	return snprintf(buf, sz, "%s/%s/fid/"DFID_NOBRACE, mnt,
-			dot_lustre_name, PFID(fid));
-}
-
-static int ct_path_archive(char *buf, int sz, const lustre_fid *fid)
-{
-	__u64 sequence_id = (fid)->f_seq;
-	__u32 object_id   = (fid)->f_oid;
-	__u32 version     = (fid)->f_ver;
-	return snprintf(buf, sz, "%016llx_%08x_%08x",
-			sequence_id, object_id, version);
-
-}
-
-static int print_fid(const lustre_fid *fid)
-{
-	printf("%016llx_%08x_%08x\n",
-	       (fid)->f_seq,
-	       (fid)->f_oid,
-	       (fid)->f_ver);
-}
-
 static int ct_finish(struct hsm_copyaction_private **phcp,
-		     const struct hsm_action_item *hai, int hp_flags, int ct_rc)
+		     const struct hsm_action_item *hai, int hp_flags,
+		     int ct_rc, char *fpath)
 {
 	struct hsm_copyaction_private *hcp;
-	char lstr[PATH_MAX];
 	int rc;
 
 	CT_TRACE("Action completed, notifying coordinator "
@@ -247,13 +222,11 @@ static int ct_finish(struct hsm_copyaction_private **phcp,
 		 (uintmax_t)hai->hai_cookie, PFID(&hai->hai_fid),
 		 hp_flags, -ct_rc);
 
-	ct_path_lustre(lstr, sizeof(lstr), opt.o_mnt, &hai->hai_fid);
-
 	if (phcp == NULL || *phcp == NULL) {
 		rc = llapi_hsm_action_begin(&hcp, ctdata, hai, -1, 0, true);
 		if (rc < 0) {
 			CT_ERROR(rc, "llapi_hsm_action_begin() on '%s' failed",
-				 lstr);
+				 fpath);
 			return rc;
 		}
 		phcp = &hcp;
@@ -262,13 +235,13 @@ static int ct_finish(struct hsm_copyaction_private **phcp,
 	rc = llapi_hsm_action_end(phcp, &hai->hai_extent, hp_flags, abs(ct_rc));
 	if (rc == -ECANCELED)
 		CT_ERROR(rc, "completed action on '%s' has been canceled: "
-			 "cookie=%#jx, FID="DFID, lstr,
+			 "cookie=%#jx, FID="DFID, fpath,
 			 (uintmax_t)hai->hai_cookie, PFID(&hai->hai_fid));
 	else if (rc < 0)
-		CT_ERROR(rc, "llapi_hsm_action_end() on '%s' failed", lstr);
+		CT_ERROR(rc, "llapi_hsm_action_end() on '%s' failed", fpath);
 	else
 		CT_TRACE("llapi_hsm_action_end() on '%s' ok (rc=%d)",
-			 lstr, rc);
+			 fpath, rc);
 
 	return rc;
 }
@@ -277,22 +250,25 @@ static int ct_archive(const struct hsm_action_item *hai, const long hal_flags,
 		      const char *filename)
 {
 	struct hsm_copyaction_private *hcp = NULL;
-	char src[PATH_MAX];
+	char fpath[PATH_MAX + 1] = {0};
 	int rc;
 	int rcf = 0;
 	int hp_flags = 0;
 	int src_fd = -1;
-	char fpath[PATH_MAX + 1];
 
-	ct_path_lustre(src, sizeof(src), opt.o_mnt, &hai->hai_dfid);
+	rc = fid_realpath(opt.o_mnt, &hai->hai_fid, fpath, sizeof(fpath));
+	if (rc < 0) {
+		CT_ERROR(rc, "fid_realpath()");
+		goto cleanup;
+	}
 
 	rc = llapi_hsm_action_begin(&hcp, ctdata, hai, -1, 0, false);
 	if (rc < 0) {
-		ct_path_lustre(src, sizeof(src), opt.o_mnt, &hai->hai_fid);
-		CT_ERROR(rc, "llapi_hsm_action_begin() on '%s' failed", src);
+		CT_ERROR(rc, "llapi_hsm_action_begin() on '%s' failed", fpath);
+		goto cleanup;
 	}
 
-	CT_TRACE("archiving '%s' to TSM storage", src);
+	CT_TRACE("archiving '%s' to TSM storage", fpath);
 
 	if (opt.o_dry_run) {
 		rc = 0;
@@ -302,29 +278,68 @@ static int ct_archive(const struct hsm_action_item *hai, const long hal_flags,
 	src_fd = llapi_hsm_action_get_fd(hcp);
 	if (src_fd < 0) {
 		rc = src_fd;
-		CT_ERROR(rc, "cannot open '%s' for read", src);
-		goto cleanup;
-	}
-
-	rc = fid_realpath(opt.o_mnt, &hai->hai_fid, fpath, sizeof(fpath));
-	if (rc < 0) {
-		CT_ERROR(rc, "fid_realpath");
+		CT_ERROR(rc, "cannot open '%s' for read", fpath);
 		goto cleanup;
 	}
 
 	rc = tsm_archive_fid("/", fpath, NULL, (const void *)&hai->hai_fid);
 	if (rc != DSM_RC_SUCCESSFUL) {
 		CT_ERROR(rc, "tsm_archive_fid on '%s' failed", fpath);
-		return rc;
+		goto cleanup;
 	}
 
-	CT_TRACE("data archiving for '%s' to TSM storage done", src);
+	CT_TRACE("data archiving for '%s' to TSM storage done", fpath);
 
 cleanup:
 	if (!(src_fd < 0))
 		close(src_fd);
 
-	rc = ct_finish(&hcp, hai, hp_flags, rcf);
+	rc = ct_finish(&hcp, hai, hp_flags, rcf, fpath);
+
+	return rc;
+}
+
+static int ct_remove(const struct hsm_action_item *hai, const long hal_flags)
+{
+	struct hsm_copyaction_private *hcp = NULL;
+	char fpath[PATH_MAX + 1] = {0};
+	int rc;
+
+	rc = fid_realpath(opt.o_mnt, &hai->hai_fid, fpath, sizeof(fpath));
+	if (rc < 0) {
+		CT_ERROR(rc, "fid_realpath()");
+		goto cleanup;
+	}
+
+	rc = llapi_hsm_action_begin(&hcp, ctdata, hai, -1, 0, false);
+	if (rc < 0) {
+		CT_ERROR(rc, "llapi_hsm_action_begin() on '%s' failed", fpath);
+		goto cleanup;
+	}
+
+	CT_TRACE("removing file '%s'", fpath);
+
+	if (opt.o_dry_run) {
+		rc = 0;
+		goto cleanup;
+	}
+	rc = tsm_delete_file("/", fpath);
+	if (rc != DSM_RC_SUCCESSFUL) {
+		CT_ERROR(rc, "tsm_delete_file on '%s' failed", fpath);
+		goto cleanup;
+	}
+
+	rc = unlink(fpath);
+	if (rc < 0) {
+		rc = -errno;
+		CT_ERROR(rc, "cannot unlink '%s'", fpath);
+		err_minor++;
+		goto cleanup;
+	}
+
+
+cleanup:
+	rc = ct_finish(&hcp, hai, 0, rc, fpath);
 
 	return rc;
 }
@@ -361,7 +376,7 @@ static int ct_process_item(struct hsm_action_item *hai, const long hal_flags)
 		/* TODO rc = ct_restore(hai, hal_flags); */
 		break;
 	case HSMA_REMOVE:
-		/* TODO rc = ct_remove(hai, hal_flags); */
+		rc = ct_remove(hai, hal_flags);
 		break;
 	case HSMA_CANCEL:
 		CT_TRACE("cancel not implemented for file system '%s'",
@@ -377,7 +392,7 @@ static int ct_process_item(struct hsm_action_item *hai, const long hal_flags)
 		CT_ERROR(rc, "unknown action %d, on '%s'", hai->hai_action,
 			 opt.o_mnt);
 		err_minor++;
-		ct_finish(NULL, hai, 0, rc);
+		ct_finish(NULL, hai, 0, rc, NULL);
 	}
 
 	return 0;
