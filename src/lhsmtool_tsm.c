@@ -193,7 +193,6 @@ static int fid_realpath(const char *mnt, const lustre_fid *fid,
 	long long recno = -1;
 	char file[PATH_MAX];
 	char strfid[FID_NOBRACE_LEN + 1];
-	char *ptr;
 
 	snprintf(strfid, sizeof(strfid), DFID_NOBRACE, PFID(fid));
 

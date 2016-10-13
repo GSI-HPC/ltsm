@@ -90,7 +90,6 @@ AC_CONFIG_FILES([Makefile
 LDFLAGS="$LDFLAGS -Wl,--as-needed"
 
 # Halt on warnings.
-# CFLAGS="$CFLAGS -Wall -Werror -pedantic"
+CFLAGS="$CFLAGS -Wall -Werror"
 
 AC_OUTPUT
-
