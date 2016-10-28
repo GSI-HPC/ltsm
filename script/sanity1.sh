@@ -4,6 +4,12 @@
 set -e
 VERBOSE=0
 
+__check_bin() {
+    [[ ! -f "${1}" ]] && { echo "[ERROR]: Cannot find '${1}' binary"; exit 1; }
+
+    return 0
+}
+
 __log() {
     [[ ${VERBOSE} -eq 1 ]] && echo "$@"
 
@@ -113,15 +119,14 @@ find ${PATH_PREFIX} -exec md5sum -b '{}' \; &> ${MD5_ORIG}
 ##########################################################
 # LTSM action
 ##########################################################
-TSM_NAME=${1-lxdv81}
-LTSM_BIN="bin/ltsmc"
+TSM_NAME=${1-polaris}
+LTSM_BIN="src/ltsmc"
 LTSM_NODE=${TSM_NAME}
 LTSM_PASSWORD=${TSM_NAME}
-LTSM_SERVERNAME=${2-lxdv81-kvm-tsm-server}
+LTSM_SERVERNAME=${2-polaris-kvm-tsm-server}
 export DSMI_CONFIG=`pwd`/dsmopt/dsm.sys
 
-# Build binary
-make clean && DEBUG=0 VERBOSE=0 make > /dev/null
+__check_bin "${LTSM_BIN}"
 
 # Archive data
 echo "Archiving data please wait ..."

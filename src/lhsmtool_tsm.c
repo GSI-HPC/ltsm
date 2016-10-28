@@ -32,11 +32,11 @@
 #include <linux/limits.h>
 #include <sys/syscall.h>
 #include <sys/time.h>
-
 #include <lustre/lustre_idl.h>
 #include <lustre/lustreapi.h>
-
 #include "tsmapi.h"
+
+#define FS_SPACE "/"
 
 struct options {
 	int o_daemonize;
@@ -245,8 +245,7 @@ static int ct_finish(struct hsm_copyaction_private **phcp,
 	return rc;
 }
 
-static int ct_archive(const struct hsm_action_item *hai, const long hal_flags,
-		      const char *filename)
+static int ct_archive(const struct hsm_action_item *hai, const long hal_flags)
 {
 	struct hsm_copyaction_private *hcp = NULL;
 	char fpath[PATH_MAX + 1] = {0};
@@ -281,7 +280,7 @@ static int ct_archive(const struct hsm_action_item *hai, const long hal_flags,
 		goto cleanup;
 	}
 
-	rc = tsm_archive_fid("/", fpath, NULL, (const void *)&hai->hai_fid);
+	rc = tsm_archive_fid(FS_SPACE, fpath, NULL, (const void *)&hai->hai_fid);
 	if (rc != DSM_RC_SUCCESSFUL) {
 		CT_ERROR(rc, "tsm_archive_fid on '%s' failed", fpath);
 		goto cleanup;
@@ -294,6 +293,74 @@ cleanup:
 		close(src_fd);
 
 	rc = ct_finish(&hcp, hai, hp_flags, rcf, fpath);
+
+	return rc;
+}
+
+static int ct_restore(const struct hsm_action_item *hai, const long hal_flags)
+{
+	struct hsm_copyaction_private *hcp = NULL;
+	int rc;
+	int dst_fd = -1;
+	int mdt_index = -1;
+	int open_flags = 0;
+	int hp_flags = 0;
+	char fpath[PATH_MAX + 1] = {0};
+	struct lu_fid dfid;
+
+	rc = fid_realpath(opt.o_mnt, &hai->hai_fid, fpath, sizeof(fpath));
+	if (rc < 0) {
+		CT_ERROR(rc, "fid_realpath()");
+		return rc;
+	}
+
+	rc = llapi_get_mdt_index_by_fid(opt.o_mnt_fd, &hai->hai_fid,
+					&mdt_index);
+	if (rc < 0) {
+		CT_ERROR(rc, "cannot get mdt index "DFID"",
+			 PFID(&hai->hai_fid));
+		return rc;
+	}
+
+	rc = llapi_hsm_action_begin(&hcp, ctdata, hai, mdt_index, open_flags,
+				    false);
+	if (rc < 0) {
+		CT_ERROR(rc, "llapi_hsm_action_begin() on '%s' failed", fpath);
+		return rc;
+	}
+
+	rc = llapi_hsm_action_get_dfid(hcp, &dfid);
+	if (rc < 0) {
+	    CT_ERROR(rc, "restoring "DFID
+		     ", cannot get FID of created volatile file",
+		     PFID(&hai->hai_fid));
+	    goto cleanup;
+	}
+
+	CT_TRACE("restoring data from TSM server to '%s'", fpath);
+	if (opt.o_dry_run) {
+	    rc = 0;
+	    goto cleanup;
+	}
+
+	dst_fd = llapi_hsm_action_get_fd(hcp);
+	if (dst_fd < 0) {
+		rc = dst_fd;
+		CT_ERROR(rc, "cannot open '%s' for write", fpath);
+		goto cleanup;
+	}
+
+	rc = tsm_retrieve_file_fd(FS_SPACE, fpath, NULL, dst_fd);
+	if (rc != DSM_RC_SUCCESSFUL)
+	    return rc;
+
+	CT_TRACE("data restore from TSM server to '%s' done", fpath);
+
+cleanup:
+	rc = ct_finish(&hcp, hai, hp_flags, rc, fpath);
+
+	if (!(dst_fd < 0))
+		close(dst_fd);
 
 	return rc;
 }
@@ -322,7 +389,7 @@ static int ct_remove(const struct hsm_action_item *hai, const long hal_flags)
 		rc = 0;
 		goto cleanup;
 	}
-	rc = tsm_delete_file("/", fpath);
+	rc = tsm_delete_file(FS_SPACE, fpath);
 	if (rc != DSM_RC_SUCCESSFUL) {
 		CT_ERROR(rc, "tsm_delete_file on '%s' failed", fpath);
 		goto cleanup;
@@ -369,10 +436,10 @@ static int ct_process_item(struct hsm_action_item *hai, const long hal_flags)
 	switch (hai->hai_action) {
 	/* set err_major, minor inside these functions */
 	case HSMA_ARCHIVE:
-		rc = ct_archive(hai, hal_flags, NULL);
+		rc = ct_archive(hai, hal_flags);
 		break;
 	case HSMA_RESTORE:
-		/* TODO rc = ct_restore(hai, hal_flags); */
+		rc = ct_restore(hai, hal_flags);
 		break;
 	case HSMA_REMOVE:
 		rc = ct_remove(hai, hal_flags);

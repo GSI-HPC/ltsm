@@ -91,6 +91,8 @@ dsInt16_t tsm_delete_file(const char *fs, const char *fpath);
 dsInt16_t tsm_delete_hl_ll(const char *fs, const char *hl, const char *ll);
 dsInt16_t tsm_retrieve_file(const char *fs, const char *fpath,
 			    const char *desc);
+dsInt16_t tsm_retrieve_file_fd(const char *fs, const char *fpath,
+			       const char *desc, int fd);
 dsInt16_t tsm_retrieve_hl_ll(const char *fs, const char *hl, const char *ll,
 			     const char *desc);
 
