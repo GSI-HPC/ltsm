@@ -145,18 +145,18 @@ static dsInt16_t tsm_open_fstream(const char *fs, const char *hl, const char *ll
 	rc = mkdir_p(hl);
 	if (rc) {
 		CT_ERROR(rc, "mkdir_p: %s", hl);
-		goto clean_up;
+		goto cleanup;
 	}
 
 	*fstream = fopen(filename, "w");
 	if (!fstream) {
 		rc = errno;
 		CT_ERROR(rc, "fopen: %s", filename);
-		goto clean_up;
+		goto cleanup;
 	}
 	rc = DSM_RC_SUCCESSFUL;
 
-clean_up:
+cleanup:
 	if (filename)
 		free(filename);
 
@@ -206,9 +206,9 @@ static dsInt16_t retrieve_obj(qryRespArchiveData *query_data,
 
 	buf = malloc(sizeof(char) * TSM_BUF_LENGTH);
 	if (!buf) {
-		rc = errno;
-		CT_ERROR(rc, "malloc");
-		goto clean_up;
+		rc = DSM_RC_UNSUCCESSFUL;
+		CT_ERROR(errno, "malloc");
+		goto cleanup;
 	}
 
 	dataBlk.stVersion = DataBlkVersion;
@@ -251,7 +251,7 @@ static dsInt16_t retrieve_obj(qryRespArchiveData *query_data,
 	if (rc != DSM_RC_SUCCESSFUL)
 		TSM_ERROR(rc, "dsmEndGetObj");
 
-clean_up:
+cleanup:
 	if (buf)
 		free(buf);
 	if (fstream)
@@ -490,7 +490,7 @@ dsInt16_t tsm_query_hl_ll(const char *fs, const char *hl, const char *ll, const 
 	TSM_TRACE(rc, "dsmBeginQuery");
 	if (rc) {
 		TSM_ERROR(rc, "dsmBeginQuery");
-		goto clean_up;
+		goto cleanup;
 	}
 
 	qryRespArchiveData qry_resp_ar_data;
@@ -517,7 +517,7 @@ dsInt16_t tsm_query_hl_ll(const char *fs, const char *hl, const char *ll, const 
 				rc = add_query(&qry_resp_ar_data);
 				if (rc) {
 					CT_ERROR(0, "add_query");
-					goto clean_up;
+					goto cleanup;
 				}
 			}
 		} else {
@@ -532,10 +532,10 @@ dsInt16_t tsm_query_hl_ll(const char *fs, const char *hl, const char *ll, const 
 	rc = dsmEndQuery(handle);
 	if (rc)  {
 		TSM_ERROR(rc, "dsmEndQuery");
-		goto clean_up;
+		goto cleanup;
 	}
 
-clean_up:
+cleanup:
 	return rc;
 }
 
@@ -634,7 +634,7 @@ static dsInt16_t tsm_archive_generic(archive_info_t *archive_info)
 	TSM_TRACE(rc, "dsmBeginTxn");
 	if (rc) {
 		TSM_ERROR(rc, "dsmBeginTxn");
-		goto clean_up;
+		goto cleanup;
 	}
 
 	mc_bind_key.stVersion = mcBindKeyVersion;
@@ -642,7 +642,7 @@ static dsInt16_t tsm_archive_generic(archive_info_t *archive_info)
 	TSM_TRACE(rc, "dsmBindMC");
 	if (rc) {
 		TSM_ERROR(rc, "dsmBindMC");
-		goto clean_up_transaction;
+		goto cleanup_transaction;
 	}
 
 	arch_data.stVersion = sndArchiveDataVersion;
@@ -653,7 +653,7 @@ static dsInt16_t tsm_archive_generic(archive_info_t *archive_info)
 
 	rc = obj_attr_prepare(&obj_attr, archive_info);
 	if (rc)
-		goto clean_up_transaction;
+		goto cleanup_transaction;
 
 	/* Start sending object. */
 	rc = dsmSendObj(handle, stArchive, &arch_data,
@@ -661,14 +661,14 @@ static dsInt16_t tsm_archive_generic(archive_info_t *archive_info)
 	TSM_TRACE(rc, "dsmSendObj");
 	if (rc) {
 		TSM_ERROR(rc, "dsmSendObj");
-		goto clean_up_transaction;
+		goto cleanup_transaction;
 	}
 
 	data_blk.bufferPtr = (char *)malloc(sizeof(buf));
 	if (!data_blk.bufferPtr) {
 		rc = errno;
 		CT_ERROR(rc, "malloc");
-		goto clean_up_sendobj;
+		goto cleanup_sendobj;
 	}
 	data_blk.stVersion = DataBlkVersion;
 	data_blk.bufferLen = sizeof(buf);
@@ -679,7 +679,7 @@ static dsInt16_t tsm_archive_generic(archive_info_t *archive_info)
 		if (ferror(file)) {
 			rc = EBADF;
 			CT_ERROR(rc, "fread");
-			goto clean_up_sendobj;
+			goto cleanup_sendobj;
 		}
 		total_bytes += rbytes;
 
@@ -687,12 +687,12 @@ static dsInt16_t tsm_archive_generic(archive_info_t *archive_info)
 		TSM_TRACE(rc, "dsmSendData");
 		if (rc) {
 			TSM_ERROR(rc, "dsmSendData");
-			goto clean_up_sendobj;
+			goto cleanup_sendobj;
 		}
 	}
 	success = bTrue;
 
-clean_up_sendobj:
+cleanup_sendobj:
 	rc = dsmEndSendObj(handle);
 	TSM_TRACE(rc, "dsmEndSendObj");
 	if (rc) {
@@ -700,7 +700,7 @@ clean_up_sendobj:
 		success = bFalse;
 	}
 
-clean_up_transaction:
+cleanup_transaction:
 	rc = dsmEndTxn(handle, DSM_VOTE_COMMIT, &err_reason);
 	TSM_TRACE(rc, "dsmEndTxn");
 	if (rc || err_reason) {
@@ -722,7 +722,7 @@ clean_up_transaction:
 			archive_info->obj_name.ll, archive_info->desc);
 	}
 
-clean_up:
+cleanup:
 	if (file)
 		fclose(file);
 	if (obj_attr.objInfo)
@@ -777,7 +777,7 @@ dsInt16_t tsm_delete_hl_ll(const char *fs, const char *hl, const char *ll)
 
 	rc = tsm_query_hl_ll(fs, hl, ll, NULL, bFalse);
 	if (rc != DSM_RC_SUCCESSFUL)
-		goto clean_up;
+		goto cleanup;
 
 	qryRespArchiveData query_data;
 
@@ -787,7 +787,7 @@ dsInt16_t tsm_delete_hl_ll(const char *fs, const char *hl, const char *ll)
 		if (rc != DSM_RC_SUCCESSFUL) {
 			errno = ENODATA; /* No data available */
 			CT_ERROR(errno, "get_query");
-			goto clean_up;
+			goto cleanup;
 		}
 		rc = tsm_del_obj(&query_data);
 		if (rc != DSM_RC_SUCCESSFUL) {
@@ -811,7 +811,7 @@ dsInt16_t tsm_delete_hl_ll(const char *fs, const char *hl, const char *ll)
 		}
 	}
 
-clean_up:
+cleanup:
 	destroy_qarray();
 	return rc;
 }
@@ -851,17 +851,18 @@ static dsInt16_t tsm_retrieve_generic(const char *fs, const char *hl,
 				      int fd)
 {
 	dsInt16_t rc;
+	dsInt16_t minor_rc = 0;
 	dsmGetList get_list;
 
 	get_list.objId = NULL;
 
 	rc = init_qarray();
 	if (rc != DSM_RC_SUCCESSFUL)
-		goto clean_up;
+		goto cleanup;
 
 	rc = tsm_query_hl_ll(fs, hl, ll, desc, bFalse);
 	if (rc != DSM_RC_SUCCESSFUL)
-		goto clean_up;
+		goto cleanup;
 
 	/* Sort query replies to ensure that the data are read from the server in the most efficient order.
 	   At least this is written on page Chapter 3. API design recommendations and considerations 57. */
@@ -888,7 +889,7 @@ static dsInt16_t tsm_retrieve_generic(const char *fs, const char *hl,
 		if (!get_list.objId) {
 			rc = errno;
 			CT_ERROR(rc, "malloc");
-			goto clean_up;
+			goto cleanup;
 		}
 		for (unsigned long c_iter = c_begin; c_iter <= c_end; c_iter++) {
 
@@ -897,10 +898,10 @@ static dsInt16_t tsm_retrieve_generic(const char *fs, const char *hl,
 			if (rc != DSM_RC_SUCCESSFUL) {
 				errno = ENODATA; /* No data available */
 				CT_ERROR(errno, "get_query");
-				goto clean_up;
+				goto cleanup;
 			} else if (qarray_size() == 0) {
 				CT_INFO("get_query has no match");
-				goto clean_up;
+				goto cleanup;
 			}
 			get_list.objId[i++] = query_data.objId;
 		}
@@ -909,7 +910,7 @@ static dsInt16_t tsm_retrieve_generic(const char *fs, const char *hl,
 		TSM_TRACE(rc, "dsmBeginGetData");
 		if (rc) {
 			TSM_ERROR(rc, "dsmBeginGetData");
-			goto clean_up;
+			goto cleanup;
 		}
 
 		obj_info_t obj_info;
@@ -918,9 +919,9 @@ static dsInt16_t tsm_retrieve_generic(const char *fs, const char *hl,
 			rc = get_query(&query_data, c_iter);
 			CT_INFO("get_query: %lu, rc: %d", c_iter, rc);
 			if (rc != DSM_RC_SUCCESSFUL) {
-				errno = ENODATA; /* No data available */
-				CT_ERROR(errno, "get_query");
-				goto clean_up;
+				minor_rc = ENODATA; /* No data available */
+				CT_ERROR(minor_rc, "get_query");
+				goto cleanup_getdata;
 			}
 			memcpy(&obj_info,
 			       (char *)&(query_data.objInfo),
@@ -951,14 +952,15 @@ static dsInt16_t tsm_retrieve_generic(const char *fs, const char *hl,
 
 			switch (query_data.objName.objType) {
 			case DSM_OBJ_FILE: {
-				rc = retrieve_obj(&query_data, &obj_info, fd);
-				CT_INFO("retrieve_file_obj, rc: %d\n", rc);
-				if (rc != DSM_RC_SUCCESSFUL) {
+				minor_rc = retrieve_obj(&query_data, &obj_info, fd);
+				CT_INFO("retrieve_file_obj, rc: %d\n", minor_rc);
+				if (minor_rc != DSM_RC_SUCCESSFUL) {
 					CT_ERROR(0, "retrieve_file_obj");
+					goto cleanup_getdata;
 				}
 			} break;
 			case DSM_OBJ_DIRECTORY: {
-				const unsigned int len = strlen(query_data.objName.fs) +
+				const size_t len = strlen(query_data.objName.fs) +
 					strlen(query_data.objName.hl) +
 					strlen(query_data.objName.ll) + 1;
 				char directory[len];
@@ -967,23 +969,27 @@ static dsInt16_t tsm_retrieve_generic(const char *fs, const char *hl,
 					 query_data.objName.fs,
 					 query_data.objName.hl,
 					 query_data.objName.ll);
-				rc = mkdir_p(directory);
+				minor_rc = mkdir_p(directory);
 				CT_INFO("mkdir_p(%s)\n", directory);
-				if (rc) {
-					CT_ERROR(rc, "mkdir_p");
+				if (minor_rc) {
+					CT_ERROR(minor_rc, "mkdir_p");
+					goto cleanup_getdata;
 				}
 				break;
 			}
 			default: {
-				CT_WARN("Skip object due to unkown type %s\n", OBJ_TYPE(query_data.objName.objType));
+				CT_WARN("Skip object due to unkown type %s\n",
+					OBJ_TYPE(query_data.objName.objType));
 				continue;
 			}
-			}
+			} /* End-switch */
 		} /* End-for iterate objid's. */
-
+cleanup_getdata:
 		/* There are no return codes that are specific to this call. */
 		rc = dsmEndGetData(handle);
 		TSM_TRACE(rc, "dsmEndGetData");
+		if (minor_rc)
+			break;
 
 		c_cur++;
 		c_begin = c_end + 1;
@@ -993,13 +999,13 @@ static dsInt16_t tsm_retrieve_generic(const char *fs, const char *hl,
 			c_begin + DSM_MAX_GET_OBJ - 1; /* Process not last chunk. */
 	} while (c_cur < c_total);
 
-clean_up:
+cleanup:
 	if (get_list.objId)
 		free(get_list.objId);
 
 	destroy_qarray();
 
-	return rc;
+	return (minor_rc == 0 ? rc : minor_rc);
 }
 
 dsInt16_t tsm_retrieve_file(const char *fs, const char *fpath, const char *desc)
@@ -1064,7 +1070,7 @@ static dsInt16_t tsm_archive_prepare(const char *fs, const char *fpath,
 	rc = lstat(resolved_fpath, &st_buf);
 	if (rc) {
 		CT_ERROR(rc, "stat");
-		goto clean_up;
+		goto cleanup;
 	}
 	archive_info->obj_info.size = to_dsStruct64_t(st_buf.st_size);
 	archive_info->obj_info.magic = MAGIC_ID_V1;
@@ -1076,7 +1082,7 @@ static dsInt16_t tsm_archive_prepare(const char *fs, const char *fpath,
 	else {
 		rc = EINVAL;
 		CT_ERROR(rc, "no regular file or directory: %s", resolved_fpath);
-		goto clean_up;
+		goto cleanup;
 	}
 
 	rc = extract_hl_ll(resolved_fpath, archive_info->obj_name.hl,
@@ -1086,7 +1092,7 @@ static dsInt16_t tsm_archive_prepare(const char *fs, const char *fpath,
 			 "hl: %s, ll: %s", resolved_fpath,
 			 archive_info->obj_name.hl,
 			 archive_info->obj_name.ll);
-		goto clean_up;
+		goto cleanup;
 	}
 	strncpy(archive_info->obj_name.fs, fs, DSM_MAX_FSNAME_LENGTH);
 
@@ -1095,7 +1101,7 @@ static dsInt16_t tsm_archive_prepare(const char *fs, const char *fpath,
 	else
 		strncpy(archive_info->desc, desc, DSM_MAX_DESCR_LENGTH);
 
-clean_up:
+cleanup:
 	if (resolved_fpath)
 		free(resolved_fpath);
 

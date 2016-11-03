@@ -351,8 +351,10 @@ static int ct_restore(const struct hsm_action_item *hai, const long hal_flags)
 	}
 
 	rc = tsm_retrieve_file_fd(FS_SPACE, fpath, NULL, dst_fd);
-	if (rc != DSM_RC_SUCCESSFUL)
-	    return rc;
+	if (rc != DSM_RC_SUCCESSFUL) {
+		CT_ERROR(rc, "tsm_retrieve_file_fd on '%s' failed", fpath);
+		goto cleanup;
+	}
 
 	CT_TRACE("data restore from TSM server to '%s' done", fpath);
 
