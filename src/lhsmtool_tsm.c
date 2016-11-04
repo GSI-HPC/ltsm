@@ -337,7 +337,7 @@ static int ct_restore(const struct hsm_action_item *hai, const long hal_flags)
 	    goto cleanup;
 	}
 
-	CT_TRACE("restoring data from TSM server to '%s'", fpath);
+	CT_TRACE("restoring data from TSM storage to '%s'", fpath);
 	if (opt.o_dry_run) {
 	    rc = 0;
 	    goto cleanup;
@@ -356,7 +356,7 @@ static int ct_restore(const struct hsm_action_item *hai, const long hal_flags)
 		goto cleanup;
 	}
 
-	CT_TRACE("data restore from TSM server to '%s' done", fpath);
+	CT_TRACE("data restore from TSM storage to '%s' done", fpath);
 
 cleanup:
 	rc = ct_finish(&hcp, hai, hp_flags, rc, fpath);
@@ -385,7 +385,7 @@ static int ct_remove(const struct hsm_action_item *hai, const long hal_flags)
 		goto cleanup;
 	}
 
-	CT_TRACE("removing file '%s'", fpath);
+	CT_TRACE("removing from TSM storage file '%s'", fpath);
 
 	if (opt.o_dry_run) {
 		rc = 0;
@@ -396,15 +396,6 @@ static int ct_remove(const struct hsm_action_item *hai, const long hal_flags)
 		CT_ERROR(rc, "tsm_delete_file on '%s' failed", fpath);
 		goto cleanup;
 	}
-
-	rc = unlink(fpath);
-	if (rc < 0) {
-		rc = -errno;
-		CT_ERROR(rc, "cannot unlink '%s'", fpath);
-		err_minor++;
-		goto cleanup;
-	}
-
 
 cleanup:
 	rc = ct_finish(&hcp, hai, 0, rc, fpath);
