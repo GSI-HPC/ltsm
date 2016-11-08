@@ -131,6 +131,7 @@ __check_bin "${LTSM_BIN}"
 # Archive data
 echo "Archiving data please wait ..."
 ${LTSM_BIN} -a -f '/' -n ${LTSM_NODE} -p ${LTSM_PASSWORD} -s ${LTSM_SERVERNAME} ${PATH_PREFIX}
+echo "done\n"
 
 # Remove locally and retrieve
 rm -rf ${PATH_PREFIX}

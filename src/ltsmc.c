@@ -35,8 +35,6 @@ static dsBool_t r_arg = bFalse;
 static dsBool_t q_arg = bFalse;
 static dsBool_t d_arg = bFalse;
 static char f_arg[DSM_MAX_FSNAME_LENGTH + 1] = {0};
-static char h_arg[DSM_MAX_HL_LENGTH + 1] = {0};
-static char l_arg[DSM_MAX_LL_LENGTH + 1] = {0};
 static char c_arg[DSM_MAX_DESCR_LENGTH + 1] = {0};
 static char n_arg[DSM_MAX_NODE_LENGTH + 1] = {0};
 static char u_arg[MAX_USERNAME_LENGTH + 1] = {0};
@@ -52,8 +50,6 @@ void usage(const char *cmd_name)
 	       "\t-q, --query\n"
 	       "\t-d, --delete\n"
 	       "\t-f, --fsname <STRING>\n"
-	       "\t-h, --hl <STRING>\n"
-	       "\t-l, --ll <STRING>\n"
 	       "\t-c, --description <STRING>\n"
 	       "\t-n, --node <STRING>\n"
 	       "\t-u, --username <STRING>\n"
@@ -64,11 +60,6 @@ void usage(const char *cmd_name)
 	       cmd_name, VERSION);
 
 	exit(DSM_RC_UNSUCCESSFUL);
-}
-
-dsBool_t isset_hl_ll()
-{
-	return (strlen(h_arg) && strlen(l_arg));
 }
 
 void sanity_arg_check(const char *cmd_name)
@@ -112,8 +103,6 @@ int main(int argc, char *argv[])
 			{"query",             no_argument, 0, 'q'},
 			{"delete",            no_argument, 0, 'd'},
 			{"fsname",      required_argument, 0, 'f'},
-			{"hl",          required_argument, 0, 'h'},
-			{"ll",          required_argument, 0, 'l'},
 			{"description", required_argument, 0, 'c'},
 			{"node",        required_argument, 0, 'n'},
 			{"username",    required_argument, 0, 'u'},
@@ -125,7 +114,7 @@ int main(int argc, char *argv[])
 		/* getopt_long stores the option index here. */
 		int option_index = 0;
 
-		c = getopt_long (argc, argv, "arqdf:h:l:c:n:u:p:s:v::",
+		c = getopt_long (argc, argv, "arqdf:c:n:u:p:s:v::",
 				 long_options, &option_index);
 
 		/* Detect the end of the options. */
@@ -149,16 +138,6 @@ int main(int argc, char *argv[])
 			strncpy(f_arg, optarg,
 				strlen(optarg) < DSM_MAX_FSNAME_LENGTH ?
 				strlen(optarg) : DSM_MAX_FSNAME_LENGTH);
-			break;
-		case 'h':	/* hl */
-			strncpy(h_arg, optarg,
-				strlen(optarg) < DSM_MAX_HL_LENGTH ?
-				strlen(optarg) : DSM_MAX_HL_LENGTH);
-			break;
-		case 'l':	/* ll */
-			strncpy(l_arg, optarg,
-				strlen(optarg) < DSM_MAX_LL_LENGTH ?
-				strlen(optarg) : DSM_MAX_LL_LENGTH);
 			break;
 		case 'c':	/* description */
 			strncpy(c_arg, optarg,
@@ -246,40 +225,24 @@ int main(int argc, char *argv[])
 	if (rc)
 		goto clean_up;
 
-	/* Handle operations with arguments --hl and --ll. */
-	if (isset_hl_ll()) {
+	/* Handle operations on files and directories resp. */
+	for (size_t i = 0; i < num_files_dirs &&
+		     files_dirs_arg[i]; i++) {
 		if (q_arg)		/* Query. */
-			rc = tsm_query_hl_ll(f_arg, h_arg, l_arg, c_arg, bTrue);
-		else if (r_arg)		/* Retrieve. */
-			rc = tsm_retrieve_hl_ll(f_arg, h_arg, l_arg, c_arg);
-		else if (d_arg)		/* Delete. */
-			rc = tsm_delete_hl_ll(f_arg, h_arg, l_arg);
-		else {
-			printf("Arguments --hl and --ll provided however "
-			       "--query, --delete or --retrieve is missing\n");
-			usage(argv[0]);
+			rc = tsm_query_fpath(f_arg, files_dirs_arg[i],
+					     c_arg, bTrue);
+		else if (r_arg)	/* Retrieve. */
+			rc = tsm_retrieve_fpath(f_arg, files_dirs_arg[i],
+						c_arg);
+		else if (d_arg)	/* Delete. */
+			rc = tsm_delete_fpath(f_arg, files_dirs_arg[i]);
+		else if (a_arg) {	/* Archive. */
+			rc = tsm_archive_fpath(f_arg,
+					       files_dirs_arg[i],
+					       c_arg);
 		}
 		if (rc)
-			CT_WARN("Operation failed with result: %d\n", rc);
-	} else { /* Handle operations on files and directories resp. */
-		for (size_t i = 0; i < num_files_dirs &&
-			     files_dirs_arg[i]; i++) {
-			if (q_arg)		/* Query. */
-				rc = tsm_query_file(f_arg, files_dirs_arg[i],
-						    c_arg, bTrue);
-			else if (r_arg)	/* Retrieve. */
-				rc = tsm_retrieve_file(f_arg, files_dirs_arg[i],
-						       c_arg);
-			else if (d_arg)	/* Delete. */
-				rc = tsm_delete_file(f_arg, files_dirs_arg[i]);
-			else if (a_arg) {	/* Archive. */
-				rc = tsm_archive_file(f_arg,
-						      files_dirs_arg[i],
-						      c_arg);
-			}
-			if (rc)
-				goto clean_up;
-		}
+			goto clean_up;
 	}
 
 clean_up:

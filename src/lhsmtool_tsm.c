@@ -350,9 +350,9 @@ static int ct_restore(const struct hsm_action_item *hai, const long hal_flags)
 		goto cleanup;
 	}
 
-	rc = tsm_retrieve_file_fd(FS_SPACE, fpath, NULL, dst_fd);
+	rc = tsm_retrieve_fpath_fd(FS_SPACE, fpath, NULL, dst_fd);
 	if (rc != DSM_RC_SUCCESSFUL) {
-		CT_ERROR(rc, "tsm_retrieve_file_fd on '%s' failed", fpath);
+		CT_ERROR(rc, "tsm_retrieve_fpath_fd on '%s' failed", fpath);
 		goto cleanup;
 	}
 
@@ -391,9 +391,9 @@ static int ct_remove(const struct hsm_action_item *hai, const long hal_flags)
 		rc = 0;
 		goto cleanup;
 	}
-	rc = tsm_delete_file(FS_SPACE, fpath);
+	rc = tsm_delete_fpath(FS_SPACE, fpath);
 	if (rc != DSM_RC_SUCCESSFUL) {
-		CT_ERROR(rc, "tsm_delete_file on '%s' failed", fpath);
+		CT_ERROR(rc, "tsm_delete_fpath on '%s' failed", fpath);
 		goto cleanup;
 	}
 

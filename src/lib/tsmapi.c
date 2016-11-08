@@ -28,6 +28,7 @@
 #include <libgen.h>
 #include <dirent.h>
 #include <math.h>
+#include <fcntl.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/param.h>
@@ -127,57 +128,35 @@ static dsInt16_t mkdir_p(const char *path)
 	return rc;
 }
 
-static dsInt16_t tsm_open_fstream(const char *fs, const char *hl, const char *ll, FILE **fstream)
+static dsInt16_t open_fd(const char *fs, const char *hl, const char *ll, int *fd)
 {
 	dsInt16_t rc;
-	char *filename;
-	unsigned int str_length = strlen(fs) + strlen(hl) + strlen(ll) + 1;
-	filename = malloc(sizeof(char) * str_length);
-	if (!filename) {
-		rc = errno;
-		CT_ERROR(rc, "malloc");
-		return rc;
+	char *fpath = NULL;
+	const size_t len = strlen(fs) + strlen(hl) + strlen(ll) + 1;
+
+	if (len > PATH_MAX) {
+		CT_ERROR(ENAMETOOLONG, "len > PATH_MAX");
+		return DSM_RC_UNSUCCESSFUL;
+	}
+	fpath = calloc(len, sizeof(char));
+	if (fpath == NULL) {
+		CT_ERROR(errno, "calloc");
+		return DSM_RC_UNSUCCESSFUL;
 	}
 
-	snprintf(filename, str_length, "%s%s%s", fs, hl, ll);
-	CT_INFO("fs/hl/ll filename: %s\n", filename);
+	snprintf(fpath, len, "%s%s%s", fs, hl, ll);
+	CT_INFO("fs/hl/ll fpath: %s\n", fpath);
 
-	rc = mkdir_p(hl);
-	if (rc) {
-		CT_ERROR(rc, "mkdir_p: %s", hl);
+	*fd = open(fpath, O_WRONLY | O_CREAT);
+	if (*fd < 0) {
+		CT_ERROR(errno, "open '%s'", fpath);
+		rc = DSM_RC_UNSUCCESSFUL;
 		goto cleanup;
-	}
-
-	*fstream = fopen(filename, "w");
-	if (!fstream) {
-		rc = errno;
-		CT_ERROR(rc, "fopen: %s", filename);
-		goto cleanup;
-	}
-	rc = DSM_RC_SUCCESSFUL;
-
-cleanup:
-	if (filename)
-		free(filename);
-
-	return rc;
-}
-
-static dsInt16_t tsm_close_fstream(FILE **fstream)
-{
-	dsInt16_t rc;
-
-	if (*fstream) {
-		rc = fclose(*fstream);
-		if (rc != 0) {
-			rc = errno;
-			CT_ERROR(rc, "fclose");
-		} else {
-			*fstream = NULL;
-			rc = DSM_RC_SUCCESSFUL;
-		}
 	} else
-		rc = DSM_RC_SUCCESSFUL;	/* FILE was already closed. */
+		rc = DSM_RC_SUCCESSFUL;
+cleanup:
+	if (fpath)
+		free(fpath);
 
 	return rc;
 }
@@ -185,55 +164,55 @@ static dsInt16_t tsm_close_fstream(FILE **fstream)
 static dsInt16_t retrieve_obj(qryRespArchiveData *query_data,
 			      obj_info_t *obj_info, int fd)
 {
-	dsInt16_t rc;
-	FILE *fstream = NULL;
 	char *buf = NULL;
 	DataBlk dataBlk;
+	dsBool_t done = bFalse;
+	off_t obj_size = to_off_t(obj_info->size);
+	ssize_t obj_size_written = 0;
+	dsInt16_t rc;
+	dsInt16_t rc_minor = 0;
+#if 0
+	int fd_temp = -1;
 
-	if (fd != -1) {
-		fstream = fdopen(fd, "w");
-		if (fstream == NULL) {
-			CT_ERROR(errno, "fdopen");
-			return DSM_RC_UNSUCCESSFUL;
-		}
-	} else {
-		rc = tsm_open_fstream(query_data->objName.fs,
-				      query_data->objName.hl,
-				      query_data->objName.ll, &fstream);
+	if (fd == -1) {
+		rc = open_fd(query_data->objName.fs,
+			     query_data->objName.hl,
+			     query_data->objName.ll, &fd_temp);
 		if (rc != DSM_RC_SUCCESSFUL)
 			return rc;
+		fd = dup(fd_temp);
 	}
-
+#endif
 	buf = malloc(sizeof(char) * TSM_BUF_LENGTH);
 	if (!buf) {
-		rc = DSM_RC_UNSUCCESSFUL;
 		CT_ERROR(errno, "malloc");
-		goto cleanup;
+		return DSM_RC_UNSUCCESSFUL;
 	}
 
 	dataBlk.stVersion = DataBlkVersion;
 	dataBlk.bufferLen = TSM_BUF_LENGTH;
 	dataBlk.numBytes  = 0;
-	dataBlk.bufferPtr = buf; /* Now we have a valid buffer pointer. */
+	dataBlk.bufferPtr = buf;
 	memset(dataBlk.bufferPtr, 0, TSM_BUF_LENGTH);
-
-	off_t obj_size = to_off_t(obj_info->size);
-	off_t obj_size_write = 0;
 
 	/* Request data with a single dsmGetObj call, otherwise data is larger and we need
 	   additional dsmGetData calls. */
 	rc = dsmGetObj(handle, &(query_data->objId), &dataBlk);
 	TSM_TRACE(rc, "dsmGetObj");
-	dsBool_t done = bFalse;
-	while (!done) {
 
+	while (!done) {
 		/* Note: dataBlk.numBytes always returns TSM_BUF_LENGTH (65536). */
 		if (!(rc == DSM_RC_MORE_DATA || rc == DSM_RC_FINISHED)) {
 			TSM_ERROR(rc, "dsmGetObj or dsmGetData");
+			rc_minor = rc;
 			done = bTrue;
 		} else {
-			obj_size_write = obj_size < TSM_BUF_LENGTH ? obj_size : TSM_BUF_LENGTH;
-			fwrite(buf, 1, obj_size_write, fstream);
+			obj_size_written = write(fd, buf, obj_size < TSM_BUF_LENGTH ? obj_size : TSM_BUF_LENGTH);
+			if (obj_size_written < 0) {
+				CT_ERROR(errno, "write");
+				rc_minor = DSM_RC_UNSUCCESSFUL;
+				goto cleanup;
+			}
 
 			if (obj_size < TSM_BUF_LENGTH)
 				done = bTrue;
@@ -246,18 +225,16 @@ static dsInt16_t retrieve_obj(qryRespArchiveData *query_data,
 		}
 	} /* End while (!done) */
 
+cleanup:
 	rc = dsmEndGetObj(handle);
 	TSM_TRACE(rc, "dsmEndGetObj");
 	if (rc != DSM_RC_SUCCESSFUL)
 		TSM_ERROR(rc, "dsmEndGetObj");
 
-cleanup:
 	if (buf)
 		free(buf);
-	if (fstream)
-		tsm_close_fstream(&fstream);
 
-	return rc;
+	return (rc_minor ? DSM_RC_UNSUCCESSFUL : rc);
 }
 
 void tsm_print_query_node(const qryRespArchiveData *qry_resp_arv_data,
@@ -816,7 +793,7 @@ cleanup:
 	return rc;
 }
 
-dsInt16_t tsm_delete_file(const char *fs, const char *fpath)
+dsInt16_t tsm_delete_fpath(const char *fs, const char *fpath)
 {
 	dsInt16_t rc;
 	char hl[DSM_MAX_HL_LENGTH + 1] = {0};
@@ -831,7 +808,8 @@ dsInt16_t tsm_delete_file(const char *fs, const char *fpath)
 	return rc;
 }
 
-dsInt16_t tsm_query_file(const char *fs, const char *fpath, const char *desc, dsBool_t display)
+dsInt16_t tsm_query_fpath(const char *fs, const char *fpath, const char *desc,
+			  dsBool_t display)
 {
 	dsInt16_t rc;
 	char hl[DSM_MAX_HL_LENGTH + 1] = {0};
@@ -851,7 +829,7 @@ static dsInt16_t tsm_retrieve_generic(const char *fs, const char *hl,
 				      int fd)
 {
 	dsInt16_t rc;
-	dsInt16_t minor_rc = 0;
+	dsInt16_t rc_minor = 0;
 	dsmGetList get_list;
 
 	get_list.objId = NULL;
@@ -919,8 +897,8 @@ static dsInt16_t tsm_retrieve_generic(const char *fs, const char *hl,
 			rc = get_query(&query_data, c_iter);
 			CT_INFO("get_query: %lu, rc: %d", c_iter, rc);
 			if (rc != DSM_RC_SUCCESSFUL) {
-				minor_rc = ENODATA; /* No data available */
-				CT_ERROR(minor_rc, "get_query");
+				rc_minor = ENODATA; /* No data available */
+				CT_ERROR(rc_minor, "get_query");
 				goto cleanup_getdata;
 			}
 			memcpy(&obj_info,
@@ -952,9 +930,9 @@ static dsInt16_t tsm_retrieve_generic(const char *fs, const char *hl,
 
 			switch (query_data.objName.objType) {
 			case DSM_OBJ_FILE: {
-				minor_rc = retrieve_obj(&query_data, &obj_info, fd);
-				CT_INFO("retrieve_file_obj, rc: %d\n", minor_rc);
-				if (minor_rc != DSM_RC_SUCCESSFUL) {
+				rc_minor = retrieve_obj(&query_data, &obj_info, fd);
+				CT_INFO("retrieve_file_obj, rc: %d\n", rc_minor);
+				if (rc_minor != DSM_RC_SUCCESSFUL) {
 					CT_ERROR(0, "retrieve_file_obj");
 					goto cleanup_getdata;
 				}
@@ -969,10 +947,10 @@ static dsInt16_t tsm_retrieve_generic(const char *fs, const char *hl,
 					 query_data.objName.fs,
 					 query_data.objName.hl,
 					 query_data.objName.ll);
-				minor_rc = mkdir_p(directory);
+				rc_minor = mkdir_p(directory);
 				CT_INFO("mkdir_p(%s)\n", directory);
-				if (minor_rc) {
-					CT_ERROR(minor_rc, "mkdir_p");
+				if (rc_minor) {
+					CT_ERROR(rc_minor, "mkdir_p");
 					goto cleanup_getdata;
 				}
 				break;
@@ -988,7 +966,7 @@ cleanup_getdata:
 		/* There are no return codes that are specific to this call. */
 		rc = dsmEndGetData(handle);
 		TSM_TRACE(rc, "dsmEndGetData");
-		if (minor_rc)
+		if (rc_minor)
 			break;
 
 		c_cur++;
@@ -1005,26 +983,38 @@ cleanup:
 
 	destroy_qarray();
 
-	return (minor_rc == 0 ? rc : minor_rc);
+	return (rc_minor == 0 ? rc : rc_minor);
 }
 
-dsInt16_t tsm_retrieve_file(const char *fs, const char *fpath, const char *desc)
+dsInt16_t tsm_retrieve_fpath(const char *fs, const char *fpath, const char *desc)
 {
 	dsInt16_t rc;
+	dsInt16_t rc_minor;
 	char hl[DSM_MAX_HL_LENGTH + 1] = {0};
 	char ll[DSM_MAX_LL_LENGTH + 1] = {0};
+	int fd;
 
 	rc = extract_hl_ll(fpath, hl, ll);
 	if (rc != DSM_RC_SUCCESSFUL)
 		return rc;
 
-	rc = tsm_retrieve_generic(fs, hl, ll, desc, -1);
+	rc = open_fd(fs, hl, ll, &fd);
+	if (rc != DSM_RC_SUCCESSFUL)
+		return rc;
 
-	return rc;
+	rc = tsm_retrieve_generic(fs, hl, ll, desc, fd);
+
+	rc_minor = close(fd);
+	if (rc_minor == -1) {
+		CT_ERROR(errno, "close");
+		rc_minor = DSM_RC_SUCCESSFUL;
+	}
+
+	return (rc_minor == 0 ? rc : rc_minor);
 }
 
-dsInt16_t tsm_retrieve_file_fd(const char *fs, const char *fpath,
-			       const char *desc, int fd)
+dsInt16_t tsm_retrieve_fpath_fd(const char *fs, const char *fpath,
+				const char *desc, int fd)
 {
 	dsInt16_t rc;
 	char hl[DSM_MAX_HL_LENGTH + 1] = {0};
@@ -1208,7 +1198,7 @@ static dsInt16_t tsm_rec_archive_dir(archive_info_t *archive_info)
         return rc;
 }
 
-dsInt16_t tsm_archive_file(const char *fs, const char *fpath, const char *desc)
+dsInt16_t tsm_archive_fpath(const char *fs, const char *fpath, const char *desc)
 {
 	int rc;
 	archive_info_t archive_info;

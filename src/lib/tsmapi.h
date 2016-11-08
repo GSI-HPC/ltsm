@@ -80,20 +80,15 @@ dsInt16_t tsm_init(login_t *login);
 void tsm_quit();
 
 dsInt16_t tsm_query_session_info();
-dsInt16_t tsm_archive_file(const char *fs, const char *fpath, const char *desc);
+dsInt16_t tsm_archive_fpath(const char *fs, const char *fpath, const char *desc);
 dsInt16_t tsm_archive_fid(const char *fs, const char *fpath, const char *desc,
 			  const lu_fid_t *lu_fid);
-dsInt16_t tsm_query_hl_ll(const char *fs, const char *hl, const char *ll,
+dsInt16_t tsm_query_fpath(const char *fs, const char *fpath,
 			  const char *desc, dsBool_t display);
-dsInt16_t tsm_query_file(const char *fs, const char *fpath,
-			 const char *desc, dsBool_t display);
-dsInt16_t tsm_delete_file(const char *fs, const char *fpath);
-dsInt16_t tsm_delete_hl_ll(const char *fs, const char *hl, const char *ll);
-dsInt16_t tsm_retrieve_file(const char *fs, const char *fpath,
-			    const char *desc);
-dsInt16_t tsm_retrieve_file_fd(const char *fs, const char *fpath,
-			       const char *desc, int fd);
-dsInt16_t tsm_retrieve_hl_ll(const char *fs, const char *hl, const char *ll,
+dsInt16_t tsm_delete_fpath(const char *fs, const char *fpath);
+dsInt16_t tsm_retrieve_fpath(const char *fs, const char *fpath,
 			     const char *desc);
+dsInt16_t tsm_retrieve_fpath_fd(const char *fs, const char *fpath,
+				const char *desc, int fd);
 
 #endif /* TSMAPI_H */
