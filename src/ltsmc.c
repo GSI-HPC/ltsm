@@ -34,6 +34,7 @@ static dsBool_t a_arg = bFalse;
 static dsBool_t r_arg = bFalse;
 static dsBool_t q_arg = bFalse;
 static dsBool_t d_arg = bFalse;
+static dsBool_t i_arg = bFalse;
 static char f_arg[DSM_MAX_FSNAME_LENGTH + 1] = {0};
 static char c_arg[DSM_MAX_DESCR_LENGTH + 1] = {0};
 static char n_arg[DSM_MAX_NODE_LENGTH + 1] = {0};
@@ -49,6 +50,7 @@ void usage(const char *cmd_name)
 	       "\t-r, --retrieve\n"
 	       "\t-q, --query\n"
 	       "\t-d, --delete\n"
+	       "\t-i, --recursive\n"
 	       "\t-f, --fsname <STRING>\n"
 	       "\t-c, --description <STRING>\n"
 	       "\t-n, --node <STRING>\n"
@@ -102,6 +104,7 @@ int main(int argc, char *argv[])
 			{"retrieve",          no_argument, 0, 'r'},
 			{"query",             no_argument, 0, 'q'},
 			{"delete",            no_argument, 0, 'd'},
+			{"recursive",         no_argument, 0, 'i'},
 			{"fsname",      required_argument, 0, 'f'},
 			{"description", required_argument, 0, 'c'},
 			{"node",        required_argument, 0, 'n'},
@@ -114,7 +117,7 @@ int main(int argc, char *argv[])
 		/* getopt_long stores the option index here. */
 		int option_index = 0;
 
-		c = getopt_long (argc, argv, "arqdf:c:n:u:p:s:v::",
+		c = getopt_long (argc, argv, "arqdif:c:n:u:p:s:v::",
 				 long_options, &option_index);
 
 		/* Detect the end of the options. */
@@ -133,6 +136,9 @@ int main(int argc, char *argv[])
 			break;
 		case 'd':	/* delete */
 			d_arg = bTrue;
+			break;
+		case 'i':	/* recursive */
+			i_arg = bTrue;
 			break;
 		case 'f':	/* fsname */
 			strncpy(f_arg, optarg,

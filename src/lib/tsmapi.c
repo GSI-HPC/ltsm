@@ -36,6 +36,8 @@
 #include "log.h"
 #include "qarray.h"
 
+dsBool_t do_recursive = bFalse;
+
 #define DIR_PERM (S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH)
 
 #define OBJ_TYPE(type)							\
@@ -520,11 +522,6 @@ static dsInt16_t extract_hl_ll(const char *fpath, char *hl, char *ll)
 {
 	size_t len, i;
 
-	if (fpath == NULL || hl == NULL || ll == NULL) {
-		CT_ERROR(EFAULT, "null argument");
-		return DSM_RC_UNSUCCESSFUL;
-	}
-
 	bzero(hl, DSM_MAX_HL_LENGTH + 1);
 	bzero(ll, DSM_MAX_LL_LENGTH + 1);
 	len = strlen(fpath);
@@ -546,6 +543,76 @@ static dsInt16_t extract_hl_ll(const char *fpath, char *hl, char *ll)
 		hl[0] = '/';
 
 	return DSM_RC_SUCCESSFUL;
+}
+
+/** @brief Builds from filepath the high-level and low-level name.
+ *
+ *  Processes input file or directory name and returns
+ *  the high-level and low-level dsmObjectName description. This function
+ *  is required for TSM query, retrieve and delete operations.
+ *  If fpath is a directory, then ll = '/\*' is set and this marks,
+ *  all files and directories listed in fpath. If extern variable
+ *  do_recursive is true and fpath is a directory, then symbol '*'
+ *  is is appended to hl and this marks all directories, subdirectories
+ *  and files in fpath (i.e. a recursive directory walk).
+ *
+ *  Example: fpath = /lustre/mydir/a.txt
+ *              hl = /lustre/mydir
+ *              ll = /a.txt
+ *
+ *           fpath = /lustre/mydir/
+ *              hl = /lustre/mydir
+ *              ll = /\*
+ *
+ *  @param fpath [in] Path to file or directory.
+ *  @param hl [out] The high-level dsmObjectName string.
+ *  @param ll [out] The low-level dsmObjectName string.
+ *  @return DSM_RC_SUCCESSFUL on success otherwise DSM_RC_UNSUCCESSFUL.
+ */
+static dsInt16_t build_hl_ll(const char *fpath, char *hl, char *ll)
+{
+	dsInt16_t rc;
+	char *resolved_fpath = NULL;
+	struct stat st_buf;
+
+	if (fpath == NULL || hl == NULL || ll == NULL) {
+		CT_ERROR(EFAULT, "null argument");
+		return DSM_RC_UNSUCCESSFUL;
+	}
+
+	resolved_fpath = realpath(fpath, resolved_fpath);
+	if (resolved_fpath == NULL) {
+		CT_ERROR(errno, "realpath failed: %s", fpath);
+		return DSM_RC_UNSUCCESSFUL;
+	}
+	rc = lstat(resolved_fpath, &st_buf);
+	if (rc) {
+		CT_ERROR(errno, "lstat failed on '%s'", resolved_fpath);
+		return DSM_RC_UNSUCCESSFUL;
+	}
+
+	if (S_ISDIR(st_buf.st_mode)) {
+		ll[0] = '/'; ll[1] = '*'; ll[2] = '\0';
+		strncpy(hl, resolved_fpath, strlen(resolved_fpath));
+		if (do_recursive) {
+			if (strlen(hl) + 1 < DSM_MAX_HL_LENGTH) {
+				hl[strlen(hl)] = '*';
+				hl[strlen(hl)+1] = '\0';
+			} else {
+				CT_ERROR(EINVAL, "hl '%s' length overflows DSM_MAX_HL_LENGTH", hl);
+				return DSM_RC_UNSUCCESSFUL;
+			}
+		}
+	} else if (S_ISREG(st_buf.st_mode)) {
+		rc = extract_hl_ll(resolved_fpath, hl, ll);
+		if (rc != DSM_RC_SUCCESSFUL)
+			return DSM_RC_UNSUCCESSFUL;
+	} else {
+		CT_ERROR(EINVAL, "'%s' is not regular file or directory", resolved_fpath);
+		return DSM_RC_UNSUCCESSFUL;
+	}
+
+	return DSM_RC_UNSUCCESSFUL;
 }
 
 static dsInt16_t obj_attr_prepare(ObjAttr *obj_attr,
@@ -1099,7 +1166,7 @@ static dsInt16_t tsm_rec_archive_dir(archive_info_t *archive_info)
         int path_len;
 	int old_errno;
 
-	/* TODO:  Still not happy with this implementation.
+	/* TODO: Still not happy with this implementation.
 	   There must be a smarter and more elegant approach. */
 	strncpy(dpath, archive_info->fpath, PATH_MAX);
 
@@ -1201,7 +1268,7 @@ dsInt16_t tsm_archive_fpath(const char *fs, const char *fpath, const char *desc)
 	memset(&archive_info, 0, sizeof(archive_info_t));
 	rc = tsm_archive_prepare(fs, fpath, desc, &archive_info);
 	if (rc) {
-		CT_WARN("tsm_archive_file failed: \n"
+		CT_WARN("tsm_archive_fpath failed: \n"
 			"fs: %s, fpath: %s, desc: %s\n",
 			fs, fpath, desc);
 		return rc;
