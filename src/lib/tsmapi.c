@@ -516,44 +516,40 @@ cleanup:
 	return rc;
 }
 
-dsInt16_t extract_hl_ll(const char *filename, char *hl, char *ll)
+static dsInt16_t extract_hl_ll(const char *fpath, char *hl, char *ll)
 {
-	dsInt16_t rc;
-	size_t len;
-	size_t i;
+	size_t len, i;
 
-	if (filename == NULL || hl == NULL || ll == NULL) {
-		rc = EFAULT;
-		CT_ERROR(rc, "null argument");
-		return rc;
+	if (fpath == NULL || hl == NULL || ll == NULL) {
+		CT_ERROR(EFAULT, "null argument");
+		return DSM_RC_UNSUCCESSFUL;
 	}
 
 	bzero(hl, DSM_MAX_HL_LENGTH + 1);
 	bzero(ll, DSM_MAX_LL_LENGTH + 1);
-	len = strlen(filename);
+	len = strlen(fpath);
 	i = len;
 
-	while (i > 0 && filename[i] != '/' && i--);
+	while (i > 0 && fpath[i] != '/' && i--);
 
 	if (i > DSM_MAX_HL_LENGTH || (len - i) > DSM_MAX_LL_LENGTH)
 	{
-		rc = EINVAL;
-		CT_ERROR(rc, "incorrect length");
-		return rc;
+		CT_ERROR(EINVAL, "incorrect length");
+		return DSM_RC_UNSUCCESSFUL;
 	}
 
-	memcpy(hl, &filename[0], i);
-	memcpy(ll, &filename[i], len - i);
+	memcpy(hl, &fpath[0], i);
+	memcpy(ll, &fpath[i], len - i);
 
 	/* If i == 0 and either '/aaaa' or 'aaaa' was given. */
-	if (i == 0 && !strncmp(&filename[0], &ll[0], len))
+	if (i == 0 && !strncmp(&fpath[0], &ll[0], len))
 		hl[0] = '/';
 
 	return DSM_RC_SUCCESSFUL;
 }
 
-dsInt16_t obj_attr_prepare(ObjAttr *obj_attr,
-			   const archive_info_t *archive_info)
+static dsInt16_t obj_attr_prepare(ObjAttr *obj_attr,
+				  const archive_info_t *archive_info)
 {
 	dsInt16_t rc;
 	obj_attr->owner[0] = '\0';
@@ -744,7 +740,8 @@ static dsInt16_t tsm_del_obj(const qryRespArchiveData *qry_resp_ar_data)
 	return rc;
 }
 
-dsInt16_t tsm_delete_hl_ll(const char *fs, const char *hl, const char *ll)
+static dsInt16_t tsm_delete_hl_ll(const char *fs, const char *hl,
+				  const char *ll)
 {
 	dsInt16_t rc;
 
@@ -1027,12 +1024,6 @@ dsInt16_t tsm_retrieve_fpath_fd(const char *fs, const char *fpath,
 	rc = tsm_retrieve_generic(fs, hl, ll, desc, fd);
 
 	return rc;
-}
-
-dsInt16_t tsm_retrieve_hl_ll(const char *fs, const char *hl, const char *ll,
-			     const char *desc)
-{
-	return tsm_retrieve_generic(fs, hl, ll, desc, -1);
 }
 
 static dsInt16_t tsm_archive_prepare(const char *fs, const char *fpath,
