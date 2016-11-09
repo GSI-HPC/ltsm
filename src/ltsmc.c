@@ -34,7 +34,6 @@ static dsBool_t a_arg = bFalse;
 static dsBool_t r_arg = bFalse;
 static dsBool_t q_arg = bFalse;
 static dsBool_t d_arg = bFalse;
-static dsBool_t i_arg = bFalse;
 static char f_arg[DSM_MAX_FSNAME_LENGTH + 1] = {0};
 static char c_arg[DSM_MAX_DESCR_LENGTH + 1] = {0};
 static char n_arg[DSM_MAX_NODE_LENGTH + 1] = {0};
@@ -98,6 +97,7 @@ int main(int argc, char *argv[])
 	int c;
 
 	api_msg_set_level(API_MSG_NORMAL);
+	set_recursive(bFalse);
 	while (1) {
 		static struct option long_options[] = {
 			{"archive",           no_argument, 0, 'a'},
@@ -138,7 +138,7 @@ int main(int argc, char *argv[])
 			d_arg = bTrue;
 			break;
 		case 'i':	/* recursive */
-			i_arg = bTrue;
+			set_recursive(bTrue);
 			break;
 		case 'f':	/* fsname */
 			strncpy(f_arg, optarg,

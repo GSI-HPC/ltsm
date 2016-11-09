@@ -73,8 +73,11 @@ typedef struct {
 	qryRespArchiveData *data;
 } query_arr_t;
 
+dsBool_t do_recursive;
+
 off_t to_off_t(const dsStruct64_t size);
 dsStruct64_t to_dsStruct64_t(const off_t size);
+void set_recursive(dsBool_t recursive);
 
 dsInt16_t tsm_init(login_t *login);
 void tsm_quit();
