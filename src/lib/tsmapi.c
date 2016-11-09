@@ -572,7 +572,7 @@ static dsInt16_t extract_hl_ll(const char *fpath, char *hl, char *ll)
  *  @param ll [out] The low-level dsmObjectName string.
  *  @return DSM_RC_SUCCESSFUL on success otherwise DSM_RC_UNSUCCESSFUL.
  */
-#if 0
+#if 1
 static dsInt16_t build_hl_ll(const char *fpath, char *hl, char *ll)
 {
 	dsInt16_t rc;
@@ -583,7 +583,6 @@ static dsInt16_t build_hl_ll(const char *fpath, char *hl, char *ll)
 		CT_ERROR(EFAULT, "null argument");
 		return DSM_RC_UNSUCCESSFUL;
 	}
-
 	resolved_fpath = realpath(fpath, resolved_fpath);
 	if (resolved_fpath == NULL) {
 		CT_ERROR(errno, "realpath failed: %s", fpath);
@@ -616,7 +615,7 @@ static dsInt16_t build_hl_ll(const char *fpath, char *hl, char *ll)
 		return DSM_RC_UNSUCCESSFUL;
 	}
 
-	return DSM_RC_UNSUCCESSFUL;
+	return DSM_RC_SUCCESSFUL;
 }
 #endif
 static dsInt16_t obj_attr_prepare(ObjAttr *obj_attr,
@@ -755,9 +754,15 @@ dsInt16_t tsm_query_fpath(const char *fs, const char *fpath, const char *desc,
 	char hl[DSM_MAX_HL_LENGTH + 1] = {0};
 	char ll[DSM_MAX_LL_LENGTH + 1] = {0};
 
-	rc = extract_hl_ll(fpath, hl, ll);
-	if (rc != DSM_RC_SUCCESSFUL)
+	rc = build_hl_ll(fpath, hl, ll);
+	CT_INFO("build_hl_ll:\n"
+		"fpath: %s\n"
+		"hl: %s\n"
+		"ll: %s\n", fpath, hl, ll);
+	if (rc != DSM_RC_SUCCESSFUL) {
+		CT_ERROR(rc, "build_hl_ll");
 		return rc;
+	}
 
 	rc = tsm_query_hl_ll(fs, hl, ll, desc, display);
 

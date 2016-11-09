@@ -234,7 +234,7 @@ int main(int argc, char *argv[])
 	/* Handle operations on files and directories resp. */
 	for (size_t i = 0; i < num_files_dirs &&
 		     files_dirs_arg[i]; i++) {
-		if (q_arg)		/* Query. */
+		if (q_arg)	/* Query. */
 			rc = tsm_query_fpath(f_arg, files_dirs_arg[i],
 					     c_arg, bTrue);
 		else if (r_arg)	/* Retrieve. */
