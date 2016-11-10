@@ -36,8 +36,6 @@
 #include "log.h"
 #include "qarray.h"
 
-#define DIR_PERM (S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH)
-
 #define OBJ_TYPE(type)							\
 	(DSM_OBJ_FILE == type ? "DSM_OBJ_FILE" :			\
 	(DSM_OBJ_DIRECTORY == type ? "DSM_OBJ_DIRECTORY" :		\
@@ -51,6 +49,8 @@ static dsUint32_t handle;
 static char rcmsg[DSM_MAX_RC_MSG_LENGTH + 1] = {0};
 static dsUint16_t max_obj_per_txn;
 static dsUint32_t max_bytes_per_txn;
+static int fd = -1;
+static dsBool_t fd_set_outside = bFalse;
 
 #define TSM_GET_MSG(rc)					\
 do {							\
@@ -93,6 +93,28 @@ dsStruct64_t to_dsStruct64_t(const off_t size)
 	return res;
 }
 
+static void tsm_set_retrieve_fd(int l_fd)
+{
+	fd = l_fd;
+}
+
+static void tsm_close_retrieve_fd()
+{
+	dsInt16_t rc;
+
+	if (!(fd < 0)) {
+		rc = close(fd);
+		if (rc != 0)
+			CT_ERROR(errno, "closing file descriptor: %d failed\n", fd);
+		fd = -1;
+	}
+}
+
+static dsBool_t is_fd_set()
+{
+	return fd < 0 ? bFalse : bTrue;
+}
+
 static void date_to_str(char *str, const dsmDate *date)
 {
 	sprintf(str, "%i/%i/%i %i:%i:%i",
@@ -104,7 +126,7 @@ static void date_to_str(char *str, const dsmDate *date)
 		(dsInt16_t)date->second);
 }
 
-static dsInt16_t mkdir_p(const char *path)
+static dsInt16_t mkdir_p(const char *path, const mode_t st_mode)
 {
 	int rc = 0;
 	size_t i = 0;
@@ -121,7 +143,7 @@ static dsInt16_t mkdir_p(const char *path)
 		memcpy(sub_path, &path[0], i++);
 
 		mode_t process_mask = umask(0);
-		rc = mkdir(sub_path, DIR_PERM);
+		rc = mkdir(sub_path, st_mode);
 		umask(process_mask);
 
 		if (rc < 0 && errno != EEXIST)
@@ -133,11 +155,13 @@ static dsInt16_t mkdir_p(const char *path)
 	return rc;
 }
 
-static dsInt16_t open_fd(const char *fs, const char *hl, const char *ll, int *fd)
+static dsInt16_t open_fd(const qryRespArchiveData *query_data, int *fd, const mode_t st_mode)
 {
 	dsInt16_t rc;
 	char *fpath = NULL;
-	const size_t len = strlen(fs) + strlen(hl) + strlen(ll) + 1;
+	const size_t len = strlen(query_data->objName.fs) +
+		strlen(query_data->objName.hl) +
+		strlen(query_data->objName.ll) + 1;
 
 	if (len > PATH_MAX) {
 		CT_ERROR(ENAMETOOLONG, "len > PATH_MAX");
@@ -149,10 +173,11 @@ static dsInt16_t open_fd(const char *fs, const char *hl, const char *ll, int *fd
 		return DSM_RC_UNSUCCESSFUL;
 	}
 
-	snprintf(fpath, len, "%s%s%s", fs, hl, ll);
+	snprintf(fpath, len, "%s%s%s", query_data->objName.fs,
+		 query_data->objName.hl, query_data->objName.ll);
 	CT_INFO("fs/hl/ll fpath: %s\n", fpath);
 
-	*fd = open(fpath, O_WRONLY | O_CREAT);
+	*fd = open(fpath, O_WRONLY | O_CREAT, st_mode);
 	if (*fd < 0) {
 		CT_ERROR(errno, "open '%s'", fpath);
 		rc = DSM_RC_UNSUCCESSFUL;
@@ -167,7 +192,7 @@ cleanup:
 }
 
 static dsInt16_t retrieve_obj(qryRespArchiveData *query_data,
-			      obj_info_t *obj_info, int fd)
+			      obj_info_t *obj_info)
 {
 	char *buf = NULL;
 	DataBlk dataBlk;
@@ -176,18 +201,27 @@ static dsInt16_t retrieve_obj(qryRespArchiveData *query_data,
 	ssize_t obj_size_written = 0;
 	dsInt16_t rc;
 	dsInt16_t rc_minor = 0;
-#if 0
-	int fd_temp = -1;
 
-	if (fd == -1) {
-		rc = open_fd(query_data->objName.fs,
-			     query_data->objName.hl,
-			     query_data->objName.ll, &fd_temp);
-		if (rc != DSM_RC_SUCCESSFUL)
+	/* If file descriptor fd is not valid, thus not set by
+	   tsm_retrieve_fpath_fd->tsm_set_retrieve_fd, then
+	   open a fd based based in fs/hl/ll inside query_data, and close fd
+	   at the end of this function.
+	 */
+	if (!is_fd_set() && !fd_set_outside) {
+		rc = mkdir_p(query_data->objName.hl, obj_info->st_mode);
+		CT_INFO("mkdir_p(%s)", query_data->objName.hl);
+		if (rc) {
+			CT_ERROR(rc_minor, "mkdir_p");
 			return rc;
-		fd = dup(fd_temp);
+		}
+
+		rc = open_fd(query_data, &fd, obj_info->st_mode);
+		if (rc != DSM_RC_SUCCESSFUL) {
+			tsm_close_retrieve_fd();
+			return rc;
+		}
 	}
-#endif
+
 	buf = malloc(sizeof(char) * TSM_BUF_LENGTH);
 	if (!buf) {
 		CT_ERROR(errno, "malloc");
@@ -238,6 +272,9 @@ cleanup:
 
 	if (buf)
 		free(buf);
+
+	if (is_fd_set() && !fd_set_outside)
+		tsm_close_retrieve_fd();
 
 	return (rc_minor ? DSM_RC_UNSUCCESSFUL : rc);
 }
@@ -548,76 +585,6 @@ static dsInt16_t extract_hl_ll(const char *fpath, char *hl, char *ll)
 	return DSM_RC_SUCCESSFUL;
 }
 
-/** @brief Builds from filepath the high-level and low-level name.
- *
- *  Processes input file or directory name and returns
- *  the high-level and low-level dsmObjectName description. This function
- *  is required for TSM query, retrieve and delete operations.
- *  If fpath is a directory, then ll = '/\*' is set and this marks,
- *  all files and directories listed in fpath. If extern variable
- *  do_recursive is true and fpath is a directory, then symbol '*'
- *  is is appended to hl and this marks all directories, subdirectories
- *  and files in fpath (i.e. a recursive directory walk).
- *
- *  Example: fpath = /lustre/mydir/a.txt
- *              hl = /lustre/mydir
- *              ll = /a.txt
- *
- *           fpath = /lustre/mydir/
- *              hl = /lustre/mydir
- *              ll = /\*
- *
- *  @param fpath [in] Path to file or directory.
- *  @param hl [out] The high-level dsmObjectName string.
- *  @param ll [out] The low-level dsmObjectName string.
- *  @return DSM_RC_SUCCESSFUL on success otherwise DSM_RC_UNSUCCESSFUL.
- */
-#if 1
-static dsInt16_t build_hl_ll(const char *fpath, char *hl, char *ll)
-{
-	dsInt16_t rc;
-	char *resolved_fpath = NULL;
-	struct stat st_buf;
-
-	if (fpath == NULL || hl == NULL || ll == NULL) {
-		CT_ERROR(EFAULT, "null argument");
-		return DSM_RC_UNSUCCESSFUL;
-	}
-	resolved_fpath = realpath(fpath, resolved_fpath);
-	if (resolved_fpath == NULL) {
-		CT_ERROR(errno, "realpath failed: %s", fpath);
-		return DSM_RC_UNSUCCESSFUL;
-	}
-	rc = lstat(resolved_fpath, &st_buf);
-	if (rc) {
-		CT_ERROR(errno, "lstat failed on '%s'", resolved_fpath);
-		return DSM_RC_UNSUCCESSFUL;
-	}
-
-	if (S_ISDIR(st_buf.st_mode)) {
-		ll[0] = '/'; ll[1] = '*'; ll[2] = '\0';
-		strncpy(hl, resolved_fpath, strlen(resolved_fpath));
-		if (do_recursive) {
-			if (strlen(hl) + 1 < DSM_MAX_HL_LENGTH) {
-				hl[strlen(hl)] = '*';
-				hl[strlen(hl)+1] = '\0';
-			} else {
-				CT_ERROR(EINVAL, "hl '%s' length overflows DSM_MAX_HL_LENGTH", hl);
-				return DSM_RC_UNSUCCESSFUL;
-			}
-		}
-	} else if (S_ISREG(st_buf.st_mode)) {
-		rc = extract_hl_ll(resolved_fpath, hl, ll);
-		if (rc != DSM_RC_SUCCESSFUL)
-			return DSM_RC_UNSUCCESSFUL;
-	} else {
-		CT_ERROR(EINVAL, "'%s' is not regular file or directory", resolved_fpath);
-		return DSM_RC_UNSUCCESSFUL;
-	}
-
-	return DSM_RC_SUCCESSFUL;
-}
-#endif
 static dsInt16_t obj_attr_prepare(ObjAttr *obj_attr,
 				  const archive_info_t *archive_info)
 {
@@ -739,9 +706,14 @@ dsInt16_t tsm_delete_fpath(const char *fs, const char *fpath)
 	char ll[DSM_MAX_LL_LENGTH + 1] = {0};
 
 	rc = extract_hl_ll(fpath, hl, ll);
-	if (rc != DSM_RC_SUCCESSFUL)
+	CT_INFO("extract_hl_ll:\n"
+		"fpath: %s\n"
+		"hl: %s\n"
+		"ll: %s\n", fpath, hl, ll);
+	if (rc != DSM_RC_SUCCESSFUL) {
+		CT_ERROR(rc, "extract_hl_ll");
 		return rc;
-
+	}
 	rc = tsm_delete_hl_ll(fs, hl, ll);
 
 	return rc;
@@ -754,24 +726,22 @@ dsInt16_t tsm_query_fpath(const char *fs, const char *fpath, const char *desc,
 	char hl[DSM_MAX_HL_LENGTH + 1] = {0};
 	char ll[DSM_MAX_LL_LENGTH + 1] = {0};
 
-	rc = build_hl_ll(fpath, hl, ll);
-	CT_INFO("build_hl_ll:\n"
+	rc = extract_hl_ll(fpath, hl, ll);
+	CT_INFO("extract_hl_ll:\n"
 		"fpath: %s\n"
 		"hl: %s\n"
 		"ll: %s\n", fpath, hl, ll);
 	if (rc != DSM_RC_SUCCESSFUL) {
-		CT_ERROR(rc, "build_hl_ll");
+		CT_ERROR(rc, "extract_hl_ll");
 		return rc;
 	}
-
 	rc = tsm_query_hl_ll(fs, hl, ll, desc, display);
 
 	return rc;
 }
 
 static dsInt16_t tsm_retrieve_generic(const char *fs, const char *hl,
-				      const char *ll, const char *desc,
-				      int fd)
+				      const char *ll, const char *desc)
 {
 	dsInt16_t rc;
 	dsInt16_t rc_minor = 0;
@@ -875,7 +845,7 @@ static dsInt16_t tsm_retrieve_generic(const char *fs, const char *hl,
 
 			switch (query_data.objName.objType) {
 			case DSM_OBJ_FILE: {
-				rc_minor = retrieve_obj(&query_data, &obj_info, fd);
+				rc_minor = retrieve_obj(&query_data, &obj_info);
 				CT_INFO("retrieve_file_obj, rc: %d\n", rc_minor);
 				if (rc_minor != DSM_RC_SUCCESSFUL) {
 					CT_ERROR(0, "retrieve_file_obj");
@@ -892,7 +862,7 @@ static dsInt16_t tsm_retrieve_generic(const char *fs, const char *hl,
 					 query_data.objName.fs,
 					 query_data.objName.hl,
 					 query_data.objName.ll);
-				rc_minor = mkdir_p(directory);
+				rc_minor = mkdir_p(directory, obj_info.st_mode);
 				CT_INFO("mkdir_p(%s)\n", directory);
 				if (rc_minor) {
 					CT_ERROR(rc_minor, "mkdir_p");
@@ -934,45 +904,31 @@ cleanup:
 dsInt16_t tsm_retrieve_fpath(const char *fs, const char *fpath, const char *desc)
 {
 	dsInt16_t rc;
-	dsInt16_t rc_minor;
 	char hl[DSM_MAX_HL_LENGTH + 1] = {0};
 	char ll[DSM_MAX_LL_LENGTH + 1] = {0};
-	int fd;
 
 	rc = extract_hl_ll(fpath, hl, ll);
-	if (rc != DSM_RC_SUCCESSFUL)
+	if (rc != DSM_RC_SUCCESSFUL) {
+		CT_ERROR(rc, "extract_hl_ll");
 		return rc;
-
-	rc = open_fd(fs, hl, ll, &fd);
-	if (rc != DSM_RC_SUCCESSFUL)
-		return rc;
-
-	rc = tsm_retrieve_generic(fs, hl, ll, desc, fd);
-
-	rc_minor = close(fd);
-	if (rc_minor == -1) {
-		CT_ERROR(errno, "close");
-		rc_minor = DSM_RC_SUCCESSFUL;
 	}
-
-	return (rc_minor == 0 ? rc : rc_minor);
-}
-
-dsInt16_t tsm_retrieve_fpath_fd(const char *fs, const char *fpath,
-				const char *desc, int fd)
-{
-	dsInt16_t rc;
-	char hl[DSM_MAX_HL_LENGTH + 1] = {0};
-	char ll[DSM_MAX_LL_LENGTH + 1] = {0};
-
-	rc = extract_hl_ll(fpath, hl, ll);
-	if (rc != DSM_RC_SUCCESSFUL)
-		return rc;
-
-	rc = tsm_retrieve_generic(fs, hl, ll, desc, fd);
+	rc = tsm_retrieve_generic(fs, hl, ll, desc);
 
 	return rc;
 }
+
+dsInt16_t tsm_retrieve_fpath_fd(const char *fs, const char *fpath,
+				const char *desc, int l_fd)
+{
+	dsInt16_t rc;
+	fd_set_outside = bTrue;
+	tsm_set_retrieve_fd(l_fd);
+	rc = tsm_retrieve_fpath(fs, fpath, desc);
+	fd_set_outside = bFalse;
+
+	return rc;
+}
+
 
 static dsInt16_t tsm_archive_generic(archive_info_t *archive_info)
 {
@@ -1144,6 +1100,7 @@ static dsInt16_t tsm_archive_prepare(const char *fs, const char *fpath,
 	}
 	archive_info->obj_info.size = to_dsStruct64_t(st_buf.st_size);
 	archive_info->obj_info.magic = MAGIC_ID_V1;
+	archive_info->obj_info.st_mode = st_buf.st_mode;
 
 	if (S_ISREG(st_buf.st_mode))
 		archive_info->obj_name.objType = DSM_OBJ_FILE;

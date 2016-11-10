@@ -53,10 +53,11 @@ typedef struct {
 	dsUint32_t f_ver;
 } lu_fid_t;
 
-/* Custom object description. */
+/* ltsm object description. */
 typedef struct {
 	unsigned int magic;
 	dsStruct64_t size;
+	mode_t st_mode;
 	lu_fid_t lu_fid;
 } obj_info_t;
 
@@ -92,6 +93,6 @@ dsInt16_t tsm_delete_fpath(const char *fs, const char *fpath);
 dsInt16_t tsm_retrieve_fpath(const char *fs, const char *fpath,
 			     const char *desc);
 dsInt16_t tsm_retrieve_fpath_fd(const char *fs, const char *fpath,
-				const char *desc, int fd);
+				const char *desc, int l_fd);
 
 #endif /* TSMAPI_H */

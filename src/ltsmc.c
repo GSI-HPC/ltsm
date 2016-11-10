@@ -49,7 +49,7 @@ void usage(const char *cmd_name)
 	       "\t-r, --retrieve\n"
 	       "\t-q, --query\n"
 	       "\t-d, --delete\n"
-	       "\t-i, --recursive\n"
+	       "\t-i, --recursive (archive recursively a directory)\n"
 	       "\t-f, --fsname <STRING>\n"
 	       "\t-c, --description <STRING>\n"
 	       "\t-n, --node <STRING>\n"
