@@ -28,8 +28,8 @@ __rnd_dirs()
     DIR_LENGTH=${2}
 
     D=$(( (RANDOM % ${MAX_DIR_DEPTH}) + 1 ))
-    P=${PATH_PREFIX}
-    
+    P="${PATH_PREFIX}/"
+
     for d in $(seq 1 ${D}); do
 	P+=$(__rnd_string ${DIR_LENGTH})
 	P+="/"
@@ -42,7 +42,7 @@ __rnd_files()
 {
     # Create randomly at most ${1} files within the last nested directory (can also be 0).
     MAX_NUM_FILES=${1}
-    
+
     # Create randomly at most ${2} nested directories each have random file name of length ${3}.
     RND_DIR=$(__rnd_dirs ${2} ${3})
 
@@ -64,12 +64,22 @@ __rnd_files()
 ##########################################################
 # main
 ##########################################################
-PATH_PREFIX="/tmp/ltsm/"
+TSM_NAME=${1-polaris}
+LTSM_BIN="src/ltsmc"
+LTSM_NODE=${TSM_NAME}
+LTSM_PASSWORD=${TSM_NAME}
+LTSM_SERVERNAME=${2-polaris-kvm-tsm-server}
+export DSMI_CONFIG=`pwd`/dsmopt/dsm.sys
+
+PATH_PREFIX=`mktemp -d`
 MAX_NUM_FILES=35
 MAX_NESTED_DIRS=16
 MAX_DIR_LEN=6
 
-echo "Creating sanity data in ${PATH_PREFIX} please wait ..." && rm -rf ${PATH_PREFIX}
+[ ${PWD##*/} == "script" ] && { LTSM_BIN="../${LTSM_BIN}"; }
+__check_bin "${LTSM_BIN}"
+
+echo "Creating sanity data in ${PATH_PREFIX} please wait ..."
 
 ##########################################################
 # Create directories and files
@@ -117,31 +127,26 @@ echo "Creating MD5 sum file of original data: ${MD5_ORIG}"
 find ${PATH_PREFIX} -exec md5sum -b '{}' \; &> ${MD5_ORIG}
 
 ##########################################################
-# LTSM action
+# LTSM actions
 ##########################################################
-TSM_NAME=${1-polaris}
-LTSM_BIN="src/ltsmc"
-LTSM_NODE=${TSM_NAME}
-LTSM_PASSWORD=${TSM_NAME}
-LTSM_SERVERNAME=${2-polaris-kvm-tsm-server}
-export DSMI_CONFIG=`pwd`/dsmopt/dsm.sys
-
-__check_bin "${LTSM_BIN}"
-
 # Archive data
 echo "Archiving data please wait ..."
-${LTSM_BIN} -a -f '/' -n ${LTSM_NODE} -p ${LTSM_PASSWORD} -s ${LTSM_SERVERNAME} ${PATH_PREFIX}
-echo "done\n"
+${LTSM_BIN} -a -i -f '/' -n ${LTSM_NODE} -p ${LTSM_PASSWORD} -s ${LTSM_SERVERNAME} "${PATH_PREFIX}"
+[ $? -eq 0 ] && { echo -e "done\n"; }
 
-# Remove locally and retrieve
+# First remove data locally, second retrieve data from TSM storage.
+echo "Deleting data locally in ${PATH_PREFIX} and retrieving data from TSM storage"
 rm -rf ${PATH_PREFIX}
-${LTSM_BIN} -r -f '/' -n ${LTSM_NODE} -p ${LTSM_PASSWORD} -s ${LTSM_SERVERNAME} -h '/*' -l '/*'
+${LTSM_BIN} -r -f '/' -n ${LTSM_NODE} -p ${LTSM_PASSWORD} -s ${LTSM_SERVERNAME} "${PATH_PREFIX}*/*"
+[ $? -eq 0 ] && { echo -e "done\n"; }
 
 echo "Creating MD5 sum file of retrieved data: ${MD5_RETR}"
 find ${PATH_PREFIX} -exec md5sum -b '{}' \; &> ${MD5_RETR}
 
-# Remove data
-${LTSM_BIN} -d -f '/' -n ${LTSM_NODE} -p ${LTSM_PASSWORD} -s ${LTSM_SERVERNAME} -h '/*' -l '/*'
+# Finally remove data locally and also from TSM storage.
+rm -rf ${PATH_PREFIX}
+${LTSM_BIN} -d -f '/' -n ${LTSM_NODE} -p ${LTSM_PASSWORD} -s ${LTSM_SERVERNAME} "${PATH_PREFIX}*/*"
+[ $? -eq 0 ] && { echo -e "done\n"; }
 
 # Check for equality
 ARE_EQUAL=1 # FALSE
