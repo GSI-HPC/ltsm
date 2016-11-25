@@ -1,6 +1,6 @@
 # LTSM - Lightweight TSM API, TSM Console Client and Lustre Copytool for Archiving Data
 
-A lightweight high-level TSM API/library (called *tsmmapi*) supporting operations
+A lightweight high-level TSM API/library (called *tsmapi*) supporting operations
 * *archiving*
 * *retrieving*
 * *deleting*
@@ -93,37 +93,37 @@ r xvfz /tmp/archives/linux-0.01.tar.gz -C /tmp/archives && rm -rf /tmp/archives/
 
 First we archive the single file `/tmp/archives/linux/Makefile`
 ```
-ltsmc --archive --fsname '/' -c 'Historic Linux Kernel Makefile' --node polaris --password polaris --servername=polaris-kvm-tsm-server 
+ltsmc -vvv --archive --fsname '/' -c 'Historic Linux Kernel Makefile' --node polaris --password polaris --servername=polaris-kvm-tsm-server 
 /tmp/archives/linux/Makefile
 ```
 
 For archiving the complete `/tmp/archives/linux` directory (with all sub-directories) perform following command:
 ```
-ltsmc --archive --fsname '/' -c 'Complete Historic Linux Kernel' --node polaris --password polaris --servername=polaris-kvm-tsm-server /tmp/archives/linux
+ltsmc -vvv --archive --recursive --fsname '/' -c 'Complete Historic Linux Kernel' --node polaris --password polaris --servername=polaris-kvm-tsm-server /tmp/archives/linux
 ```
 ### Querying Data
 For querying all data stored in directory `/tmp/archives/linux`
 ```
-ltsmc --query --fsname '/' --node polaris --password polaris --servername=polaris-kvm-tsm-server --hl '/tmp/archives/linux/*' --ll '/*'
+ltsmc -vvv --query --fsname '/' --node polaris --password polaris --servername=polaris-kvm-tsm-server '/tmp/archives/linux*/*'
 ```
 Querying the single file `/tmp/archives/linux/Makefile`
 ```
-ltsmc --query --fsname '/' --node polaris --password polaris --servername=polaris-kvm-tsm-server --hl '/tmp/archives/linux' --ll '/Makefile'
+ltsmc -vvv --query --fsname '/' --node polaris --password polaris --servername=polaris-kvm-tsm-server '/tmp/archives/linux/Makefile'
 ```
 ### Retrieving Data
 We first delete all data in `/tmp/archives/linux` and the restore the data to that directory:
 ```
-rm -rf /tmp/archives/linux && ltsmc --retrieve --fsname '/' --node polaris --password polaris --servername=polaris-kvm-tsm-server --hl '/tmp/archives/linux/*' --ll '/*'
+rm -rf /tmp/archives/linux && ltsmc -vvv --retrieve --fsname '/' --node polaris --password polaris --servername=polaris-kvm-tsm-server '/tmp/archives/linux*/*'
 ```
 
 ### Deleting Data
 To delete data on the TSM perform the following command:
 ```
-ltsmc --delete --fsname '/' --node polaris --password polaris --servername=polaris-kvm-tsm-server --hl '/tmp/archives/linux/*' --ll '/*'
+ltsmc -vvv --delete --fsname '/' --node polaris --password polaris --servername=polaris-kvm-tsm-server '/tmp/archives/linux*/*'
 ```
 A subsequent *delete* or *query* command shows that there is no data left on the TSM side.
 ```
-ltsmc --delete --fsname '/' --node polaris --password polaris --servername=polaris-kvm-tsm-server --hl '/tmp/archives/linux/*' --ll '/*'
+ltsmc -vvv --delete --fsname '/' --node polaris --password polaris --servername=polaris-kvm-tsm-server '/tmp/archives/linux*/*'
 ```
 
 ## Screenshot and Screencast
@@ -133,7 +133,7 @@ Klick on the screenshot to see the full screencast which demonstrates the usage 
 ## Work in Progress
 * Implement multiple objects per transaction, currently a single object is processed per transaction.
 * Extend test suite for larger code coverage.
-* Provide Debian package
+* Provide man page(s).
  
 ## References
 A thorough description and code examples of IBM's low-level TSM API/library can be found in the open document [Using the Application Programming Interface](http://web-docs.gsi.de/~tstibor/tsm/doc/using_the_programming_application_interface.pdf), 2007.
