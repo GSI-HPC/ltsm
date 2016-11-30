@@ -1269,12 +1269,11 @@ dsInt16_t tsm_archive_fpath(const char *fs, const char *fpath, const char *desc)
 			fs, fpath, desc);
 		return rc;
 	}
-	/* If fpath is a directory, then perform archiving with tsm_archive_directory().
-	   Inside tsm_archive_directory() recursive traverse and archiving is executed,
-	   when do_recursive = bTrue, otherwise just files and directories inside
-	   fpath are archived (no sub-directories and files inside the sub-directories). */
+	/* If fpath is a directory D, then archive D and all regular files
+	   inside D. If do_recursive is bTrue, archive recursively
+	   regular files and directories inside D. */
 	if (archive_info.obj_name.objType == DSM_OBJ_DIRECTORY)
-		return tsm_archive_recursive(&archive_info); /* Archive directory. */
+		return tsm_archive_recursive(&archive_info); /* Archive (recursively) inside D. */
 	else
 		return tsm_archive_generic(&archive_info); /* Archive regular file. */
 
