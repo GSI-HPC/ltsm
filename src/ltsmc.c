@@ -23,10 +23,8 @@
 #include <sys/stat.h>
 #include "tsmapi.h"
 
-/* If version tag can not be obtained via Makefile
-   and `git describe`, set it to not available. */
-#ifndef VERSION
-#define VERSION "NA"
+#ifndef PACKAGE_VERSION
+#define PACKAGE_VERSION "NA"
 #endif
 
 /* Arguments */
@@ -58,7 +56,7 @@ void usage(const char *cmd_name)
 	       "\t-s, --servername <STRING>\n"
 	       "\t-v, --verbose (optional level <v,vv,vvv>)\n"
 	       "\nVersion: %s © by Thomas Stibor <t.stibor@gsi.de>\n",
-	       cmd_name, VERSION);
+	       cmd_name, PACKAGE_VERSION);
 
 	exit(DSM_RC_UNSUCCESSFUL);
 }

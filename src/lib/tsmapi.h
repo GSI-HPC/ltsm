@@ -23,6 +23,10 @@
 #ifndef TSMAPI_H
 #define TSMAPI_H
 
+#if HAVE_CONFIG_H
+#include <config.h>
+#endif
+
 #include <sys/types.h>
 #include "dsmapitd.h"
 #include "dsmapifp.h"

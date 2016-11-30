@@ -2,7 +2,13 @@
 # Process this file with autoconf to produce a configure script.
 
 AC_PREREQ([2.69])
-AC_INIT([ltsmc], [0.0.1])
+
+# Obtain git version.
+m4_define([GIT_VERSION_STRING], m4_esyscmd([git describe --always | tr -d '\n']))
+
+# Define package information.
+AC_INIT([ltsm], [GIT_VERSION_STRING], [t.stibor@gsi.de], [], [https://github.com/tstibor/ltsm])
+
 m4_include([m4/ax_pthread.m4])
 AC_CONFIG_SRCDIR([src/ltsmc.c])
 AM_INIT_AUTOMAKE
