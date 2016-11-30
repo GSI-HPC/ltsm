@@ -997,6 +997,7 @@ static dsInt16_t tsm_archive_generic(archive_info_t *archive_info)
 	}
 	data_blk.stVersion = DataBlkVersion;
 	data_blk.bufferLen = sizeof(buf);
+	data_blk.numBytes = 0;
 
 	while (archive_info->obj_name.objType == DSM_OBJ_FILE && !feof(file)) {
 		rbytes = fread(data_blk.bufferPtr, 1, data_blk.bufferLen,
@@ -1007,6 +1008,7 @@ static dsInt16_t tsm_archive_generic(archive_info_t *archive_info)
 			goto cleanup_sendobj;
 		}
 		total_bytes += rbytes;
+		data_blk.bufferLen = rbytes;
 
 		rc = dsmSendData(handle, &data_blk);
 		TSM_TRACE(rc, "dsmSendData");
@@ -1014,6 +1016,9 @@ static dsInt16_t tsm_archive_generic(archive_info_t *archive_info)
 			TSM_ERROR(rc, "dsmSendData");
 			goto cleanup_sendobj;
 		}
+		CT_TRACE("data_blk.numBytes: %zu, rbytes: %zu, total_bytes: %zu",
+			 data_blk.numBytes, rbytes, total_bytes);
+		data_blk.numBytes = 0;
 	}
 	success = bTrue;
 
