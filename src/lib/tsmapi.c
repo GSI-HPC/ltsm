@@ -191,8 +191,20 @@ cleanup:
 	return rc;
 }
 
+
+/**
+ * @brief Retrieve and write object data into file descriptor.
+ *
+ * Given response of query (qryRespArchiveData) and
+ * the corresponding object information (obj_info_t), retrieve
+ * data from TSM storage and write data into file descriptor.
+ *
+ * @param[in] query_data Description of query_data
+ * @param[in] obj_info   Description of obj_info
+ * @return DSM_RC_SUCCESSFUL on success otherwise DSM_RC_UNSUCCESSFUL.
+ */
 static dsInt16_t retrieve_obj(qryRespArchiveData *query_data,
-			      obj_info_t *obj_info)
+			      const obj_info_t *obj_info)
 {
 	char *buf = NULL;
 	DataBlk dataBlk;
@@ -202,9 +214,9 @@ static dsInt16_t retrieve_obj(qryRespArchiveData *query_data,
 	dsInt16_t rc;
 	dsInt16_t rc_minor = 0;
 
-	/* If file descriptor fd is not valid, thus not set by
-	   tsm_retrieve_fpath_fd->tsm_set_retrieve_fd, then
-	   open a fd based based in fs/hl/ll inside query_data, and close fd
+	/* If file descriptor fd is not valid, thus not set from outside
+	   by tsm_retrieve_fpath_fd->tsm_set_retrieve_fd, then
+	   open a fd based of fs/hl/ll provided in query_data, and close fd
 	   at the end of this function.
 	 */
 	if (!is_fd_set() && !fd_set_outside) {
@@ -855,9 +867,9 @@ static dsInt16_t tsm_retrieve_generic(const char *fs, const char *hl,
 			switch (query_data.objName.objType) {
 			case DSM_OBJ_FILE: {
 				rc_minor = retrieve_obj(&query_data, &obj_info);
-				CT_INFO("retrieve_file_obj, rc: %d\n", rc_minor);
+				CT_INFO("retrieve_obj, rc: %d\n", rc_minor);
 				if (rc_minor != DSM_RC_SUCCESSFUL) {
-					CT_ERROR(0, "retrieve_file_obj");
+					CT_ERROR(0, "retrieve_obj");
 					goto cleanup_getdata;
 				}
 			} break;
@@ -1072,17 +1084,18 @@ cleanup:
 	return rc;
 }
 
-/** @brief Initialize and setup archive_info_t struct fields.
+/**
+ * @brief Initialize and setup archive_info_t struct fields.
  *
  *  Processes input file or directory name, file space name and description.
  *  Extract from fpath the high-level name hl, the low-level name ll and fill
  *  struct fields in archive_info_t with fs, desc, hl and ll.
  *
- *  @param fs [in] File space name set in archive_info->dsmObjectName.fs.
- *  @param fpath [in] Path to file or directory, converted to hl, ll and set
- *                    archive_info->dsmObjectName.hl and
- *                    archive_info->dsmObjectName.ll.
- *  @param desc [in] Description of fpath and set in
+ *  @param[in] fs    File space name set in archive_info->dsmObjectName.fs.
+ *  @param[in] fpath Path to file or directory, converted to hl, ll and set
+ *                   archive_info->dsmObjectName.hl and
+ *                   archive_info->dsmObjectName.ll.
+ *  @param[in] desc  Description of fpath and to be set in
  *                   archive_info->dsmObjectName.desc.
  *  @return DSM_RC_SUCCESSFUL on success otherwise DSM_RC_UNSUCCESSFUL.
  */
@@ -1252,19 +1265,20 @@ static dsInt16_t tsm_archive_recursive(archive_info_t *archive_info)
         return rc;
 }
 
-/** @brief Archive file or directory with additional description information.
+/**
+ * @brief Archive file or directory.
  *
- *  Archive file or directory, specified by fs, fpath and additional description
- *  information. Note: If fpath is a directory and do_recursive is true, then
- *  recursively all files and subdirectories inside fpath are also archived.
+ * Archive file or directory, specified by fs, fpath and additional description
+ * information. Note: If fpath is a directory and do_recursive is true, then
+ * recursively all files and subdirectories inside fpath are also archived.
  *
- *  @param[in] fs File space name set in archive_info->dsmObjectName.fs.
- *  @param[in] fpath Path to file or directory, converted to hl, ll and set
- *                   archive_info->dsmObjectName.hl and
- *                   archive_info->dsmObjectName.ll.
- *  @param[in] desc Description of fpath and set in
+ * @param[in] fs    File space name set in archive_info->dsmObjectName.fs.
+ * @param[in] fpath Path to file or directory, converted to hl, ll and set
+ *                  archive_info->dsmObjectName.hl and
+ *                  archive_info->dsmObjectName.ll.
+ * @param[in] desc  Description of fpath and set in
  *                  archive_info->dsmObjectName.desc.
- *  @return DSM_RC_SUCCESSFUL on success otherwise DSM_RC_UNSUCCESSFUL.
+ * @return DSM_RC_SUCCESSFUL on success otherwise DSM_RC_UNSUCCESSFUL.
  */
 dsInt16_t tsm_archive_fpath(const char *fs, const char *fpath, const char *desc)
 {
@@ -1294,19 +1308,19 @@ dsInt16_t tsm_archive_fpath(const char *fs, const char *fpath, const char *desc)
 	return rc;
 }
 
-/** @brief Archive file or directory with additional description and
- *         Lustre fid information.
+/**
+ * @brief Archive file or directory and additional Lustre fid information.
  *
  *  Archive file or directory, specified by fs, fpath and additional description
  *  information and Lustre lu_fid data. Note: This function is basically reserved
  *  for the Lustre HSM archive call.
  *
- *  @param[in] fs File space name set in archive_info->dsmObjectName.fs.
- *  @param[in] fpath Path to file or directory, converted to hl, ll and set
- *                   archive_info->dsmObjectName.hl and
- *                   archive_info->dsmObjectName.ll.
- *  @param[in] desc Description of fpath and set in
- *                  archive_info->dsmObjectName.desc.
+ *  @param[in] fs     File space name set in archive_info->dsmObjectName.fs.
+ *  @param[in] fpath  Path to file or directory, converted to hl, ll and set
+ *                    archive_info->dsmObjectName.hl and
+ *                    archive_info->dsmObjectName.ll.
+ *  @param[in] desc   Description of fpath and set in
+ *                    archive_info->dsmObjectName.desc.
  *  @param[in] lu_fid Lustre FID information which is set in
  *                    archive_info->obj_info.lu_fid.
  *  @return DSM_RC_SUCCESSFUL on success otherwise DSM_RC_UNSUCCESSFUL.
