@@ -17,8 +17,14 @@
  */
 
 /* Important note: The API can only restore or retrieve objects that were
-   backed up or archived using API calls
-   (see Chapter 3. API design recommendations and considerations page 55.) */
+   archived using TSM API calls, that is, data archived with dsmc cannot
+   be retrieved with these TSM API calls and console client ltsmc.
+   Moreover the API doesn't support subdir opperations, that is, hl/ll
+   queries must be constructed (in a clever way) with wildcard (*) and
+   question mark (?) to match sub directories and files. For more detail c.f.
+   PDF Dokument: Using the Application Programming Interface
+   (http://www.ibm.com/support/knowledgecenter/SSGSG7_7.1.3/api/b_api_using.pdf)
+*/
 
 #ifndef TSMAPI_H
 #define TSMAPI_H
