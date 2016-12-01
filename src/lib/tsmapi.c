@@ -208,7 +208,16 @@ static dsInt16_t retrieve_obj(qryRespArchiveData *query_data,
 	   at the end of this function.
 	 */
 	if (!is_fd_set() && !fd_set_outside) {
-		rc = mkdir_p(query_data->objName.hl, obj_info->st_mode);
+		/* If a regular file was archived, e.g. /dir1/dir2/data.txt,
+		   then on the TSM storage only the object
+		   hl: /dir1/dir2, ll: /data.txt is stored. In contrast to
+		   IBM's dsmc tool where also the directories /dir1 and
+		   /dir1/dir2 are stored as objects. Our approach saves us
+		   two objects, however we have no st_mode information of /dir1
+		   and /dir1/dir2, therefore use the default directory permission:
+		   S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH */
+		rc = mkdir_p(query_data->objName.hl,
+			     S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH);
 		CT_INFO("mkdir_p(%s)", query_data->objName.hl);
 		if (rc) {
 			CT_ERROR(rc_minor, "mkdir_p");
