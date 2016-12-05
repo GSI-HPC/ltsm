@@ -280,7 +280,8 @@ static int ct_archive(const struct hsm_action_item *hai, const long hal_flags)
 		goto cleanup;
 	}
 
-	rc = tsm_archive_fid(FS_SPACE, fpath, NULL, (const void *)&hai->hai_fid);
+	rc = tsm_archive_fpath_fid(FS_SPACE, fpath, NULL,
+				   (const void *)&hai->hai_fid);
 	if (rc != DSM_RC_SUCCESSFUL) {
 		CT_ERROR(rc, "tsm_archive_fid on '%s' failed", fpath);
 		goto cleanup;

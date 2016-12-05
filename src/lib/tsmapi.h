@@ -94,9 +94,12 @@ dsInt16_t tsm_init(login_t *login);
 void tsm_quit();
 
 dsInt16_t tsm_query_session_info();
-dsInt16_t tsm_archive_fpath(const char *fs, const char *fpath, const char *desc);
-dsInt16_t tsm_archive_fid(const char *fs, const char *fpath, const char *desc,
-			  const lu_fid_t *lu_fid);
+dsInt16_t tsm_archive_fpath(const char *fs, const char *fpath,
+			    const char *desc);
+dsInt16_t tsm_archive_fpath_fid(const char *fs, const char *fpath,
+				const char *desc, const lu_fid_t *lu_fid);
+dsInt16_t tsm_archive_fpath_fd(const char *fs, const char *fpath,
+			       const char *desc, int l_fd);
 dsInt16_t tsm_query_fpath(const char *fs, const char *fpath,
 			  const char *desc, dsBool_t display);
 dsInt16_t tsm_delete_fpath(const char *fs, const char *fpath);

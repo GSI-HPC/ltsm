@@ -105,7 +105,8 @@ static void tsm_close_retrieve_fd()
 	if (!(fd < 0)) {
 		rc = close(fd);
 		if (rc != 0)
-			CT_ERROR(errno, "closing file descriptor: %d failed\n", fd);
+			CT_ERROR(errno, "closing file descriptor: %d failed",
+				 fd);
 		fd = -1;
 	}
 }
@@ -155,10 +156,21 @@ static dsInt16_t mkdir_p(const char *path, const mode_t st_mode)
 	return rc;
 }
 
-static dsInt16_t open_fd(const qryRespArchiveData *query_data, int *fd, const mode_t st_mode)
+
+/**
+ * @brief Extract from qryRespArchiveData fields fs, hl, ll and construct fpath.
+ *
+ * @param[in]  query_data Query data response containing fs, hl and ll.
+ * @param[out] fpath      File path contructed and set from fs, hl and ll.
+ * @return DSM_RC_SUCCESSFUL on success otherwise DSM_RC_UNSUCCESSFUL.
+ */
+static dsInt16_t extract_fpath(const qryRespArchiveData *query_data, char *fpath)
 {
-	dsInt16_t rc;
-	char *fpath = NULL;
+	if (fpath == NULL) {
+		CT_WARN("fpath: %p", fpath);
+		return DSM_RC_UNSUCCESSFUL;
+	}
+
 	const size_t len = strlen(query_data->objName.fs) +
 		strlen(query_data->objName.hl) +
 		strlen(query_data->objName.ll) + 1;
@@ -167,28 +179,23 @@ static dsInt16_t open_fd(const qryRespArchiveData *query_data, int *fd, const mo
 		CT_ERROR(ENAMETOOLONG, "len > PATH_MAX");
 		return DSM_RC_UNSUCCESSFUL;
 	}
-	fpath = calloc(len, sizeof(char));
-	if (fpath == NULL) {
-		CT_ERROR(errno, "calloc");
-		return DSM_RC_UNSUCCESSFUL;
-	}
 
 	snprintf(fpath, len, "%s%s%s", query_data->objName.fs,
 		 query_data->objName.hl, query_data->objName.ll);
 	CT_INFO("fs/hl/ll fpath: %s\n", fpath);
 
-	*fd = open(fpath, O_WRONLY | O_CREAT, st_mode);
+	return DSM_RC_SUCCESSFUL;
+}
+
+static dsInt16_t open_fd(const char *fpath, int *fd, const int flags,
+			 const mode_t st_mode)
+{
+	*fd = open(fpath, flags, st_mode);
 	if (*fd < 0) {
 		CT_ERROR(errno, "open '%s'", fpath);
-		rc = DSM_RC_UNSUCCESSFUL;
-		goto cleanup;
+		return DSM_RC_UNSUCCESSFUL;
 	} else
-		rc = DSM_RC_SUCCESSFUL;
-cleanup:
-	if (fpath)
-		free(fpath);
-
-	return rc;
+		return DSM_RC_SUCCESSFUL;
 }
 
 
@@ -232,13 +239,18 @@ static dsInt16_t retrieve_obj(qryRespArchiveData *query_data,
 			     S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH);
 		CT_INFO("mkdir_p(%s)", query_data->objName.hl);
 		if (rc) {
-			CT_ERROR(rc_minor, "mkdir_p");
+			CT_ERROR(rc, "mkdir_p");
 			return rc;
 		}
 
-		rc = open_fd(query_data, &fd, obj_info->st_mode);
+		char fpath[PATH_MAX + 1] = {0};
+		rc = extract_fpath(query_data, &fpath[0]);
+		if (rc != DSM_RC_SUCCESSFUL)
+			return rc;
+
+		rc = open_fd(fpath, &fd, O_WRONLY | O_CREAT, obj_info->st_mode);
 		if (rc != DSM_RC_SUCCESSFUL) {
-			tsm_close_retrieve_fd();
+			tsm_close_retrieve_fd(); /* TODO: We altering the fd. */
 			return rc;
 		}
 	}
@@ -950,7 +962,7 @@ dsInt16_t tsm_retrieve_fpath_fd(const char *fs, const char *fpath,
 	return rc;
 }
 
-
+#if 0
 static dsInt16_t tsm_archive_generic(archive_info_t *archive_info)
 {
 	dsInt16_t rc;
@@ -1082,6 +1094,158 @@ cleanup:
 		free(data_blk.bufferPtr);
 
 	return rc;
+}
+#endif
+
+static dsInt16_t tsm_archive_generic(archive_info_t *archive_info)
+{
+	dsInt16_t rc;
+	dsInt16_t rc_minor = 0;
+	mcBindKey mc_bind_key;
+	sndArchiveData arch_data;
+	ObjAttr obj_attr;
+	DataBlk data_blk;
+	dsUint16_t err_reason;
+	dsBool_t success = bFalse;
+	ssize_t total_read = 0;
+	ssize_t obj_size_read = 0;
+	dsBool_t done = bFalse;
+	dsUint8_t vote_txn;
+
+	data_blk.bufferPtr = NULL;
+	obj_attr.objInfo = NULL;
+
+	if (!is_fd_set() && !fd_set_outside) {
+		/* TODO: We open here also a directory? */
+		rc = open_fd(archive_info->fpath, &fd, O_RDONLY,
+			     archive_info->obj_info.st_mode);
+		CT_INFO("rc: %d, open_fd(%s), fd: %d", rc, archive_info->fpath,
+			fd);
+		if (rc != DSM_RC_SUCCESSFUL) {
+			CT_ERROR(rc, "open_fd '%s'", archive_info->fpath);
+			tsm_close_retrieve_fd();
+			return rc;
+		}
+	}
+
+	/* Start transaction. */
+	rc = dsmBeginTxn(handle);
+	TSM_TRACE(rc, "dsmBeginTxn");
+	if (rc) {
+		TSM_ERROR(rc, "dsmBeginTxn");
+		goto cleanup;
+	}
+
+	mc_bind_key.stVersion = mcBindKeyVersion;
+	rc = dsmBindMC(handle, &(archive_info->obj_name), stArchive, &mc_bind_key);
+	TSM_TRACE(rc, "dsmBindMC");
+	if (rc) {
+		TSM_ERROR(rc, "dsmBindMC");
+		goto cleanup_transaction;
+	}
+
+	arch_data.stVersion = sndArchiveDataVersion;
+	if (strlen(archive_info->desc) <= DSM_MAX_DESCR_LENGTH)
+		arch_data.descr = (char *)archive_info->desc;
+	else
+		arch_data.descr[0] = '\0';
+
+	rc = obj_attr_prepare(&obj_attr, archive_info);
+	if (rc)
+		goto cleanup_transaction;
+
+	/* Start sending object. */
+	rc = dsmSendObj(handle, stArchive, &arch_data,
+			&(archive_info->obj_name), &obj_attr, NULL);
+	TSM_TRACE(rc, "dsmSendObj");
+	if (rc) {
+		TSM_ERROR(rc, "dsmSendObj");
+		goto cleanup_transaction;
+	}
+
+	if (archive_info->obj_name.objType == DSM_OBJ_FILE) {
+		data_blk.bufferPtr = (char *)malloc(sizeof(char) * TSM_BUF_LENGTH);
+		if (!data_blk.bufferPtr) {
+			rc = errno;
+			CT_ERROR(rc, "malloc");
+			goto cleanup_transaction;
+		}
+		data_blk.stVersion = DataBlkVersion;
+		data_blk.numBytes = 0;
+
+		while (!done) {
+			obj_size_read = read(fd, data_blk.bufferPtr, TSM_BUF_LENGTH);
+			if (obj_size_read < 0) {
+				CT_ERROR(errno, "read");
+				rc_minor = DSM_RC_UNSUCCESSFUL;
+				goto cleanup_transaction;
+			} else if (obj_size_read == 0) /* Zero indicates end of file. */
+				done = bTrue;
+			else {
+				total_read += obj_size_read;
+				data_blk.bufferLen = obj_size_read;
+
+				rc = dsmSendData(handle, &data_blk);
+				TSM_TRACE(rc, "dsmSendData");
+				if (rc) {
+					TSM_ERROR(rc, "dsmSendData");
+					goto cleanup_transaction;
+				}
+				CT_TRACE("data_blk.numBytes: %zu, current_read: %zu, total_read: %zu, obj_size: %zu",
+					 data_blk.numBytes, obj_size_read, total_read, to_off_t(archive_info->obj_info.size));
+				data_blk.numBytes = 0;
+			}
+		}
+		/* File obj. was archived, verify that the number of bytes read
+		   from file descriptor matches the number of bytes we
+		   transfered with dsmSendData. */
+		success = total_read == to_off_t(archive_info->obj_info.size) ?
+			bTrue : bFalse;
+	} else /* dsmSendObj was successful and we archived a directory obj. */
+		success = bTrue;
+
+	rc = dsmEndSendObj(handle);
+	TSM_TRACE(rc, "dsmEndSendObj");
+	if (rc) {
+		TSM_ERROR(rc, "dsmEndSendObj");
+		success = bFalse;
+	}
+
+cleanup_transaction:
+	/* Commit transaction (DSM_VOTE_COMMIT) on success, otherwise
+	   roll back current transaction (DSM_VOTE_ABORT). */
+	vote_txn = success == bTrue ? DSM_VOTE_COMMIT : DSM_VOTE_ABORT;
+	rc = dsmEndTxn(handle, vote_txn, &err_reason);
+	TSM_TRACE(rc, "dsmEndTxn");
+	if (rc || err_reason) {
+		TSM_ERROR(rc, "dsmEndTxn");
+		TSM_ERROR(err_reason, "dsmEndTxn reason");
+		success = bFalse;
+	}
+
+	if (success) {
+		CT_INFO("\n*** successfully archived: %s %s of size: %lu bytes "
+			"with settings ***\n"
+			"fs: %s\n"
+			"hl: %s\n"
+			"ll: %s\n"
+			"desc: %s\n",
+			OBJ_TYPE(archive_info->obj_name.objType),
+			archive_info->fpath, total_read,
+			archive_info->obj_name.fs, archive_info->obj_name.hl,
+			archive_info->obj_name.ll, archive_info->desc);
+	}
+
+cleanup:
+	if (obj_attr.objInfo)
+		free(obj_attr.objInfo);
+	if (data_blk.bufferPtr)
+		free(data_blk.bufferPtr);
+
+	if (is_fd_set() && !fd_set_outside)
+		tsm_close_retrieve_fd();
+
+	return (rc_minor ? DSM_RC_UNSUCCESSFUL : rc);
 }
 
 /**
@@ -1325,8 +1489,8 @@ dsInt16_t tsm_archive_fpath(const char *fs, const char *fpath, const char *desc)
  *                    archive_info->obj_info.lu_fid.
  *  @return DSM_RC_SUCCESSFUL on success otherwise DSM_RC_UNSUCCESSFUL.
  */
-dsInt16_t tsm_archive_fid(const char *fs, const char *fpath, const char *desc,
-			  const lu_fid_t *lu_fid)
+dsInt16_t tsm_archive_fpath_fid(const char *fs, const char *fpath,
+				const char *desc, const lu_fid_t *lu_fid)
 {
 	dsInt16_t rc;
 	archive_info_t archive_info;
@@ -1353,4 +1517,16 @@ dsInt16_t tsm_archive_fid(const char *fs, const char *fpath, const char *desc,
 	}
 
 	return tsm_archive_generic(&archive_info);
+}
+
+dsInt16_t tsm_archive_fpath_fd(const char *fs, const char *fpath,
+			       const char *desc, int l_fd)
+{
+	dsInt16_t rc;
+	fd_set_outside = bTrue;
+	tsm_set_retrieve_fd(l_fd);
+	rc = tsm_archive_fpath(fs, fpath, desc);
+	fd_set_outside = bFalse;
+
+	return rc;
 }
