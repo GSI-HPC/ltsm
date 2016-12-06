@@ -79,13 +79,17 @@ AC_SUBST([LUSTRE_SRC_DIR])
 AC_SUBST([TSM_SRC_DIR])
 
 # Checks for typedefs, structures, and compiler characteristics.
-AC_C_INLINE
+AC_CHECK_HEADER_STDBOOL
 AC_TYPE_MODE_T
 AC_TYPE_OFF_T
 AC_TYPE_SIZE_T
+AC_TYPE_SSIZE_T
 
 # Checks for library functions.
-AC_CHECK_FUNCS([bzero gettimeofday memmove memset mkdir strerror])
+AC_FUNC_LSTAT_FOLLOWS_SLASHED_SYMLINK
+AC_FUNC_MALLOC
+AC_FUNC_REALLOC
+AC_CHECK_FUNCS([bzero gettimeofday memmove memset mkdir realpath strerror])
 
 AC_CONFIG_FILES([Makefile
                  src/Makefile
