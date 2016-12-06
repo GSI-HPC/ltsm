@@ -15,7 +15,7 @@ and the archived data still needs to be retrieved afterwards.
 Before using LTSM a working access to a TSM server is required. One can install for testing purposes a fully working
 TSM server (e.g. inside a KVM) for a period of 30 days before the license expires. A complete installation and setup guide is provided
 at [TSM Server Installation Guide](http://web-docs.gsi.de/~tstibor/tsm/).
-Download and install the TSM API client provided at [7.1.4.0-TIV-TSMBAC-LinuxX86_DEB.tar](http://ftp.software.ibm.com/storage/tivoli-storage-management/maintenance/client/v7r1/Linux/LinuxX86_DEB/BA/v714/).
+Download and install the TSM API client provided at [7.1.X.Y-TIV-TSMBAC-LinuxX86_DEB.tar](http://ftp.software.ibm.com/storage/tivoli-storage-management/maintenance/client/v7r1/Linux/LinuxX86_DEB/BA/).
 Make sure to install `tivsm-api64.amd64.deb` where the header files `dapitype.h, dsmapips.h, ...` and the low-level library `libApiTSM64.so` are provided.
 
 ### Compile *ltsmc* and *lhsmtool_tsm*
