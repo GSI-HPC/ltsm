@@ -71,24 +71,47 @@ do {								\
 	CT_TRACE("%s: handle: %d %s", func, handle, rcmsg);	\
 } while (0)
 
-void set_recursive(dsBool_t recursive)
+/**
+ * @brief Set interval boolean variable
+ *
+ * @param[in] recursive
+ * @return off64_t
+ */
+void set_recursive(const dsBool_t recursive)
 {
 	do_recursive = recursive;
 }
 
-off_t to_off_t(const dsStruct64_t size)
+/**
+ * @brief Convert dsStruct64_t to off64_t type.
+ *
+ * Convert dsStruct64_t struct that consists of fields
+ * dsUint32_t hi; (Most significant 32 bits) and
+ * dsUint32_t lo; (Least significant 32 bits) to off64_t.
+ *
+ * @param[in] size Type used to represent file/object sizes.
+ * @return off64_t
+ */
+off64_t to_off64_t(const dsStruct64_t size)
 {
-	off_t res;
-	res = (off_t)size.hi << 32 | size.lo;
-
-	return res;
+	return (off64_t)size.hi << 32 | size.lo;
 }
 
-dsStruct64_t to_dsStruct64_t(const off_t size)
+/**
+ * @brief Convert off64_t to to_dsStruct64_t type.
+ *
+ * Convert off64_t to dsStruct64_t struct which consists of fields
+ * dsUint32_t hi; (Most significant 32 bits) and
+ * dsUint32_t lo; (Least significant 32 bits).
+ *
+ * @param[in] size Type used to represent file/object sizes.
+ * @return dsStruct64_t Struct consists of {dsUint32_t hi, dsUint32_t lo};
+ */
+dsStruct64_t to_dsStruct64_t(const off64_t size)
 {
 	dsStruct64_t res;
 	res.lo = (dsUint32_t)size;
-	res.hi = (dsUint32_t)((off_t)size >> 32);
+	res.hi = (dsUint32_t)((off64_t)size >> 32);
 
 	return res;
 }
@@ -216,7 +239,7 @@ static dsInt16_t retrieve_obj(qryRespArchiveData *query_data,
 	char *buf = NULL;
 	DataBlk dataBlk;
 	dsBool_t done = bFalse;
-	off_t obj_size = to_off_t(obj_info->size);
+	off64_t obj_size = to_off64_t(obj_info->size);
 	ssize_t obj_size_written = 0;
 	dsInt16_t rc;
 	dsInt16_t rc_minor = 0;
@@ -1088,14 +1111,14 @@ static dsInt16_t tsm_archive_generic(archive_info_t *archive_info)
 					goto cleanup_transaction;
 				}
 				CT_TRACE("data_blk.numBytes: %zu, current_read: %zu, total_read: %zu, obj_size: %zu",
-					 data_blk.numBytes, obj_size_read, total_read, to_off_t(archive_info->obj_info.size));
+					 data_blk.numBytes, obj_size_read, total_read, to_off64_t(archive_info->obj_info.size));
 				data_blk.numBytes = 0;
 			}
 		}
 		/* File obj. was archived, verify that the number of bytes read
 		   from file descriptor matches the number of bytes we
 		   transfered with dsmSendData. */
-		success = total_read == to_off_t(archive_info->obj_info.size) ?
+		success = total_read == to_off64_t(archive_info->obj_info.size) ?
 			bTrue : bFalse;
 	} else /* dsmSendObj was successful and we archived a directory obj. */
 		success = bTrue;
