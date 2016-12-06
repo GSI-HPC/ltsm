@@ -72,10 +72,9 @@ do {								\
 } while (0)
 
 /**
- * @brief Set interval boolean variable
+ * @brief Set internal boolean variable recursive to flag recursive archiving.
  *
- * @param[in] recursive
- * @return off64_t
+ * @param[in] recursive Boolean variable flags whether to archive recursively.
  */
 void set_recursive(const dsBool_t recursive)
 {
