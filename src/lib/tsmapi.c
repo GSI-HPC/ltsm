@@ -426,6 +426,42 @@ void tsm_quit()
 	dsmTerminate(handle);
 }
 
+/**
+ * @brief Return application client version.
+ *
+ * Returns API version number of the application client which is entered
+ * in the compiled object code as a set of four constants defined in dsmapitd.h.
+ *
+ * @return dsmApiVersionEx
+ */
+dsmApiVersionEx get_app_ver()
+{
+	dsmApiVersionEx app_ver;
+	memset(&app_ver, 0, sizeof(app_ver));
+	app_ver.version = DSM_API_VERSION;
+	app_ver.release = DSM_API_RELEASE;
+	app_ver.level = DSM_API_LEVEL;
+	app_ver.subLevel = DSM_API_SUBLEVEL;
+
+	return app_ver;
+}
+
+/**
+ * @brief Return version of the API library.
+ *
+ * Returns the version of the API library that is installed and used.
+ *
+ * @return dsmApiVersionEx
+ */
+dsmApiVersionEx get_lib_ver()
+{
+	dsmApiVersionEx lib_ver;
+	memset(&lib_ver, 0, sizeof(lib_ver));
+	dsmQueryApiVersionEx(&lib_ver);
+
+	return lib_ver;
+}
+
 dsInt16_t tsm_query_session_info()
 {
 	optStruct dsmOpt;
@@ -479,28 +515,28 @@ dsInt16_t tsm_query_session_info()
 		 dsmSessInfo.maxBytesPerTxn,
 		 dsmSessInfo.fsdelim, dsmSessInfo.hldelim);
 
-	dsmApiVersionEx qry_lib_ver;
-	memset(&qry_lib_ver, 0, sizeof(qry_lib_ver));
-	dsmQueryApiVersionEx(&qry_lib_ver);
-
-	dsUint32_t app_ver = 0;
-	dsUint32_t lib_ver = 0;
-	app_ver = (DSM_API_VERSION * 10000) + (DSM_API_RELEASE * 1000) +
-		(DSM_API_LEVEL * 100) + (DSM_API_SUBLEVEL);
-	lib_ver = (qry_lib_ver.version * 10000) + (qry_lib_ver.release * 1000) +
-		(qry_lib_ver.level * 100) + (qry_lib_ver.subLevel);
+	dsmApiVersionEx lib_ver_t = get_lib_ver();
+	dsmApiVersionEx app_ver_t = get_app_ver();
+	dsUint32_t lib_ver = (lib_ver_t.version * 10000) +
+		(lib_ver_t.release * 1000) +
+		(lib_ver_t.level * 100) +
+		lib_ver_t.subLevel;
+	dsUint32_t app_ver = (app_ver_t.version * 10000) +
+		(app_ver_t.release * 1000) +
+		(app_ver_t.level * 100) +
+		app_ver_t.subLevel;
 
 	if (lib_ver < app_ver) {
 		rc = DSM_RC_UNSUCCESSFUL;
 		TSM_ERROR(rc, "The TSM API library is lower than the application version\n"
-			    "Install the current library version.");
+			  "Install the current library version.");
 	}
 
-	CT_TRACE("API Library Version = %d.%d.%d.%d\n",
-		 qry_lib_ver.version,
-		 qry_lib_ver.release,
-		 qry_lib_ver.level,
-		 qry_lib_ver.subLevel);
+	CT_TRACE("IBM API library version = %d.%d.%d.%d\n",
+		 lib_ver_t.version,
+		 lib_ver_t.release,
+		 lib_ver_t.level,
+		 lib_ver_t.subLevel);
 
 	return rc;
 }

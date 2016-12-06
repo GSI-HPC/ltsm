@@ -41,6 +41,8 @@
 #include "dapint64.h"
 #include "log.h"
 
+#define LOGIN_PLATFORM "GNU/Linux"
+
 #define TSM_BUF_LENGTH 65536
 #define MAX_PASSWORD_LENGTH 32
 #define MAX_USERNAME_LENGTH 32
@@ -92,6 +94,9 @@ void set_recursive(dsBool_t recursive);
 
 dsInt16_t tsm_init(login_t *login);
 void tsm_quit();
+
+dsmApiVersionEx get_app_ver();
+dsmApiVersionEx get_lib_ver();
 
 dsInt16_t tsm_query_session_info();
 dsInt16_t tsm_archive_fpath(const char *fs, const char *fpath,

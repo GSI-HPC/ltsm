@@ -42,6 +42,9 @@ static char **files_dirs_arg = NULL;
 
 void usage(const char *cmd_name)
 {
+	dsmApiVersionEx lib_ver_t = get_lib_ver();
+	dsmApiVersionEx app_ver_t = get_app_ver();
+
 	printf("Syntax: %s\n"
 	       "\t-a, --archive\n"
 	       "\t-r, --retrieve\n"
@@ -55,8 +58,14 @@ void usage(const char *cmd_name)
 	       "\t-p, --password <STRING>\n"
 	       "\t-s, --servername <STRING>\n"
 	       "\t-v, --verbose (optional level <v,vv,vvv>)\n"
-	       "\nVersion: %s © by Thomas Stibor <t.stibor@gsi.de>\n",
-	       cmd_name, PACKAGE_VERSION);
+	       "\nVersion: %s © by Thomas Stibor <t.stibor@gsi.de>\n"
+	       "IBM API library version: %d.%d.%d.%d, "
+	       "IBM API application client version: %d.%d.%d.%d\n",
+	       cmd_name, PACKAGE_VERSION,
+	       lib_ver_t.version, lib_ver_t.release, lib_ver_t.level,
+	       lib_ver_t.subLevel,
+	       app_ver_t.version, app_ver_t.release, app_ver_t.level,
+	       app_ver_t.subLevel);
 
 	exit(DSM_RC_UNSUCCESSFUL);
 }
@@ -210,7 +219,7 @@ int main(int argc, char *argv[])
 	strcpy(login.node, n_arg);
 	strcpy(login.password, p_arg);
 	strcpy(login.username, u_arg);
-	strcpy(login.platform, "GNU/Linux");
+	strcpy(login.platform, LOGIN_PLATFORM);
 	const unsigned short s_arg_len = 1 + strlen(s_arg) + strlen("-se=");
 	if (s_arg_len < MAX_OPTIONS_LENGTH)
 		snprintf(login.options, s_arg_len, "-se=%s", s_arg);
