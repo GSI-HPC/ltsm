@@ -27,6 +27,8 @@
 #define PACKAGE_VERSION "NA"
 #endif
 
+#define DEFAULT_FSPACE "/"
+
 /* Arguments */
 static dsBool_t a_arg = bFalse;
 static dsBool_t r_arg = bFalse;
@@ -35,37 +37,37 @@ static dsBool_t d_arg = bFalse;
 static char f_arg[DSM_MAX_FSNAME_LENGTH + 1] = {0};
 static char c_arg[DSM_MAX_DESCR_LENGTH + 1] = {0};
 static char n_arg[DSM_MAX_NODE_LENGTH + 1] = {0};
-static char u_arg[MAX_USERNAME_LENGTH + 1] = {0};
+static char o_arg[MAX_OWNER_LENGTH + 1] = {0};
 static char p_arg[MAX_PASSWORD_LENGTH + 1] = {0};
 static char s_arg[MAX_OPTIONS_LENGTH + 1] = {0};
 static char **files_dirs_arg = NULL;
 
 void usage(const char *cmd_name)
 {
-	dsmApiVersionEx lib_ver_t = get_lib_ver();
-	dsmApiVersionEx app_ver_t = get_app_ver();
+	dsmApiVersionEx libapi_ver = get_libapi_ver();
+	dsmAppVersion appapi_ver = get_appapi_ver();
 
 	printf("Syntax: %s\n"
 	       "\t-a, --archive\n"
 	       "\t-r, --retrieve\n"
 	       "\t-q, --query\n"
 	       "\t-d, --delete\n"
-	       "\t-i, --recursive (archive recursively a directory)\n"
-	       "\t-f, --fsname <STRING>\n"
+	       "\t-i, --recursive (archive recursively directory)\n"
+	       "\t-f, --fsname <STRING> [default '/']\n"
 	       "\t-c, --description <STRING>\n"
 	       "\t-n, --node <STRING>\n"
-	       "\t-u, --username <STRING>\n"
+	       "\t-o, --owner <STRING>\n"
 	       "\t-p, --password <STRING>\n"
 	       "\t-s, --servername <STRING>\n"
-	       "\t-v, --verbose (optional level <v,vv,vvv>)\n"
+	       "\t-v, --verbose [optional level <v,vv,vvv>]\n"
 	       "\nVersion: %s © by Thomas Stibor <t.stibor@gsi.de>\n"
 	       "IBM API library version: %d.%d.%d.%d, "
 	       "IBM API application client version: %d.%d.%d.%d\n",
 	       cmd_name, PACKAGE_VERSION,
-	       lib_ver_t.version, lib_ver_t.release, lib_ver_t.level,
-	       lib_ver_t.subLevel,
-	       app_ver_t.version, app_ver_t.release, app_ver_t.level,
-	       app_ver_t.subLevel);
+	       libapi_ver.version, libapi_ver.release, libapi_ver.level,
+	       libapi_ver.subLevel,
+	       appapi_ver.applicationVersion, appapi_ver.applicationRelease,
+	       appapi_ver.applicationLevel, appapi_ver.applicationSubLevel);
 
 	exit(DSM_RC_UNSUCCESSFUL);
 }
@@ -84,10 +86,7 @@ void sanity_arg_check(const char *cmd_name)
 		usage(cmd_name);
 	}
 
-	if (strlen(f_arg) == 0) {
-		printf("missing argument: -f, --fsname\n");
-		usage(cmd_name);
-	} else if (strlen(n_arg) == 0) {
+	if (strlen(n_arg) == 0) {
 		printf("missing argument: -n, --node\n");
 		usage(cmd_name);
 	} else if (strlen(p_arg) == 0) {
@@ -96,7 +95,7 @@ void sanity_arg_check(const char *cmd_name)
 	} else if (strlen(s_arg) == 0) {
 		printf("missing argument: -s, --servername\n");
 		usage(cmd_name);
-	} /* Username (arg_u) is not necessarily required. */
+	} /* Owner (arg_o) is not necessarily required. */
 }
 
 int main(int argc, char *argv[])
@@ -105,6 +104,7 @@ int main(int argc, char *argv[])
 
 	api_msg_set_level(API_MSG_NORMAL);
 	set_recursive(bFalse);
+	strncpy(f_arg, DEFAULT_FSPACE, strlen(DEFAULT_FSPACE));
 	while (1) {
 		static struct option long_options[] = {
 			{"archive",           no_argument, 0, 'a'},
@@ -112,10 +112,10 @@ int main(int argc, char *argv[])
 			{"query",             no_argument, 0, 'q'},
 			{"delete",            no_argument, 0, 'd'},
 			{"recursive",         no_argument, 0, 'i'},
-			{"fsname",      required_argument, 0, 'f'},
+			{"fsname",      optional_argument, 0, 'f'},
 			{"description", required_argument, 0, 'c'},
 			{"node",        required_argument, 0, 'n'},
-			{"username",    required_argument, 0, 'u'},
+			{"owner",       required_argument, 0, 'o'},
 			{"password",    required_argument, 0, 'p'},
 			{"servername",  required_argument, 0, 's'},
 			{"verbose",	required_argument, 0, 'v'},
@@ -124,7 +124,7 @@ int main(int argc, char *argv[])
 		/* getopt_long stores the option index here. */
 		int option_index = 0;
 
-		c = getopt_long (argc, argv, "arqdif:c:n:u:p:s:v::",
+		c = getopt_long (argc, argv, "arqdif:c:n:o:p:s:v::",
 				 long_options, &option_index);
 
 		/* Detect the end of the options. */
@@ -162,10 +162,10 @@ int main(int argc, char *argv[])
 				strlen(optarg) < DSM_MAX_NODE_LENGTH ?
 				strlen(optarg) : DSM_MAX_NODE_LENGTH);
 			break;
-		case 'u':	/* username */
-			strncpy(u_arg, optarg,
-				strlen(optarg) < MAX_USERNAME_LENGTH ?
-				strlen(optarg) : MAX_USERNAME_LENGTH);
+		case 'o':	/* owner */
+			strncpy(o_arg, optarg,
+				strlen(optarg) < MAX_OWNER_LENGTH ?
+				strlen(optarg) : MAX_OWNER_LENGTH);
 			break;
 		case 'p':	/* password */
 			strncpy(p_arg, optarg,
@@ -218,8 +218,10 @@ int main(int argc, char *argv[])
 	memset(&login, 0, sizeof(login));
 	strcpy(login.node, n_arg);
 	strcpy(login.password, p_arg);
-	strcpy(login.username, u_arg);
+	strcpy(login.owner, o_arg);
 	strcpy(login.platform, LOGIN_PLATFORM);
+	strcpy(login.fsname, f_arg);
+	strcpy(login.fstype, FSPACE_TYPE);
 	const unsigned short s_arg_len = 1 + strlen(s_arg) + strlen("-se=");
 	if (s_arg_len < MAX_OPTIONS_LENGTH)
 		snprintf(login.options, s_arg_len, "-se=%s", s_arg);

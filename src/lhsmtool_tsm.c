@@ -50,7 +50,7 @@ struct options {
 	int o_mnt_fd;
 	char o_servername[MAX_OPTIONS_LENGTH + 1];
 	char o_node[DSM_MAX_NODE_LENGTH + 1];
-	char o_username[MAX_USERNAME_LENGTH + 1];
+	char o_owner[MAX_OWNER_LENGTH + 1];
 	char o_password[MAX_PASSWORD_LENGTH + 1];
 };
 
@@ -58,7 +58,7 @@ struct options opt = {
 	.o_verbose = LLAPI_MSG_INFO,
 	.o_servername = {0},
 	.o_node = {0},
-	.o_username = {0},
+	.o_owner = {0},
 	.o_password = {0},
 };
 
@@ -79,9 +79,9 @@ static void usage(int rc)
 		"\t--dry-run\t\t\tDon't run, just show what would be done\n"
 		"\t-f, --event-fifo <path>\t\tWrite events stream to fifo\n"
 		"\t-n, --node <string>\t\tNode registered on TSM server\n"
-		"\t-p, --password <string>\t\tPassword of TSM node/username\n"
+		"\t-p, --password <string>\t\tPassword of TSM node/owner\n"
 		"\t-s, --servername <string>\tHostname of TSM server\n"
-		"\t-u, --username <string>\t\tUsername of TSM node\n"
+		"\t-u, --owner <string>\t\tOwner of TSM node\n"
 		"\t-v, --verbose\t\t\tProduce more verbose output\n",
 		cmd_name);
 	exit(rc);
@@ -102,7 +102,7 @@ static int ct_parseopts(int argc, char *argv[])
 		{"password",       no_argument, NULL,                'p'},
 		{"quiet",          no_argument, NULL,                'q'},
 		{"servername",     no_argument, NULL,                's'},
-		{"username",       no_argument, NULL,                'u'},
+		{"owner",          no_argument, NULL,                'o'},
 		{"verbose",        no_argument, NULL,                'v'},
 		{0, 0, 0, 0}
 	};
@@ -110,7 +110,7 @@ static int ct_parseopts(int argc, char *argv[])
 	int c, rc;
 	optind = 0;
 
-	while ((c = getopt_long(argc, argv, "A:f:hn:p:qs:u:v",
+	while ((c = getopt_long(argc, argv, "A:f:hn:p:qs:o:v",
 				long_opts, NULL)) != -1) {
 		switch (c) {
 		case 'A': {
@@ -155,10 +155,10 @@ static int ct_parseopts(int argc, char *argv[])
 				strlen(optarg) : MAX_OPTIONS_LENGTH);
 			break;
 		}
-		case 'u': {
-			strncpy(opt.o_username, optarg,
-				strlen(optarg) < MAX_USERNAME_LENGTH ?
-				strlen(optarg) : MAX_USERNAME_LENGTH);
+		case 'o': {
+			strncpy(opt.o_owner, optarg,
+				strlen(optarg) < MAX_OWNER_LENGTH ?
+				strlen(optarg) : MAX_OWNER_LENGTH);
 			break;
 		}
 		case 'v': {
@@ -662,7 +662,7 @@ static int ct_setup(void)
 	memset(&login, 0, sizeof(login));
 	strcpy(login.node, opt.o_node);
 	strcpy(login.password, opt.o_password);
-	strcpy(login.username, opt.o_username);
+	strcpy(login.owner, opt.o_owner);
 	strcpy(login.platform, "GNU/Linux");
 
 	rc = tsm_init(&login);

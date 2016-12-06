@@ -363,37 +363,31 @@ void tsm_print_query_node(const qryRespArchiveData *qry_resp_arv_data,
 
 dsInt16_t tsm_init(login_t *login)
 {
-	dsmInitExIn_t initIn;
-	dsmInitExOut_t initOut;
-	dsmApiVersionEx apiApplVer;
-	dsmApiVersion dsmApiVer;
+	dsmInitExIn_t init_in;
+	dsmInitExOut_t init_out;
+	dsmApiVersionEx libapi_ver;
+	dsmAppVersion appapi_ver;
 	dsInt16_t rc;
 
-	memset(&initIn, 0, sizeof(dsmInitExIn_t));
-	memset(&initOut, 0, sizeof(dsmInitExOut_t));
-	memset(&apiApplVer, 0, sizeof(dsmApiVersionEx));
-	memset(&dsmApiVer, 0, sizeof(dsmApiVersion));
+	memset(&init_in, 0, sizeof(dsmInitExIn_t));
+	memset(&init_out, 0, sizeof(dsmInitExOut_t));
 
-	dsmApiVer.version   = DSM_API_VERSION;
-	dsmApiVer.release   = DSM_API_RELEASE;
-	dsmApiVer.level     = DSM_API_LEVEL  ;
-	apiApplVer.version  = DSM_API_VERSION;
-	apiApplVer.release  = DSM_API_RELEASE;
-	apiApplVer.level    = DSM_API_LEVEL  ;
-	apiApplVer.subLevel = DSM_API_SUBLEVEL;
+	libapi_ver = get_libapi_ver();
+	appapi_ver = get_appapi_ver();
 
-	initIn.stVersion        = dsmInitExInVersion;
-	initIn.apiVersionExP    = &apiApplVer;
-	initIn.clientNodeNameP  = login->node;
-	initIn.clientOwnerNameP = login->username;
-	initIn.clientPasswordP  = login->password;
-	initIn.applicationTypeP = login->platform;
-	initIn.configfile       = NULL;
-	initIn.options          = login->options;
-	initIn.userNameP        = NULL; /* Administrative user. */
-	initIn.userPasswordP    = NULL; /* Administrative password. */
+	init_in.stVersion        = dsmInitExInVersion;
+	init_in.apiVersionExP    = &libapi_ver;
+	init_in.clientNodeNameP  = login->node;
+	init_in.clientOwnerNameP = login->owner;
+	init_in.clientPasswordP  = login->password;
+	init_in.applicationTypeP = login->platform;
+	init_in.configfile       = NULL;
+	init_in.options          = login->options;
+	init_in.userNameP        = NULL; /* Administrative user. */
+	init_in.userPasswordP    = NULL; /* Administrative password. */
+	init_in.appVersionP      = &appapi_ver;
 
-	rc = dsmInitEx(&handle, &initIn, &initOut);
+	rc = dsmInitEx(&handle, &init_in, &init_out);
 	TSM_TRACE(rc, "dsmInitEx");
 	if (rc) {
 		TSM_ERROR(rc, "dsmInitEx");
@@ -402,8 +396,8 @@ dsInt16_t tsm_init(login_t *login)
 
 	regFSData reg_fs_data;
 	memset(&reg_fs_data, 0, sizeof(reg_fs_data));
-	reg_fs_data.fsName = "/";
-	reg_fs_data.fsType = "/";
+	reg_fs_data.fsName = login->fsname;
+	reg_fs_data.fsType = login->fstype;
 	reg_fs_data.capacity.lo = 0;
 	reg_fs_data.capacity.hi = 0;
 	reg_fs_data.occupancy.lo = 0;
@@ -427,39 +421,40 @@ void tsm_quit()
 }
 
 /**
- * @brief Return application client version.
+ * @brief Return application client API version.
  *
  * Returns API version number of the application client which is entered
  * in the compiled object code as a set of four constants defined in dsmapitd.h.
  *
- * @return dsmApiVersionEx
+ * @return dsmAppVersion
  */
-dsmApiVersionEx get_app_ver()
+dsmAppVersion get_appapi_ver()
 {
-	dsmApiVersionEx app_ver;
-	memset(&app_ver, 0, sizeof(app_ver));
-	app_ver.version = DSM_API_VERSION;
-	app_ver.release = DSM_API_RELEASE;
-	app_ver.level = DSM_API_LEVEL;
-	app_ver.subLevel = DSM_API_SUBLEVEL;
+	dsmAppVersion appapi_ver;
+	memset(&appapi_ver, 0, sizeof(appapi_ver));
+	appapi_ver.stVersion = appVersionVer;
+	appapi_ver.applicationVersion = DSM_API_VERSION;
+	appapi_ver.applicationRelease = DSM_API_RELEASE;
+	appapi_ver.applicationLevel = DSM_API_LEVEL;
+	appapi_ver.applicationSubLevel = DSM_API_SUBLEVEL;
 
-	return app_ver;
+	return appapi_ver;
 }
 
 /**
  * @brief Return version of the API library.
  *
- * Returns the version of the API library that is installed and used.
+ * Returns version of the API library that is installed and used.
  *
  * @return dsmApiVersionEx
  */
-dsmApiVersionEx get_lib_ver()
+dsmApiVersionEx get_libapi_ver()
 {
-	dsmApiVersionEx lib_ver;
-	memset(&lib_ver, 0, sizeof(lib_ver));
-	dsmQueryApiVersionEx(&lib_ver);
+	dsmApiVersionEx libapi_ver;
+	memset(&libapi_ver, 0, sizeof(libapi_ver));
+	dsmQueryApiVersionEx(&libapi_ver);
 
-	return lib_ver;
+	return libapi_ver;
 }
 
 dsInt16_t tsm_query_session_info()
@@ -515,28 +510,28 @@ dsInt16_t tsm_query_session_info()
 		 dsmSessInfo.maxBytesPerTxn,
 		 dsmSessInfo.fsdelim, dsmSessInfo.hldelim);
 
-	dsmApiVersionEx lib_ver_t = get_lib_ver();
-	dsmApiVersionEx app_ver_t = get_app_ver();
-	dsUint32_t lib_ver = (lib_ver_t.version * 10000) +
-		(lib_ver_t.release * 1000) +
-		(lib_ver_t.level * 100) +
-		lib_ver_t.subLevel;
-	dsUint32_t app_ver = (app_ver_t.version * 10000) +
-		(app_ver_t.release * 1000) +
-		(app_ver_t.level * 100) +
-		app_ver_t.subLevel;
+	dsmApiVersionEx libapi_ver_t = get_libapi_ver();
+	dsmAppVersion appapi_ver_t = get_appapi_ver();
+	dsUint32_t libapi_ver = (libapi_ver_t.version * 10000) +
+		(libapi_ver_t.release * 1000) +
+		(libapi_ver_t.level * 100) +
+		libapi_ver_t.subLevel;
+	dsUint32_t appapi_ver = (appapi_ver_t.applicationVersion * 10000) +
+		(appapi_ver_t.applicationRelease * 1000) +
+		(appapi_ver_t.applicationLevel * 100) +
+		appapi_ver_t.applicationSubLevel;
 
-	if (lib_ver < app_ver) {
+	if (libapi_ver < appapi_ver) {
 		rc = DSM_RC_UNSUCCESSFUL;
 		TSM_ERROR(rc, "The TSM API library is lower than the application version\n"
 			  "Install the current library version.");
 	}
 
 	CT_TRACE("IBM API library version = %d.%d.%d.%d\n",
-		 lib_ver_t.version,
-		 lib_ver_t.release,
-		 lib_ver_t.level,
-		 lib_ver_t.subLevel);
+		 libapi_ver_t.version,
+		 libapi_ver_t.release,
+		 libapi_ver_t.level,
+		 libapi_ver_t.subLevel);
 
 	return rc;
 }

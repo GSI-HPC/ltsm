@@ -41,11 +41,12 @@
 #include "dapint64.h"
 #include "log.h"
 
+#define FSPACE_TYPE "ltsm"
 #define LOGIN_PLATFORM "GNU/Linux"
 
 #define TSM_BUF_LENGTH 65536
 #define MAX_PASSWORD_LENGTH 32
-#define MAX_USERNAME_LENGTH 32
+#define MAX_OWNER_LENGTH 32
 #define MAX_OPTIONS_LENGTH 256
 #define MAX_OFF_T_DS64 20
 
@@ -54,9 +55,11 @@
 typedef struct {
 	char node[DSM_MAX_ID_LENGTH + 1];
 	char password[MAX_PASSWORD_LENGTH + 1];
-	char username[MAX_USERNAME_LENGTH + 1];
+	char owner[MAX_OWNER_LENGTH + 1];
 	char platform[DSM_MAX_PLATFORM_LENGTH + 1];
 	char options[MAX_OPTIONS_LENGTH + 1];
+	char fsname[DSM_MAX_FSNAME_LENGTH + 1];
+	char fstype[DSM_MAX_FSTYPE_LENGTH + 1];
 } login_t;
 
 typedef struct {
@@ -95,8 +98,8 @@ void set_recursive(dsBool_t recursive);
 dsInt16_t tsm_init(login_t *login);
 void tsm_quit();
 
-dsmApiVersionEx get_app_ver();
-dsmApiVersionEx get_lib_ver();
+dsmAppVersion get_appapi_ver();
+dsmApiVersionEx get_libapi_ver();
 
 dsInt16_t tsm_query_session_info();
 dsInt16_t tsm_archive_fpath(const char *fs, const char *fpath,
