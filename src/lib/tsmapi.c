@@ -138,6 +138,44 @@ static dsBool_t is_fd_set()
 	return fd < 0 ? bFalse : bTrue;
 }
 
+/**
+ * @brief Fallback for determining d_type with lstat().
+ *
+ * Some file systems such as xfs return DT_UNKNOWN in dirent when calling
+ * opendir(). Fallback with lstat() and set fields in dirent according to stat
+ * information. Note: The TSM API can handle only regular files and directories.
+ * For supporting all d_types types, define HANDLE_ALL_D_TYPES.
+ *
+ * @param entry Structure representing the next directory entry in the directory
+ *              stream.
+ * @return DSM_RC_SUCCESSFUL on success otherwise DSM_RC_UNSUCCESSFUL.
+ */
+static dsInt16_t fallback_dt_unknown(struct dirent *entry, const char *fpath)
+{
+	dsInt16_t rc;
+	struct stat st_buf;
+
+	rc = lstat(fpath, &st_buf);
+	if (rc) {
+		CT_ERROR(errno, "lstat");
+		rc = DSM_RC_UNSUCCESSFUL;
+	} else {
+		switch (st_buf.st_mode & S_IFMT) {
+		case S_IFREG : entry->d_type = DT_REG ; break;
+		case S_IFDIR : entry->d_type = DT_DIR ; break;
+#ifdef HANDLE_ALL_D_TYPES
+		case S_IFLNK : entry->d_type = DT_LNK ; break;
+		case S_IFCHR : entry->d_type = DT_CHR ; break;
+		case S_IFBLK : entry->d_type = DT_BLK ; break;
+		case S_IFIFO : entry->d_type = DT_FIFO; break;
+		case S_IFSOCK: entry->d_type = DT_SOCK; break;
+#endif
+		}
+		rc = DSM_RC_SUCCESSFUL;
+	}
+	return rc;
+}
+
 static void date_to_str(char *str, const dsmDate *date)
 {
 	sprintf(str, "%i/%i/%i %i:%i:%i",
@@ -1288,6 +1326,23 @@ static dsInt16_t tsm_archive_recursive(archive_info_t *archive_info)
 				 dpath, entry->d_name);
 			continue;
                 }
+
+		/* Currently, only some filesystems (among them: Btrfs, ext2,
+		   ext3, and ext4) have full support for returning the file type
+		   in d_type. Other file systems such as xfs return DT_UNKNOWN.
+		   When d_type is DT_UNKNOWN determine d_type with lstat()
+		   inside fallback_dt_unknown(). */
+		if (entry->d_type == DT_UNKNOWN) {
+			rc = fallback_dt_unknown(entry, path);
+			/* If fallback fails we skip this entry, flag an error
+			   and try to archive the next entry. Note: For being
+			   more conservative we can also break() here. */
+			if (rc != DSM_RC_SUCCESSFUL) {
+				CT_ERROR(rc, "fallback_dt_unkown failed: '%s'", path);
+				continue;
+			}
+		}
+
 		switch (entry->d_type) {
 		case DT_REG: {
 			rc = tsm_archive_prepare(archive_info->obj_name.fs,
