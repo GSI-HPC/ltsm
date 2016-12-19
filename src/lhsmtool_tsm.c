@@ -50,8 +50,8 @@ struct options {
 	int o_mnt_fd;
 	char o_servername[MAX_OPTIONS_LENGTH + 1];
 	char o_node[DSM_MAX_NODE_LENGTH + 1];
-	char o_owner[MAX_OWNER_LENGTH + 1];
-	char o_password[MAX_PASSWORD_LENGTH + 1];
+	char o_owner[DSM_MAX_OWNER_LENGTH + 1];
+	char o_password[DSM_MAX_VERIFIER_LENGTH + 1];
 };
 
 struct options opt = {
@@ -141,8 +141,8 @@ static int ct_parseopts(int argc, char *argv[])
 		}
 		case 'p': {
 			strncpy(opt.o_password, optarg,
-				strlen(optarg) < MAX_PASSWORD_LENGTH ?
-				strlen(optarg) : MAX_PASSWORD_LENGTH);
+				strlen(optarg) < DSM_MAX_VERIFIER_LENGTH ?
+				strlen(optarg) : DSM_MAX_VERIFIER_LENGTH);
 			break;
 		}
 		case 'q': {
@@ -157,8 +157,8 @@ static int ct_parseopts(int argc, char *argv[])
 		}
 		case 'o': {
 			strncpy(opt.o_owner, optarg,
-				strlen(optarg) < MAX_OWNER_LENGTH ?
-				strlen(optarg) : MAX_OWNER_LENGTH);
+				strlen(optarg) < DSM_MAX_OWNER_LENGTH ?
+				strlen(optarg) : DSM_MAX_OWNER_LENGTH);
 			break;
 		}
 		case 'v': {

@@ -37,8 +37,8 @@ static dsBool_t d_arg = bFalse;
 static char f_arg[DSM_MAX_FSNAME_LENGTH + 1] = {0};
 static char c_arg[DSM_MAX_DESCR_LENGTH + 1] = {0};
 static char n_arg[DSM_MAX_NODE_LENGTH + 1] = {0};
-static char o_arg[MAX_OWNER_LENGTH + 1] = {0};
-static char p_arg[MAX_PASSWORD_LENGTH + 1] = {0};
+static char o_arg[DSM_MAX_OWNER_LENGTH + 1] = {0};
+static char p_arg[DSM_MAX_VERIFIER_LENGTH + 1] = {0};
 static char s_arg[MAX_OPTIONS_LENGTH + 1] = {0};
 static char **files_dirs_arg = NULL;
 
@@ -164,13 +164,13 @@ int main(int argc, char *argv[])
 			break;
 		case 'o':	/* owner */
 			strncpy(o_arg, optarg,
-				strlen(optarg) < MAX_OWNER_LENGTH ?
-				strlen(optarg) : MAX_OWNER_LENGTH);
+				strlen(optarg) < DSM_MAX_OWNER_LENGTH ?
+				strlen(optarg) : DSM_MAX_OWNER_LENGTH);
 			break;
 		case 'p':	/* password */
 			strncpy(p_arg, optarg,
-				strlen(optarg) < MAX_PASSWORD_LENGTH ?
-				strlen(optarg) : MAX_PASSWORD_LENGTH);
+				strlen(optarg) < DSM_MAX_VERIFIER_LENGTH ?
+				strlen(optarg) : DSM_MAX_VERIFIER_LENGTH);
 			break;
 		case 's':	/* servername */
 			strncpy(s_arg, optarg,
