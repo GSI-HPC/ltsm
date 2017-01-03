@@ -41,12 +41,14 @@
 #include "dapint64.h"
 #include "log.h"
 
-#define FSPACE_TYPE "ltsm"
+#ifndef FSNAME
+#define FSNAME "/"
+#endif
+#define FSTYPE "ltsm"
 #define LOGIN_PLATFORM "GNU/Linux"
 
 #define TSM_BUF_LENGTH 65536
 #define MAX_OPTIONS_LENGTH 256
-#define MAX_OFF_T_DS64 20
 
 #define MAGIC_ID_V1 71147
 

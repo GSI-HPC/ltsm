@@ -27,8 +27,6 @@
 #define PACKAGE_VERSION "NA"
 #endif
 
-#define DEFAULT_FSPACE "/"
-
 /* Arguments */
 static dsBool_t a_arg = bFalse;
 static dsBool_t r_arg = bFalse;
@@ -39,7 +37,7 @@ static char c_arg[DSM_MAX_DESCR_LENGTH + 1] = {0};
 static char n_arg[DSM_MAX_NODE_LENGTH + 1] = {0};
 static char o_arg[DSM_MAX_OWNER_LENGTH + 1] = {0};
 static char p_arg[DSM_MAX_VERIFIER_LENGTH + 1] = {0};
-static char s_arg[MAX_OPTIONS_LENGTH + 1] = {0};
+static char s_arg[DSM_MAX_SERVERNAME_LENGTH + 1] = {0};
 static char **files_dirs_arg = NULL;
 
 void usage(const char *cmd_name)
@@ -104,7 +102,7 @@ int main(int argc, char *argv[])
 
 	api_msg_set_level(API_MSG_NORMAL);
 	set_recursive(bFalse);
-	strncpy(f_arg, DEFAULT_FSPACE, strlen(DEFAULT_FSPACE));
+	strncpy(f_arg, FSNAME, strlen(FSNAME));
 	while (1) {
 		static struct option long_options[] = {
 			{"archive",           no_argument, 0, 'a'},
@@ -174,8 +172,8 @@ int main(int argc, char *argv[])
 			break;
 		case 's':	/* servername */
 			strncpy(s_arg, optarg,
-				strlen(optarg) < MAX_OPTIONS_LENGTH ?
-				strlen(optarg) : MAX_OPTIONS_LENGTH);
+				strlen(optarg) < DSM_MAX_SERVERNAME_LENGTH ?
+				strlen(optarg) : DSM_MAX_SERVERNAME_LENGTH);
 			break;
 		case 'v': {	/* verbosity */
 			if (!optarg)
@@ -221,7 +219,7 @@ int main(int argc, char *argv[])
 	strcpy(login.owner, o_arg);
 	strcpy(login.platform, LOGIN_PLATFORM);
 	strcpy(login.fsname, f_arg);
-	strcpy(login.fstype, FSPACE_TYPE);
+	strcpy(login.fstype, FSTYPE);
 	const unsigned short s_arg_len = 1 + strlen(s_arg) + strlen("-se=");
 	if (s_arg_len < MAX_OPTIONS_LENGTH)
 		snprintf(login.options, s_arg_len, "-se=%s", s_arg);

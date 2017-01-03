@@ -36,8 +36,6 @@
 #include <lustre/lustreapi.h>
 #include "tsmapi.h"
 
-#define FS_SPACE "/"
-
 struct options {
 	int o_daemonize;
 	int o_dry_run;
@@ -48,7 +46,7 @@ struct options {
 	char *o_mnt;
 	char *o_event_fifo;
 	int o_mnt_fd;
-	char o_servername[MAX_OPTIONS_LENGTH + 1];
+	char o_servername[DSM_MAX_SERVERNAME_LENGTH + 1];
 	char o_node[DSM_MAX_NODE_LENGTH + 1];
 	char o_owner[DSM_MAX_OWNER_LENGTH + 1];
 	char o_password[DSM_MAX_VERIFIER_LENGTH + 1];
@@ -151,8 +149,8 @@ static int ct_parseopts(int argc, char *argv[])
 		}
 		case 's': {
 			strncpy(opt.o_servername, optarg,
-				strlen(optarg) < MAX_OPTIONS_LENGTH ?
-				strlen(optarg) : MAX_OPTIONS_LENGTH);
+				strlen(optarg) < DSM_MAX_SERVERNAME_LENGTH ?
+				strlen(optarg) : DSM_MAX_SERVERNAME_LENGTH);
 			break;
 		}
 		case 'o': {
@@ -280,7 +278,7 @@ static int ct_archive(const struct hsm_action_item *hai, const long hal_flags)
 		goto cleanup;
 	}
 
-	rc = tsm_archive_fpath_fid(FS_SPACE, fpath, NULL,
+	rc = tsm_archive_fpath_fid(FSNAME, fpath, NULL,
 				   (const void *)&hai->hai_fid);
 	if (rc != DSM_RC_SUCCESSFUL) {
 		CT_ERROR(rc, "tsm_archive_fid on '%s' failed", fpath);
@@ -351,7 +349,7 @@ static int ct_restore(const struct hsm_action_item *hai, const long hal_flags)
 		goto cleanup;
 	}
 
-	rc = tsm_retrieve_fpath_fd(FS_SPACE, fpath, NULL, dst_fd);
+	rc = tsm_retrieve_fpath_fd(FSNAME, fpath, NULL, dst_fd);
 	if (rc != DSM_RC_SUCCESSFUL) {
 		CT_ERROR(rc, "tsm_retrieve_fpath_fd on '%s' failed", fpath);
 		goto cleanup;
@@ -392,7 +390,7 @@ static int ct_remove(const struct hsm_action_item *hai, const long hal_flags)
 		rc = 0;
 		goto cleanup;
 	}
-	rc = tsm_delete_fpath(FS_SPACE, fpath);
+	rc = tsm_delete_fpath(FSNAME, fpath);
 	if (rc != DSM_RC_SUCCESSFUL) {
 		CT_ERROR(rc, "tsm_delete_fpath on '%s' failed", fpath);
 		goto cleanup;
@@ -663,7 +661,16 @@ static int ct_setup(void)
 	strcpy(login.node, opt.o_node);
 	strcpy(login.password, opt.o_password);
 	strcpy(login.owner, opt.o_owner);
-	strcpy(login.platform, "GNU/Linux");
+	strcpy(login.platform, LOGIN_PLATFORM);
+	strcpy(login.fsname, FSNAME);
+	strcpy(login.fstype, FSTYPE);
+	const unsigned short o_servername_len = 1 + strlen(opt.o_servername) + strlen("-se=");
+	if (o_servername_len < MAX_OPTIONS_LENGTH)
+		snprintf(login.options, o_servername_len, "-se=%s", opt.o_servername);
+	else
+		CT_WARN("Option parameter \'-se=%s\' is larger than "
+			"MAX_OPTIONS_LENGTH: %d and is ignored\n",
+			opt.o_servername, MAX_OPTIONS_LENGTH);
 
 	rc = tsm_init(&login);
 	if (rc)
