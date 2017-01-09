@@ -663,7 +663,10 @@ dsInt16_t tsm_query_hl_ll(const char *fs, const char *hl, const char *ll, const 
 					goto cleanup;
 				}
 			}
-		} else {
+		} else if (rc == DSM_RC_UNKNOWN_FORMAT) {
+			/* head over to next object if format error occurs when trying to access non api archived files */
+                        CT_WARN("DSM_OBJECT not archived by API. Skipping Object!");
+                } else {
 			done = bTrue;
 			if (rc == DSM_RC_ABORT_NO_MATCH)
 				CT_MESSAGE("query has no match");
