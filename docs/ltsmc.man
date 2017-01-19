@@ -1,0 +1,113 @@
+.\" Copyright (c) 2017, Jörg Behrendt
+.\"
+.\" %%%LICENSE_START(GPLv2+_DOC_FULL)
+.\" This is free documentation; you can redistribute it and/or
+.\" modify it under the terms of the GNU General Public License as
+.\" published by the Free Software Foundation; either version 2 of
+.\" the License, or (at your option) any later version.
+.\"
+.\" The GNU General Public License's references to "object code"
+.\" and "executables" are to be interpreted as the output of any
+.\" document formatting or typesetting system, including
+.\" intermediate and printed output.
+.\"
+.\" This manual is distributed in the hope that it will be useful,
+.\" but WITHOUT ANY WARRANTY; without even the implied warranty of
+.\" MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+.\" GNU General Public License for more details.
+.\"
+.\" You should have received a copy of the GNU General Public
+.\" License along with this manual; if not, see
+.\" <http://www.gnu.org/licenses/>.
+.\" %%%LICENSE_END
+
+.TH "tsmc" "1" "20.December 2016" "Thomas Stibor <t.stibor@gsi.de>" "version 0.1.5"
+
+.SH NAME
+ltsmc demonstrates the use of the high-level TSM API (tsmapi) which is used by the Lustre TSM Copytool (lhsmtool_tsm) to archive, retrieve, delete and query data on a tsm server. The console client can be used to retrieve data which was archived with the Lustre Copytool. This is especially useful when a Lustre storage deployment is decommissioned and the archived data still needs to be retrieved afterwards.
+
+.SH SYNOPSIS
+tsmc MODE OPTION... PATH 
+
+.SH DESCRIPTION
+.SS
+.BR MODES: 
+.TP
+.BR \-a ", " \-\-archive
+Archives the data at the given path to tsm storage.
+.TP
+.BR \-q ", " \-\-query
+Queries the tsm server for files matching the path and prints the result.
+.TP
+.BR \-r ", " \-\-retrieve
+Queries the tsm server for files matching the path and then retrieves every file to save it locally.
+.TP
+.BR \-d ", " \-\-delete
+Queries the tsm server for files matching the path and then deletes every file from server.
+.SS
+.BR OPTIONS:       
+Mandatory arguments to long options are mandatory for short options too except for verbose option.
+.PP
+REQUIRED
+.TP
+.BR \-n ", " \-\-node =\fINAME\fR
+The name of the TSM node used during the authentification.
+.TP
+.BR \-p ", " \-\-password =\fIPASSWORD\fR
+The password for the TSM node used during the authentification.
+.TP
+.BR \-s ", " \-\-servername =\fINAME\fR
+The TSM servername to connect to. Name will be resolved to an actual ip adress within the dsm.sys file of your tsm-api-client installation.
+.PP
+OPTIONAL
+.TP
+.BR \-i ", " \-\-recursive
+Archive directory recursively by also processing each subdirectory.
+.TP
+.BR \-f ", " \-\-fsname =\fIPATH\fR
+TSM Filesystem path to archive to or query from. Defaults to '/'.
+.TP
+.BR \-c ", " \-\-description =\fISTRING\fR
+If in archive mode the description will be stored in association with the file objects onto the tsm server. By default an empty string is used.
+Otherwise the description will be used to select only the query results matching the description before continuing with the actual action and can contain the wildcards '*' or '?'. By default any description will be selected.
+.TP
+.BR \-o ", " \-\-owner =\fINAME\fR
+If in archive mode the owner's name  will be stored with the file objects onto the tsm server. By default an empty string is used.
+Otherwise the name will be used to filter the queries by owner and the wildcards '*' or '?' are allowed. By default all owners will be selected.
+.TP
+.BR \-v " " \-vv " " \-vvv ", " \-\-verbose =v|vv|vvv
+Causes ltsmc to print debugging messages about its progress. Multiple -v options increase the verbosity level. The maximum is 3. 
+.SS
+.BR PATH:
+.PP
+If not in archive mode a TSM-objectname is expected. The argument is splitted into the low-level (ll) name which reflects the actual file name and a high-level (hl) name which reflects the path. 
+This split will occur at the last occurency of the path seperator '/' in the string. In addition wildcard characters '*' and '?' can be used to match multiple file objects.	
+e.g.: 
+.TP
+PATH='*'
+hl='/' and ll='*' \- matches any file in path '/' 
+.TP
+PATH='*/*'
+hl='*' and ll='/*' \- matches any file in any path
+.TP
+PATH='/home/user/files/test.txt'
+hl='/home/user/files' and ll='/test.txt' \- matches single file
+.TP
+PATH='/home/user/*.txt'
+hl="/home/user" and ll='/*.txt' \- matches any file ending with '.txt' in path '/home/user'
+.TP
+PATH='/home/*/files/??.txt'
+hl='/home/*/files' and ll="/??.txt' \- matches all files with two characters and ending with '.txt' in all paths matching '/home/*/files'. 
+.PP
+When in archive mode a path to an existing file or directory is required which should be stored onto the tsm server. If path points to an directory all files in it will be archived. See additional options to store directories recursivly .
+The TSM-objectname of the stored files will use the filename for the low-level name and the full path to the parent directory as high-level name.	
+
+.SH FILES
+tsm-api-client 'dsm.sys' file containts the information to look up the ip address of your tsm-server. By default it is located at '/opt/tivoli/tsm/client/api/bin64/dsm.sys'.
+It should containt at least one set of options consisting of SERVERNAME, NODENAME and TCPSERVERADDRESS.
+
+.SH BUGS
+Please report bugs to <http://github.com/tstibor/ltsm/issues>
+
+.SH SEE ALSO
+Github project at <http://github.com/tstibor/ltsm>
