@@ -278,10 +278,10 @@ static int ct_archive(const struct hsm_action_item *hai, const long hal_flags)
 		goto cleanup;
 	}
 
-	rc = tsm_archive_fpath_fid(FSNAME, fpath, NULL,
-				   (const void *)&hai->hai_fid);
+	rc = tsm_archive_fpath(FSNAME, fpath, NULL, -1,
+			       (const void *)&hai->hai_fid);
 	if (rc != DSM_RC_SUCCESSFUL) {
-		CT_ERROR(rc, "tsm_archive_fid on '%s' failed", fpath);
+		CT_ERROR(rc, "tsm_archive_fpath_fid on '%s' failed", fpath);
 		goto cleanup;
 	}
 
@@ -349,9 +349,9 @@ static int ct_restore(const struct hsm_action_item *hai, const long hal_flags)
 		goto cleanup;
 	}
 
-	rc = tsm_retrieve_fpath_fd(FSNAME, fpath, NULL, dst_fd);
+	rc = tsm_retrieve_fpath(FSNAME, fpath, NULL, dst_fd);
 	if (rc != DSM_RC_SUCCESSFUL) {
-		CT_ERROR(rc, "tsm_retrieve_fpath_fd on '%s' failed", fpath);
+		CT_ERROR(rc, "tsm_retrieve_fpath on '%s' failed", fpath);
 		goto cleanup;
 	}
 

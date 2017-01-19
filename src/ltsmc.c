@@ -50,7 +50,7 @@ void usage(const char *cmd_name)
 	       "\t-r, --retrieve\n"
 	       "\t-q, --query\n"
 	       "\t-d, --delete\n"
-	       "\t-i, --recursive (archive recursively directory)\n"
+	       "\t-i, --recursive [archive]\n"
 	       "\t-f, --fsname <STRING> [default '/']\n"
 	       "\t-c, --description <STRING>\n"
 	       "\t-n, --node <STRING>\n"
@@ -246,13 +246,13 @@ int main(int argc, char *argv[])
 					     c_arg, bTrue);
 		else if (r_arg)	/* Retrieve. */
 			rc = tsm_retrieve_fpath(f_arg, files_dirs_arg[i],
-						c_arg);
+						c_arg, -1);
 		else if (d_arg)	/* Delete. */
 			rc = tsm_delete_fpath(f_arg, files_dirs_arg[i]);
 		else if (a_arg) {	/* Archive. */
 			rc = tsm_archive_fpath(f_arg,
 					       files_dirs_arg[i],
-					       c_arg);
+					       c_arg, -1, NULL);
 		}
 		if (rc)
 			goto clean_up;
