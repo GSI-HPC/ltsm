@@ -49,8 +49,6 @@ static dsUint32_t handle;
 static char rcmsg[DSM_MAX_RC_MSG_LENGTH + 1] = {0};
 static dsUint16_t max_obj_per_txn;
 static dsUint32_t max_bytes_per_txn;
-static int fd = -1;
-static dsBool_t fd_set_outside = bFalse;
 
 #define TSM_GET_MSG(rc)					\
 do {							\
@@ -113,29 +111,6 @@ dsStruct64_t to_dsStruct64_t(const off64_t size)
 	res.hi = (dsUint32_t)((off64_t)size >> 32);
 
 	return res;
-}
-
-static void tsm_set_retrieve_fd(int l_fd)
-{
-	fd = l_fd;
-}
-
-static void tsm_close_retrieve_fd()
-{
-	dsInt16_t rc;
-
-	if (!(fd < 0)) {
-		rc = close(fd);
-		if (rc != 0)
-			CT_ERROR(errno, "closing file descriptor: %d failed",
-				 fd);
-		fd = -1;
-	}
-}
-
-static dsBool_t is_fd_set()
-{
-	return fd < 0 ? bFalse : bTrue;
 }
 
 /**
@@ -247,18 +222,6 @@ static dsInt16_t extract_fpath(const qryRespArchiveData *query_data, char *fpath
 	return DSM_RC_SUCCESSFUL;
 }
 
-static dsInt16_t open_fd(const char *fpath, int *fd, const int flags,
-			 const mode_t st_mode)
-{
-	*fd = open(fpath, flags, st_mode);
-	if (*fd < 0) {
-		CT_ERROR(errno, "open '%s'", fpath);
-		return DSM_RC_UNSUCCESSFUL;
-	} else
-		return DSM_RC_SUCCESSFUL;
-}
-
-
 /**
  * @brief Retrieve and write object data into file descriptor.
  *
@@ -271,7 +234,7 @@ static dsInt16_t open_fd(const char *fpath, int *fd, const int flags,
  * @return DSM_RC_SUCCESSFUL on success otherwise DSM_RC_UNSUCCESSFUL.
  */
 static dsInt16_t retrieve_obj(qryRespArchiveData *query_data,
-			      const obj_info_t *obj_info)
+			      const obj_info_t *obj_info, int fd)
 {
 	char *buf = NULL;
 	DataBlk dataBlk;
@@ -280,13 +243,9 @@ static dsInt16_t retrieve_obj(qryRespArchiveData *query_data,
 	ssize_t obj_size_written = 0;
 	dsInt16_t rc;
 	dsInt16_t rc_minor = 0;
+	dsBool_t is_local_fd = bFalse;
 
-	/* If file descriptor fd is not valid, thus not set from outside
-	   by tsm_retrieve_fpath_fd->tsm_set_retrieve_fd, then
-	   open a fd based of fs/hl/ll provided in query_data, and close fd
-	   at the end of this function.
-	 */
-	if (!is_fd_set() && !fd_set_outside) {
+	if (fd < 0) {
 		/* If a regular file was archived, e.g. /dir1/dir2/data.txt,
 		   then on the TSM storage only the object
 		   hl: /dir1/dir2, ll: /data.txt is stored. In contrast to
@@ -300,19 +259,20 @@ static dsInt16_t retrieve_obj(qryRespArchiveData *query_data,
 		CT_INFO("mkdir_p(%s)", query_data->objName.hl);
 		if (rc) {
 			CT_ERROR(rc, "mkdir_p");
-			return rc;
+			return DSM_RC_UNSUCCESSFUL;
 		}
 
 		char fpath[PATH_MAX + 1] = {0};
 		rc = extract_fpath(query_data, &fpath[0]);
 		if (rc != DSM_RC_SUCCESSFUL)
-			return rc;
+			return  DSM_RC_UNSUCCESSFUL;
 
-		rc = open_fd(fpath, &fd, O_WRONLY | O_CREAT, obj_info->st_mode);
-		if (rc != DSM_RC_SUCCESSFUL) {
-			tsm_close_retrieve_fd(); /* TODO: We altering the fd. */
-			return rc;
+		fd = open(fpath, O_WRONLY | O_CREAT, obj_info->st_mode);
+		if (fd < 0) {
+			CT_ERROR(errno, "open '%s'", fpath);
+			return DSM_RC_UNSUCCESSFUL;
 		}
+		is_local_fd = bTrue;
 	}
 
 	buf = malloc(sizeof(char) * TSM_BUF_LENGTH);
@@ -366,8 +326,14 @@ cleanup:
 	if (buf)
 		free(buf);
 
-	if (is_fd_set() && !fd_set_outside)
-		tsm_close_retrieve_fd();
+	if (is_local_fd && !(fd < 0)) {
+		rc = close(fd);
+		if (rc < 0) {
+			CT_ERROR(errno, "close failed: %d", rc, fd);
+			rc = DSM_RC_UNSUCCESSFUL;
+		}
+
+	}
 
 	return (rc_minor ? DSM_RC_UNSUCCESSFUL : rc);
 }
@@ -868,7 +834,8 @@ dsInt16_t tsm_query_fpath(const char *fs, const char *fpath, const char *desc,
 }
 
 static dsInt16_t tsm_retrieve_generic(const char *fs, const char *hl,
-				      const char *ll, const char *desc)
+				      const char *ll, int fd,
+				      const char *desc)
 {
 	dsInt16_t rc;
 	dsInt16_t rc_minor = 0;
@@ -972,7 +939,7 @@ static dsInt16_t tsm_retrieve_generic(const char *fs, const char *hl,
 
 			switch (query_data.objName.objType) {
 			case DSM_OBJ_FILE: {
-				rc_minor = retrieve_obj(&query_data, &obj_info);
+				rc_minor = retrieve_obj(&query_data, &obj_info, fd);
 				CT_INFO("retrieve_obj, rc: %d\n", rc_minor);
 				if (rc_minor != DSM_RC_SUCCESSFUL) {
 					CT_ERROR(0, "retrieve_obj");
@@ -1028,7 +995,8 @@ cleanup:
 	return (rc_minor == 0 ? rc : rc_minor);
 }
 
-dsInt16_t tsm_retrieve_fpath(const char *fs, const char *fpath, const char *desc)
+dsInt16_t tsm_retrieve_fpath(const char *fs, const char *fpath,
+			     const char *desc, int fd)
 {
 	dsInt16_t rc;
 	char hl[DSM_MAX_HL_LENGTH + 1] = {0};
@@ -1039,24 +1007,12 @@ dsInt16_t tsm_retrieve_fpath(const char *fs, const char *fpath, const char *desc
 		CT_ERROR(rc, "extract_hl_ll");
 		return rc;
 	}
-	rc = tsm_retrieve_generic(fs, hl, ll, desc);
+	rc = tsm_retrieve_generic(fs, hl, ll, fd, desc);
 
 	return rc;
 }
 
-dsInt16_t tsm_retrieve_fpath_fd(const char *fs, const char *fpath,
-				const char *desc, int l_fd)
-{
-	dsInt16_t rc;
-	fd_set_outside = bTrue;
-	tsm_set_retrieve_fd(l_fd);
-	rc = tsm_retrieve_fpath(fs, fpath, desc);
-	fd_set_outside = bFalse;
-
-	return rc;
-}
-
-static dsInt16_t tsm_archive_generic(archive_info_t *archive_info)
+static dsInt16_t tsm_archive_generic(archive_info_t *archive_info, int fd)
 {
 	dsInt16_t rc;
 	dsInt16_t rc_minor = 0;
@@ -1070,21 +1026,19 @@ static dsInt16_t tsm_archive_generic(archive_info_t *archive_info)
 	ssize_t obj_size_read = 0;
 	dsBool_t done = bFalse;
 	dsUint8_t vote_txn;
+	dsBool_t is_local_fd = bFalse;
 
 	data_blk.bufferPtr = NULL;
 	obj_attr.objInfo = NULL;
 
-	if (!is_fd_set() && !fd_set_outside) {
-		/* TODO: We open here also a directory? */
-		rc = open_fd(archive_info->fpath, &fd, O_RDONLY,
-			     archive_info->obj_info.st_mode);
-		CT_INFO("rc: %d, open_fd(%s), fd: %d", rc, archive_info->fpath,
-			fd);
-		if (rc != DSM_RC_SUCCESSFUL) {
-			CT_ERROR(rc, "open_fd '%s'", archive_info->fpath);
-			tsm_close_retrieve_fd();
-			return rc;
+	if (fd < 0) {
+		fd = open(archive_info->fpath, O_RDONLY,
+			  archive_info->obj_info.st_mode);
+		if (fd < 0) {
+			CT_ERROR(errno, "open '%s'", archive_info->fpath);
+			return DSM_RC_UNSUCCESSFUL;
 		}
+		is_local_fd = bTrue;
 	}
 
 	/* Start transaction. */
@@ -1201,8 +1155,14 @@ cleanup:
 	if (data_blk.bufferPtr)
 		free(data_blk.bufferPtr);
 
-	if (is_fd_set() && !fd_set_outside)
-		tsm_close_retrieve_fd();
+	if (is_local_fd && !(fd < 0)) {
+		rc = close(fd);
+		if (rc < 0) {
+			CT_ERROR(errno, "close failed: %d", fd);
+			rc = DSM_RC_UNSUCCESSFUL;
+		}
+
+	}
 
 	return (rc_minor ? DSM_RC_UNSUCCESSFUL : rc);
 }
@@ -1361,7 +1321,7 @@ static dsInt16_t tsm_archive_recursive(archive_info_t *archive_info)
 					archive_info->obj_name.ll);
 				break;
 			}
-			rc = tsm_archive_generic(archive_info);
+			rc = tsm_archive_generic(archive_info, -1);
 			if (rc)
 				CT_WARN("tsm_archive_generic failed: %s", archive_info->fpath);
 			break;
@@ -1383,7 +1343,7 @@ static dsInt16_t tsm_archive_recursive(archive_info_t *archive_info)
 					archive_info->obj_name.ll);
 				break;
 			}
-			rc = tsm_archive_generic(archive_info);
+			rc = tsm_archive_generic(archive_info, -1);
 			if (rc) {
 				CT_WARN("tsm_archive_generic failed: %s", archive_info->fpath);
 				break;
@@ -1418,21 +1378,27 @@ static dsInt16_t tsm_archive_recursive(archive_info_t *archive_info)
  *                  archive_info->dsmObjectName.ll.
  * @param[in] desc  Description of fpath and set in
  *                  archive_info->dsmObjectName.desc.
+ * @param[in] fd    File descriptor.
+ * @param[in] lu_fid Lustre FID information is set in
+ *                   archive_info->obj_info.lu_fid.
  * @return DSM_RC_SUCCESSFUL on success otherwise DSM_RC_UNSUCCESSFUL.
  */
-dsInt16_t tsm_archive_fpath(const char *fs, const char *fpath, const char *desc)
+dsInt16_t tsm_archive_fpath(const char *fs, const char *fpath,
+			    const char *desc, int fd, const lu_fid_t *lu_fid)
 {
 	int rc;
 	archive_info_t archive_info;
 
 	CT_INFO("tsm_archive_fpath:\n"
-		"fs: %s, fpath: %s, desc: %s",
-		fs, fpath, desc);
+		"fs: %s, fpath: %s, desc: %s, fd: %d, *lu_fid: %p",
+		fs, fpath, desc, fd, lu_fid);
 
 	memset(&archive_info, 0, sizeof(archive_info_t));
+	if (lu_fid)
+		memcpy(&(archive_info.obj_info.lu_fid), lu_fid, sizeof(lu_fid_t));
 	rc = tsm_archive_prepare(fs, fpath, desc, &archive_info);
 	if (rc) {
-		CT_WARN("tsm_archive_fpath failed: \n"
+		CT_WARN("tsm_archive_prepare failed: \n"
 			"fs: %s, fpath: %s, desc: %s\n",
 			fs, fpath, desc);
 		return rc;
@@ -1443,66 +1409,7 @@ dsInt16_t tsm_archive_fpath(const char *fs, const char *fpath, const char *desc)
 	if (archive_info.obj_name.objType == DSM_OBJ_DIRECTORY)
 		return tsm_archive_recursive(&archive_info); /* Archive (recursively) inside D. */
 	else
-		return tsm_archive_generic(&archive_info); /* Archive regular file. */
-
-	return rc;
-}
-
-/**
- * @brief Archive file or directory and additional Lustre fid information.
- *
- *  Archive file or directory, specified by fs, fpath and additional description
- *  information and Lustre lu_fid data. Note: This function is basically reserved
- *  for the Lustre HSM archive call.
- *
- *  @param[in] fs     File space name set in archive_info->dsmObjectName.fs.
- *  @param[in] fpath  Path to file or directory, converted to hl, ll and set
- *                    archive_info->dsmObjectName.hl and
- *                    archive_info->dsmObjectName.ll.
- *  @param[in] desc   Description of fpath and set in
- *                    archive_info->dsmObjectName.desc.
- *  @param[in] lu_fid Lustre FID information which is set in
- *                    archive_info->obj_info.lu_fid.
- *  @return DSM_RC_SUCCESSFUL on success otherwise DSM_RC_UNSUCCESSFUL.
- */
-dsInt16_t tsm_archive_fpath_fid(const char *fs, const char *fpath,
-				const char *desc, const lu_fid_t *lu_fid)
-{
-	dsInt16_t rc;
-	archive_info_t archive_info;
-
-	CT_INFO("tsm_archive_fid:\n"
-		"fs: %s, fpath: %s, desc: %s, *lu_fid: %p",
-		fs, fpath, desc, lu_fid);
-	if (lu_fid == NULL) {
-		rc = EFAULT;
-		CT_ERROR(rc, "lu_fid null argument");
-		return rc;
-	}
-	memset(&archive_info, 0, sizeof(archive_info_t));
-	memcpy(&(archive_info.obj_info.lu_fid), lu_fid, sizeof(lu_fid_t));
-
-	rc = tsm_archive_prepare(fs, fpath, desc, &archive_info);
-	if (rc) {
-		CT_WARN("tsm_archive_prepare failed: \n"
-			"fs: %s, fpath: %s, desc: %s\n"
-			"fseq: %lu, f_oid: %d, f_ver: %d",
-			fs, fpath, desc, lu_fid->f_seq,
-			lu_fid->f_oid, lu_fid->f_ver);
-		return rc;
-	}
-
-	return tsm_archive_generic(&archive_info);
-}
-
-dsInt16_t tsm_archive_fpath_fd(const char *fs, const char *fpath,
-			       const char *desc, int l_fd)
-{
-	dsInt16_t rc;
-	fd_set_outside = bTrue;
-	tsm_set_retrieve_fd(l_fd);
-	rc = tsm_archive_fpath(fs, fpath, desc);
-	fd_set_outside = bFalse;
+		return tsm_archive_generic(&archive_info, fd); /* Archive regular file. */
 
 	return rc;
 }
