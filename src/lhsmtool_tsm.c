@@ -644,7 +644,7 @@ static int ct_setup(void)
 
 	rc = llapi_search_fsname(opt.o_mnt, fs_name);
 	if (rc < 0) {
-		CT_ERROR(rc, "can find a Lustre filesystem mounted at '%s'",
+		CT_ERROR(rc, "cannot find a Lustre filesystem mounted at '%s'",
 			 opt.o_mnt);
 		return rc;
 	}

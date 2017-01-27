@@ -350,7 +350,7 @@ void tsm_print_query_node(const qryRespArchiveData *qry_resp_arv_data,
 	obj_info_t obj_info;
 	memcpy(&obj_info, (char *)qry_resp_arv_data->objInfo, qry_resp_arv_data->objInfolen);
 
-	CT_INFO("\nobject # %lu\n"
+	CT_MESSAGE("\nobject # %lu\n"
 		"fs: %s, hl: %s, ll: %s\n"
 		"object id (hi,lo)                          : (%u,%u)\n"
 		"object info length                         : %d\n"
