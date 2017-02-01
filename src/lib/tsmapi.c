@@ -859,6 +859,11 @@ static dsInt16_t tsm_retrieve_generic(const char *fs, const char *hl,
 	get_list.stVersion = dsmGetListVersion; /* dsmGetListVersion: Not using Partial Obj data,
 						   dsmGetListPORVersion: Using Partial Obj data. */
 
+	/* Objects which are inserted in dsmGetList after querying more than
+	   DSM_MAX_GET_OBJ (= 4080) items cannot be retrieved with a single
+	   function call dsmBeginGetData. To overcome this limitation, partition
+	   the query replies in chunks of maximum size DSM_MAX_GET_OBJ and call
+	   dsmBeginGetData on each chunk. */
 	unsigned long c_begin = 0;
 	unsigned long c_end = MIN(qarray_size(), DSM_MAX_GET_OBJ) - 1;
 	unsigned int c_total = ceil((double)qarray_size() / (double)DSM_MAX_GET_OBJ);
