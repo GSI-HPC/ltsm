@@ -173,7 +173,7 @@ static dsInt16_t fallback_dt_unknown(struct dirent *entry, const char *fpath)
 
 static void date_to_str(char *str, const dsmDate *date)
 {
-	sprintf(str, "%i/%i/%i %i:%i:%i",
+	sprintf(str, "%i/%02i/%02i %02i:%02i:%02i",
 		date->year,
 		(dsInt16_t)date->month,
 		(dsInt16_t)date->day,
@@ -370,7 +370,7 @@ void tsm_print_query_node(const qryRespArchiveData *qry_resp_arv_data,
 	obj_info_t obj_info;
 	memcpy(&obj_info, (char *)qry_resp_arv_data->objInfo, qry_resp_arv_data->objInfolen);
 
-	CT_INFO("\nobject # %lu\n"
+	fprintf(stdout, "object # %lu\n"
 		"fs: %s, hl: %s, ll: %s\n"
 		"object id (hi,lo)                          : (%u,%u)\n"
 		"object info length                         : %d\n"
@@ -382,7 +382,7 @@ void tsm_print_query_node(const qryRespArchiveData *qry_resp_arv_data,
 		"insert date                                : %s\n"
 		"expiration date                            : %s\n"
 		"restore order (top,hi_hi,hi_lo,lo_hi,lo_lo): (%u,%u,%u,%u,%u)\n"
-		"estimated size (hi,lo)                     : (%u,%u)",
+		"estimated size (hi,lo)                     : (%u,%u)\n",
 		n,
 		qry_resp_arv_data->objName.fs,
 		qry_resp_arv_data->objName.hl,
@@ -405,6 +405,8 @@ void tsm_print_query_node(const qryRespArchiveData *qry_resp_arv_data,
 		qry_resp_arv_data->restoreOrderExt.lo_lo,
 		qry_resp_arv_data->sizeEstimate.hi,
 		qry_resp_arv_data->sizeEstimate.lo);
+
+	fflush(stdout);
 }
 
 dsInt16_t tsm_init(login_t *login)
