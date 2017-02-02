@@ -50,6 +50,7 @@ void usage(const char *cmd_name)
 	       "\t-r, --retrieve\n"
 	       "\t-q, --query\n"
 	       "\t-d, --delete\n"
+	       "\t-l, --latest\n"
 	       "\t-i, --recursive [archive]\n"
 	       "\t-f, --fsname <STRING> [default '/']\n"
 	       "\t-c, --description <STRING>\n"
@@ -109,6 +110,7 @@ int main(int argc, char *argv[])
 			{"retrieve",          no_argument, 0, 'r'},
 			{"query",             no_argument, 0, 'q'},
 			{"delete",            no_argument, 0, 'd'},
+			{"latest",            no_argument, 0, 'l'},
 			{"recursive",         no_argument, 0, 'i'},
 			{"fsname",      optional_argument, 0, 'f'},
 			{"description", required_argument, 0, 'c'},
@@ -122,7 +124,7 @@ int main(int argc, char *argv[])
 		/* getopt_long stores the option index here. */
 		int option_index = 0;
 
-		c = getopt_long (argc, argv, "arqdif:c:n:o:p:s:v::",
+		c = getopt_long (argc, argv, "arqdlif:c:n:o:p:s:v::",
 				 long_options, &option_index);
 
 		/* Detect the end of the options. */
@@ -141,6 +143,9 @@ int main(int argc, char *argv[])
 			break;
 		case 'd':	/* delete */
 			d_arg = bTrue;
+			break;
+		case 'l':	/* latest */
+			select_latest(bTrue);
 			break;
 		case 'i':	/* recursive */
 			set_recursive(bTrue);

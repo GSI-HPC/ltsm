@@ -1,4 +1,4 @@
-/* 
+/*
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 only,
  * as published by the Free Software Foundation.
@@ -9,39 +9,51 @@
  * General Public License version 2 for more details (a copy is included
  * in the LICENSE file that accompanied this code).
  * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>. 
+ * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
 /*
  * Copyright (c) 2016, Thomas Stibor <t.stibor@gsi.de>
  */
 
+#include <stdlib.h>
+#include <search.h>
 #include "log.h"
 #include "qarray.h"
-#include <stdlib.h>
+
+#define QARRAY_RC_UPDATED 20000
+#define DSM_DATE_TO_SEC(date) (date.second + date.minute * 60 +		\
+			       date.hour * 3600 + date.day * 86400 +	\
+			       date.month * 2678400 + date.year * 977616000)
 
 static query_arr_t *qarray = NULL;
+static ENTRY entry_ht;
+static ENTRY *result_ht = NULL;
 
 dsInt16_t init_qarray()
 {
 	int rc;
-	
+
 	if (qarray)
 		return DSM_RC_UNSUCCESSFUL;
 
+	rc = hcreate(INITIAL_CAPACITY * INITIAL_CAPACITY);
+	if (rc == 0) {
+		CT_ERROR(errno, "hcreate");
+		return DSM_RC_UNSUCCESSFUL;
+	}
+
 	qarray = malloc(sizeof(query_arr_t));
 	if (!qarray) {
-		rc = errno;
-		CT_ERROR(rc, "malloc");
-		return rc;
+		CT_ERROR(errno, "malloc");
+		return DSM_RC_UNSUCCESSFUL;
 	}
-    
+
 	qarray->data = malloc(sizeof(qryRespArchiveData) * INITIAL_CAPACITY);
 	if (!qarray->data) {
 		free(qarray);
-		rc = errno;
-		CT_ERROR(rc, "malloc");
-		return rc;
+		CT_ERROR(errno, "malloc");
+		return DSM_RC_UNSUCCESSFUL;
 	}
 	qarray->capacity = INITIAL_CAPACITY;
 	qarray->N = 0;
@@ -49,21 +61,90 @@ dsInt16_t init_qarray()
 	return DSM_RC_SUCCESSFUL;
 }
 
-dsInt16_t add_query(const qryRespArchiveData *query_data)
+static dsInt16_t replace_oldest_obj(const qryRespArchiveData *query_data)
 {
-	if (!qarray)
+	const size_t key_len = strlen(query_data->objName.fs) +
+		strlen(query_data->objName.hl) +
+		strlen(query_data->objName.ll) + 1;
+	char key[key_len];
+	bzero(key, key_len);
+
+	snprintf(key, key_len, "%s%s%s", query_data->objName.fs,
+		 query_data->objName.hl,
+		 query_data->objName.ll);
+
+	entry_ht.key = key;
+	result_ht = hsearch(entry_ht, FIND);
+	/* Key: fs/hl/ll is already in hashtable, thus get position in qarray
+	   and fetch the corresponding qryRespArchiveData object. */
+	if (result_ht) {
+		const unsigned long long n = (unsigned long)result_ht->data;
+		const qryRespArchiveData qdata_in_ar = qarray->data[n];
+		/* If insertion date of qryRespArchiveData object in qarray is
+		   older than the one we want to add, then overwrite the
+		   qryRespArchiveData object at position n in qarray with
+		   the newer one. */
+		if (DSM_DATE_TO_SEC(qdata_in_ar.insDate) <
+		    DSM_DATE_TO_SEC(query_data->insDate)) {
+			CT_TRACE("replacing older date qryRespArchiveData: "
+				 "%i/%02i/%02i %02i:%02i:%02i with newer "
+				 "date: %i/%02i/%02i %02i:%02i:%02i",
+				 qdata_in_ar.insDate.year,
+				 qdata_in_ar.insDate.month,
+				 qdata_in_ar.insDate.day,
+				 qdata_in_ar.insDate.hour,
+				 qdata_in_ar.insDate.minute,
+				 qdata_in_ar.insDate.second,
+				 query_data->insDate.year,
+				 query_data->insDate.month,
+				 query_data->insDate.day,
+				 query_data->insDate.hour,
+				 query_data->insDate.minute,
+				 query_data->insDate.second);
+
+			memcpy(&(qarray->data[n]), query_data,
+			       sizeof(qryRespArchiveData));
+
+			return QARRAY_RC_UPDATED;
+		}
+	} else {
+		result_ht = hsearch(entry_ht, ENTER);
+		if (result_ht == NULL) {
+			CT_ERROR(errno, "hsearch ENTER '%s' failed", entry_ht.key);
+			return DSM_RC_UNSUCCESSFUL;
+		}
+	}
+	return DSM_RC_SUCCESSFUL;
+}
+
+dsInt16_t add_query(const qryRespArchiveData *query_data, const dsmBool_t use_latest)
+{
+	dsInt16_t rc;
+
+	if (!qarray || !qarray->data)
 		return DSM_RC_UNSUCCESSFUL;
 
-	if (!qarray->data)
-		return DSM_RC_UNSUCCESSFUL;
+	if (use_latest) {
+		rc = replace_oldest_obj(query_data);
+		if (rc == QARRAY_RC_UPDATED)
+			return DSM_RC_SUCCESSFUL;
+		else if (rc == DSM_RC_UNSUCCESSFUL)
+			return rc;
+	}
 
 	/* Increase length (capacity) by factor of 2 when qarray is full. */
 	if (qarray->N >= qarray->capacity) {
 		qarray->capacity *= 2;
-		qarray->data = realloc(qarray->data, sizeof(qryRespArchiveData) * qarray->capacity);
+		qarray->data = realloc(qarray->data,
+				       sizeof(qryRespArchiveData) *
+				       qarray->capacity);
+		if (qarray->data == NULL) {
+			CT_ERROR(errno, "realloc");
+			return DSM_RC_UNSUCCESSFUL;
+		}
 	}
-
-	memcpy(&(qarray->data[qarray->N++]), query_data, sizeof(qryRespArchiveData));
+	memcpy(&(qarray->data[qarray->N++]), query_data,
+	       sizeof(qryRespArchiveData));
 
 	return DSM_RC_SUCCESSFUL;
 }
@@ -91,6 +172,9 @@ unsigned long qarray_size()
 
 void destroy_qarray()
 {
+	hdestroy();
+	result_ht = NULL;
+
 	if (!qarray)
 		return;
 
@@ -98,7 +182,6 @@ void destroy_qarray()
 		free(qarray->data);
 		qarray->data = NULL;
 	}
-
 	free(qarray);
 	qarray = NULL;
 }

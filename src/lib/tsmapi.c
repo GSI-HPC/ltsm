@@ -9,7 +9,7 @@
  * General Public License version 2 for more details (a copy is included
  * in the LICENSE file that accompanied this code).
  * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
 /*
@@ -50,6 +50,9 @@ static char rcmsg[DSM_MAX_RC_MSG_LENGTH + 1] = {0};
 static dsUint16_t max_obj_per_txn;
 static dsUint32_t max_bytes_per_txn;
 
+static dsBool_t do_recursive;
+static dsBool_t use_latest;
+
 #define TSM_GET_MSG(rc)					\
 do {							\
 	memset(&rcmsg, 0, DSM_MAX_RC_MSG_LENGTH + 1);	\
@@ -77,6 +80,23 @@ do {								\
 void set_recursive(const dsBool_t recursive)
 {
 	do_recursive = recursive;
+}
+
+/**
+ * @brief Set internal boolean variable use_latest to process the most recent
+ *        objects only.
+ *
+ *        If objects are archived multiple times (e.g. with different content),
+ *        then add in the query array only those having the most recent date.
+ *        That is, only objects will be retrieved or deleted which have the most
+ *        recent insertion date.
+ *
+ * @param[in] latest Boolean variable flags whether to retrieve or delete the
+ *                   most recent files/directories.
+ */
+void select_latest(const dsBool_t latest)
+{
+	use_latest = latest;
 }
 
 /**
@@ -153,7 +173,7 @@ static dsInt16_t fallback_dt_unknown(struct dirent *entry, const char *fpath)
 
 static void date_to_str(char *str, const dsmDate *date)
 {
-	sprintf(str, "%i/%i/%i %i:%i:%i",
+	sprintf(str, "%i/%02i/%02i %02i:%02i:%02i",
 		date->year,
 		(dsInt16_t)date->month,
 		(dsInt16_t)date->day,
@@ -350,7 +370,7 @@ void tsm_print_query_node(const qryRespArchiveData *qry_resp_arv_data,
 	obj_info_t obj_info;
 	memcpy(&obj_info, (char *)qry_resp_arv_data->objInfo, qry_resp_arv_data->objInfolen);
 
-	CT_MESSAGE("\nobject # %lu\n"
+	fprintf(stdout, "object # %lu\n"
 		"fs: %s, hl: %s, ll: %s\n"
 		"object id (hi,lo)                          : (%u,%u)\n"
 		"object info length                         : %d\n"
@@ -362,7 +382,7 @@ void tsm_print_query_node(const qryRespArchiveData *qry_resp_arv_data,
 		"insert date                                : %s\n"
 		"expiration date                            : %s\n"
 		"restore order (top,hi_hi,hi_lo,lo_hi,lo_lo): (%u,%u,%u,%u,%u)\n"
-		"estimated size (hi,lo)                     : (%u,%u)",
+		"estimated size (hi,lo)                     : (%u,%u)\n",
 		n,
 		qry_resp_arv_data->objName.fs,
 		qry_resp_arv_data->objName.hl,
@@ -385,6 +405,8 @@ void tsm_print_query_node(const qryRespArchiveData *qry_resp_arv_data,
 		qry_resp_arv_data->restoreOrderExt.lo_lo,
 		qry_resp_arv_data->sizeEstimate.hi,
 		qry_resp_arv_data->sizeEstimate.lo);
+
+	fflush(stdout);
 }
 
 dsInt16_t tsm_init(login_t *login)
@@ -623,7 +645,7 @@ dsInt16_t tsm_query_hl_ll(const char *fs, const char *hl, const char *ll, const 
 			if (display)	/* If query is only for printing, we are not filling the query array. */
 				tsm_print_query_node(&qry_resp_ar_data, ++n);
 			else {
-				rc = add_query(&qry_resp_ar_data);
+				rc = add_query(&qry_resp_ar_data, use_latest);
 				if (rc) {
 					CT_ERROR(0, "add_query");
 					goto cleanup;
@@ -859,6 +881,11 @@ static dsInt16_t tsm_retrieve_generic(const char *fs, const char *hl,
 	get_list.stVersion = dsmGetListVersion; /* dsmGetListVersion: Not using Partial Obj data,
 						   dsmGetListPORVersion: Using Partial Obj data. */
 
+	/* Objects which are inserted in dsmGetList after querying more than
+	   DSM_MAX_GET_OBJ (= 4080) items cannot be retrieved with a single
+	   function call dsmBeginGetData. To overcome this limitation, partition
+	   the query replies in chunks of maximum size DSM_MAX_GET_OBJ and call
+	   dsmBeginGetData on each chunk. */
 	unsigned long c_begin = 0;
 	unsigned long c_end = MIN(qarray_size(), DSM_MAX_GET_OBJ) - 1;
 	unsigned int c_total = ceil((double)qarray_size() / (double)DSM_MAX_GET_OBJ);
