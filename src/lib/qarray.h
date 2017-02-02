@@ -24,7 +24,7 @@
 #define INITIAL_CAPACITY 32
 
 dsInt16_t init_qarray();
-dsInt16_t add_query(const qryRespArchiveData *query_data);
+dsInt16_t add_query(const qryRespArchiveData *query_data, const dsmBool_t use_latest);
 dsInt16_t get_query(qryRespArchiveData *query_data, const unsigned long n);
 unsigned long qarray_size();
 void sort_qarray();

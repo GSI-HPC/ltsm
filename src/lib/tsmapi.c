@@ -50,6 +50,9 @@ static char rcmsg[DSM_MAX_RC_MSG_LENGTH + 1] = {0};
 static dsUint16_t max_obj_per_txn;
 static dsUint32_t max_bytes_per_txn;
 
+static dsBool_t do_recursive;
+static dsBool_t use_latest;
+
 #define TSM_GET_MSG(rc)					\
 do {							\
 	memset(&rcmsg, 0, DSM_MAX_RC_MSG_LENGTH + 1);	\
@@ -77,6 +80,23 @@ do {								\
 void set_recursive(const dsBool_t recursive)
 {
 	do_recursive = recursive;
+}
+
+/**
+ * @brief Set internal boolean variable use_latest to process the most recent
+ *        objects only.
+ *
+ *        If objects are archived multiple times (e.g. with different content),
+ *        then add in the query array only those having the most recent date.
+ *        That is, only objects will be retrieved or deleted which have the most
+ *        recent insertion date.
+ *
+ * @param[in] latest Boolean variable flags whether to retrieve or delete the
+ *                   most recent files/directories.
+ */
+void select_latest(const dsBool_t latest)
+{
+	use_latest = latest;
 }
 
 /**
@@ -623,7 +643,7 @@ dsInt16_t tsm_query_hl_ll(const char *fs, const char *hl, const char *ll, const 
 			if (display)	/* If query is only for printing, we are not filling the query array. */
 				tsm_print_query_node(&qry_resp_ar_data, ++n);
 			else {
-				rc = add_query(&qry_resp_ar_data);
+				rc = add_query(&qry_resp_ar_data, use_latest);
 				if (rc) {
 					CT_ERROR(0, "add_query");
 					goto cleanup;

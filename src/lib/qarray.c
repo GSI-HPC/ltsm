@@ -117,18 +117,20 @@ static dsInt16_t replace_oldest_obj(const qryRespArchiveData *query_data)
 	return DSM_RC_SUCCESSFUL;
 }
 
-dsInt16_t add_query(const qryRespArchiveData *query_data)
+dsInt16_t add_query(const qryRespArchiveData *query_data, const dsmBool_t use_latest)
 {
 	dsInt16_t rc;
 
 	if (!qarray || !qarray->data)
 		return DSM_RC_UNSUCCESSFUL;
 
-	rc = replace_oldest_obj(query_data);
-	if (rc == QARRAY_RC_UPDATED)
-		return DSM_RC_SUCCESSFUL;
-	else if (rc == DSM_RC_UNSUCCESSFUL)
-		return rc;
+	if (use_latest) {
+		rc = replace_oldest_obj(query_data);
+		if (rc == QARRAY_RC_UPDATED)
+			return DSM_RC_SUCCESSFUL;
+		else if (rc == DSM_RC_UNSUCCESSFUL)
+			return rc;
+	}
 
 	/* Increase length (capacity) by factor of 2 when qarray is full. */
 	if (qarray->N >= qarray->capacity) {

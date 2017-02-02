@@ -42,7 +42,7 @@ void test_qarray(CuTest *tc)
 	    query_data.objId.hi = n * n;
 	}
 
-	rc = add_query(&query_data);
+	rc = add_query(&query_data, bTrue);
 	CuAssertTrue(tc, rc == DSM_RC_SUCCESSFUL);
     }
 
@@ -73,7 +73,7 @@ void test_qarray_sort_top(CuTest *tc)
     for (unsigned int n = 0; n < N; n++) {
 	bzero(&query_data, sizeof(query_data));
 	query_data.restoreOrderExt.top = rand() % N;
-	rc = add_query(&query_data);
+	rc = add_query(&query_data, bTrue);
 	CuAssertTrue(tc, rc == DSM_RC_SUCCESSFUL);
     }
 
@@ -116,7 +116,7 @@ void test_qarray_sort_all(CuTest *tc)
 	query_data.restoreOrderExt.hi_lo = rand() % N;
 	query_data.restoreOrderExt.lo_hi = rand() % N;
 	query_data.restoreOrderExt.lo_lo = rand() % N;
-	rc = add_query(&query_data);
+	rc = add_query(&query_data, bTrue);
 	CuAssertTrue(tc, rc == DSM_RC_SUCCESSFUL);
     }
 
@@ -162,7 +162,7 @@ void test_qarray_init_destroy(CuTest *tc)
 
     /* Adding a query to non initialized qarray should give DSM_RC_UNSUCCESSFUL. */
     qryRespArchiveData query_data;
-    rc = add_query(&query_data);
+    rc = add_query(&query_data, bTrue);
     CuAssertTrue(tc, rc == DSM_RC_UNSUCCESSFUL);
 }
 
