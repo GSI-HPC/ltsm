@@ -5,7 +5,7 @@
  *
  * This program is distributed in the hope that it will be useful, but
  * WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
  * General Public License version 2 for more details (a copy is included
  * in the LICENSE file that accompanied this code).
  * You should have received a copy of the GNU General Public License
@@ -22,9 +22,12 @@
 #include "qarray.h"
 
 #define QARRAY_RC_UPDATED 20000
-#define DSM_DATE_TO_SEC(date) (date.second + date.minute * 60 +		\
-			       date.hour * 3600 + date.day * 86400 +	\
-			       date.month * 2678400 + date.year * 977616000)
+#define DSM_DATE_TO_SEC(date) ((unsigned long long)date.second +	\
+			       (unsigned long long)date.minute * 60 +	\
+			       (unsigned long long)date.hour * 3600 +	\
+			       (unsigned long long)date.day * 86400 +	\
+			       (unsigned long long)date.month * 2678400 + \
+			       (unsigned long long)date.year * 977616000)
 
 static query_arr_t *qarray = NULL;
 static ENTRY entry_ht;
