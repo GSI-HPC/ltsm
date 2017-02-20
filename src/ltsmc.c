@@ -13,7 +13,8 @@
  */
 
 /*
- * Copyright (c) 2016, Thomas Stibor <t.stibor@gsi.de>
+ * Copyright (c) 2016, 2017, Thomas Stibor <t.stibor@gsi.de>
+ * 			     Jörg Behrendt <j.behrendt@gsi.de>
  */
 
 #include <string.h>
@@ -218,28 +219,20 @@ int main(int argc, char *argv[])
 	}
 
 	login_t login;
-	memset(&login, 0, sizeof(login));
-	strcpy(login.node, n_arg);
-	strcpy(login.password, p_arg);
-	strcpy(login.owner, o_arg);
-	strcpy(login.platform, LOGIN_PLATFORM);
-	strcpy(login.fsname, f_arg);
-	strcpy(login.fstype, FSTYPE);
-	const unsigned short s_arg_len = 1 + strlen(s_arg) + strlen("-se=");
-	if (s_arg_len < MAX_OPTIONS_LENGTH)
-		snprintf(login.options, s_arg_len, "-se=%s", s_arg);
-	else
-		CT_WARN("Option parameter \'-se=%s\' is larger than "
-			"MAX_OPTIONS_LENGTH: %d and is ignored\n",
-			s_arg, MAX_OPTIONS_LENGTH);
+	login_fill(&login, s_arg,
+		   n_arg, p_arg,
+		   o_arg, LOGIN_PLATFORM,
+		   f_arg, FSTYPE);
 
 	dsInt16_t rc;
+	session_t session;
+	bzero(&session, sizeof(session));
 
-	rc = tsm_init(&login);
+	rc = tsm_init(&login, &session);
 	if (rc)
 		goto clean_up;
 
-	rc = tsm_query_session_info();
+	rc = tsm_query_session(&session);
 	if (rc)
 		goto clean_up;
 
@@ -248,16 +241,16 @@ int main(int argc, char *argv[])
 		     files_dirs_arg[i]; i++) {
 		if (q_arg)	/* Query. */
 			rc = tsm_query_fpath(f_arg, files_dirs_arg[i],
-					     c_arg, bTrue);
+					     c_arg, bTrue, &session);
 		else if (r_arg)	/* Retrieve. */
 			rc = tsm_retrieve_fpath(f_arg, files_dirs_arg[i],
-						c_arg, -1);
+						c_arg, -1, &session);
 		else if (d_arg)	/* Delete. */
-			rc = tsm_delete_fpath(f_arg, files_dirs_arg[i]);
+			rc = tsm_delete_fpath(f_arg, files_dirs_arg[i], &session);
 		else if (a_arg) {	/* Archive. */
 			rc = tsm_archive_fpath(f_arg,
 					       files_dirs_arg[i],
-					       c_arg, -1, NULL);
+					       c_arg, -1, NULL, &session);
 		}
 		if (rc)
 			goto clean_up;
@@ -272,7 +265,7 @@ clean_up:
 		free(files_dirs_arg);
 	}
 
-	tsm_quit();
+	tsm_quit(&session);
 
 	return rc;
 }
