@@ -6,4 +6,4 @@ endif
 
 noinst_LIBRARIES = libtsmapi.a
 noinst_HEADERS = tsmapi.h qarray.h log.h
-libtsmapi_a_SOURCES = tsmapi.c qarray.c log.c
+libtsmapi_a_SOURCES = tsmapi.c qarray.c log.c list.c queue.c
