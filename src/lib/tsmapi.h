@@ -91,13 +91,13 @@ typedef struct {
 } qarray_t;
 
 typedef struct {
+	dsUint16_t id;
 	dsUint32_t handle;
 	qarray_t *qarray;
 	dsmBool_t overwrite_older;
 	struct hsm_action_item *hai;
 	struct hsm_copyaction_private *hcp;
 	long hal_flags;
-	unsigned int th_id;
 } session_t;
 
 off64_t to_off64_t(const dsStruct64_t size);
@@ -109,8 +109,12 @@ void login_fill(login_t *login, const char *servername,
 		const char *node, const char *password,
 		const char *owner, const char *platform,
 		const char *fsname, const char *fstype);
-dsInt16_t tsm_init(login_t *login, session_t *session);
-void tsm_quit(session_t *session);
+
+dsInt16_t tsm_init(const dsBool_t mt_flag);
+void tsm_cleanup(const dsBool_t mt_flag);
+
+dsInt16_t tsm_connect(login_t *login, session_t *session);
+void tsm_disconnect(session_t *session);
 
 dsmAppVersion get_appapi_ver();
 dsmApiVersionEx get_libapi_ver();

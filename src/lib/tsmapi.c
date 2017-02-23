@@ -71,7 +71,8 @@ do {									\
 #define TSM_TRACE(session, rc, func)					\
 do {									\
 	TSM_GET_MSG(session, rc);					\
-	CT_TRACE("%s: handle: %d %s", func, session->handle, rcmsg);	\
+	CT_TRACE("%s: session: %d handle: %d %s", func, session->id,	\
+		 session->handle, rcmsg);				\
 } while (0)
 
 void login_fill(login_t *login, const char *servername,
@@ -435,7 +436,41 @@ void tsm_print_query_node(const qryRespArchiveData *qry_resp_arv_data,
 	fflush(stdout);
 }
 
-dsInt16_t tsm_init(login_t *login, session_t *session)
+dsInt16_t tsm_init(const dsBool_t mt_flag)
+{
+	dsInt16_t rc;
+	session_t *empty_session = NULL;
+	empty_session = calloc(1, sizeof(session_t));
+	if (empty_session == NULL)
+		return DSM_RC_UNSUCCESSFUL;
+
+	/* The dsmSetUp call must be the first call
+	   after the dsmQueryApiVersionEx call. This
+	   call must return before any thread calls
+	   the dsmInitEx call. When all threads complete processing,
+	   enter a call to dsmCleanUp.
+	 */
+	get_libapi_ver();	/* Calls dsmQueryApiVersionEx.*/
+	rc = dsmSetUp(mt_flag, NULL);
+	TSM_TRACE(empty_session, rc, "dsmSetUp");
+	if (rc) {
+		TSM_ERROR(empty_session, rc, "dsmSetUp");
+		dsmCleanUp(mt_flag);
+		free(empty_session);
+		return DSM_RC_UNSUCCESSFUL;
+	}
+	free(empty_session);
+	return DSM_RC_SUCCESSFUL;
+}
+
+void tsm_cleanup(const dsBool_t mt_flag)
+{
+	/* The dsmCleanUp function call should be called after dsmTerminate.
+	   You cannot make any other calls after you call dsmCleanUp. */
+	dsmCleanUp(mt_flag);
+}
+
+dsInt16_t tsm_connect(login_t *login, session_t *session)
 {
 	dsmInitExIn_t init_in;
 	dsmInitExOut_t init_out;
@@ -448,14 +483,6 @@ dsInt16_t tsm_init(login_t *login, session_t *session)
 
 	libapi_ver = get_libapi_ver();
 	appapi_ver = get_appapi_ver();
-
-	rc = dsmSetUp(DSM_MULTITHREAD, NULL);
-	TSM_TRACE(session, rc, "dsmSetUp");
-	if (rc) {
-		TSM_ERROR(session, rc, "dsmSetUp");
-		dsmCleanUp(DSM_MULTITHREAD);
-		return rc;
-	}
 
 	init_in.stVersion        = dsmInitExInVersion;
 	init_in.apiVersionExP    = &libapi_ver;
@@ -475,6 +502,10 @@ dsInt16_t tsm_init(login_t *login, session_t *session)
 		TSM_ERROR(session, rc, "dsmInitEx");
 		return rc;
 	}
+
+	/* DEBUG START */
+	printf("session id: %d\n", session->id);
+	/* DEBUG END */
 
 	regFSData reg_fs_data;
 	memset(&reg_fs_data, 0, sizeof(reg_fs_data));
@@ -497,10 +528,9 @@ dsInt16_t tsm_init(login_t *login, session_t *session)
 	return rc;
 }
 
-void tsm_quit(session_t *session)
+void tsm_disconnect(session_t *session)
 {
 	dsmTerminate(session->handle);
-	dsmCleanUp(DSM_MULTITHREAD);
 }
 
 /**

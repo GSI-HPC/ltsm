@@ -29,12 +29,14 @@
 #include <signal.h>
 #include <stdarg.h>
 #include <pthread.h>
+#include <stdint.h>
 #include <linux/limits.h>
 #include <sys/syscall.h>
 #include <sys/time.h>
 #include <lustre/lustre_idl.h>
 #include <lustre/lustreapi.h>
 #include "tsmapi.h"
+#include "queue.h"
 
 struct options {
 	int o_daemonize;
@@ -64,8 +66,12 @@ struct options opt = {
 	.o_fstype = {0},
 };
 
-static pthread_mutex_t curnum_mutex;
-static unsigned int curnum_threads = 0;
+static uint16_t N_THREADS = 2;
+static pthread_t **thread = NULL;
+static pthread_mutex_t queue_mutex;
+static pthread_cond_t queue_cond;
+static session_t **session = NULL;
+static queue_t queue;
 
 static int err_major;
 static int err_minor;
@@ -254,17 +260,17 @@ static int ct_archive(session_t *session)
 
 	rc = fid_realpath(opt.o_mnt, &session->hai->hai_fid, fpath, sizeof(fpath));
 	if (rc < 0) {
-		CT_ERROR(rc, "[th:%d] fid_realpath failed", session->th_id);
+		CT_ERROR(rc, "fid_realpath failed");
 		goto cleanup;
 	}
 
 	rc = llapi_hsm_action_begin(&session->hcp, ctdata, session->hai, -1, 0, false);
 	if (rc < 0) {
-		CT_ERROR(rc, "[th:%d] llapi_hsm_action_begin on '%s' failed", session->th_id, fpath);
+		CT_ERROR(rc, "llapi_hsm_action_begin on '%s' failed", fpath);
 		goto cleanup;
 	}
 
-	CT_TRACE("[th:%d] archiving '%s' to TSM storage", session->th_id, fpath);
+	CT_TRACE("archiving '%s' to TSM storage", fpath);
 
 	if (opt.o_dry_run) {
 		rc = 0;
@@ -274,20 +280,18 @@ static int ct_archive(session_t *session)
 	src_fd = llapi_hsm_action_get_fd(session->hcp);
 	if (src_fd < 0) {
 		rc = src_fd;
-		CT_ERROR(rc, "[th:%d] cannot open '%s' for read", session->th_id,
-			 fpath);
+		CT_ERROR(rc, "cannot open '%s' for read", fpath);
 		goto cleanup;
 	}
 
 	rc = tsm_archive_fpath(FSNAME, fpath, NULL, -1,
 			       (const void *)&session->hai->hai_fid, session);
 	if (rc != DSM_RC_SUCCESSFUL) {
-		CT_ERROR(rc, "[th:%d] tsm_archive_fpath_fid on '%s' failed",
-			 session->th_id, fpath);
+		CT_ERROR(rc, "tsm_archive_fpath_fid on '%s' failed", fpath);
 		goto cleanup;
 	}
 
-	CT_TRACE("[th:%d] archiving '%s' to TSM storage done", session->th_id, fpath);
+	CT_TRACE("archiving '%s' to TSM storage done", fpath);
 
 cleanup:
 	if (!(src_fd < 0))
@@ -432,6 +436,8 @@ static int ct_process_item(session_t *session)
 			CT_TRACE("processing file '%s'", path);
 	}
 
+	return 0;
+
 	switch (session->hai->hai_action) {
 	/* set err_major, minor inside these functions */
 	case HSMA_ARCHIVE:
@@ -464,96 +470,33 @@ static int ct_process_item(session_t *session)
 		ct_finish(session, rc, NULL);
 	}
 
+	free(session->hai);
+
 	return 0;
 }
 
 static void *ct_thread(void *data)
 {
-	login_t login;
 	session_t *session = data;
 	int rc;
 
-	/* TODO: We call login_fill for each created thread. */
-	bzero(&login, sizeof(login));
-	login_fill(&login, "",
-		   opt.o_node, opt.o_password,
-		   opt.o_owner, LOGIN_PLATFORM,
-		   FSNAME, FSTYPE); /* TODO: opt.o_fsname, opt.o_fstype */
+	/* TODO: How to break properly the for-loop? */
+	for (;;) {
+		/* Crticial region, lock. */
+		pthread_mutex_lock(&queue_mutex);
+		while (queue_size(&queue) == 0)
+			pthread_cond_wait(&queue_cond, &queue_mutex);
 
-	rc = tsm_init(&login, session);
-	if (rc) {
-		rc = ECANCELED;
-		CT_ERROR(rc, "tsm_init failed");
-		goto cleanup;
-	}
-	rc = tsm_query_session(session);
-	if (rc) {
-		rc = ECANCELED;
-		CT_ERROR(rc, "tsm_query_session failed");
-		goto cleanup;
+		rc = queue_dequeue(&queue, (void **)&session->hai);
+		if (rc)
+			CT_WARN("queue_dequeue failed");
+		pthread_mutex_unlock(&queue_mutex);
+		/* Unlock. */
+
+		rc = ct_process_item(session);
 	}
 
-	rc = ct_process_item(session);
-	if (rc) {
-		/* TODO: Change that into a proper CT_ERROR and minor_rc. */
-		CT_WARN("ct_process_item failed");
-	}
-cleanup:
-	tsm_quit(session);
-	rc = pthread_mutex_lock(&curnum_mutex);
-	if (rc) {
-		CT_ERROR(rc, "pthread_mutex_lock failed");
-	} else
-		curnum_threads -= 1;
-	rc = pthread_mutex_unlock(&curnum_mutex);
-	if (rc)
-		CT_ERROR(rc, "pthread_mutex_unlock failed");
-
-	free(session->hai);
-	free(session);
 	pthread_exit((void *)(intptr_t)rc);
-}
-
-static int ct_process_item_async(const struct hsm_action_item *hai,
-				 long hal_flags)
-{
-	pthread_attr_t attr;
-	pthread_t thread;
-	session_t *session;
-	int rc;
-
-	session = malloc(sizeof(*session));
-	if (session == NULL)
-		return -ENOMEM;
-
-	session->hai = malloc(hai->hai_len);
-	if (session->hai == NULL) {
-		free(session);
-		return -ENOMEM;
-	}
-
-	memcpy(session->hai, hai, hai->hai_len);
-	session->hal_flags = hal_flags;
-	session->handle = -1;
-
-	rc = pthread_attr_init(&attr);
-	if (rc != 0) {
-		CT_ERROR(rc, "pthread_attr_init failed for '%s' service",
-			 opt.o_mnt);
-		free(session->hai);
-		free(session);
-		return -rc;
-	}
-
-	pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
-
-	rc = pthread_create(&thread, &attr, ct_thread, session);
-	if (rc != 0)
-		CT_ERROR(rc, "cannot create thread for '%s' service",
-			 opt.o_mnt);
-
-	pthread_attr_destroy(&attr);
-	return 0;
 }
 
 static void handler(int signal)
@@ -659,12 +602,46 @@ static int ct_run(void)
 				err_major++;
 				break;
 			}
+
+			struct hsm_action_item *work_hai;
+			work_hai = malloc(sizeof(struct hsm_action_item));
+			if (work_hai == NULL) {
+				CT_ERROR(errno, "malloc failed");
+				break;
+			}
+			memcpy(work_hai, hai, sizeof(struct hsm_action_item));
+
+			/* Lock queue to avoid thread access. */
+			pthread_mutex_lock(&queue_mutex);
+
+			/* Insert hsm action into queue. */
+			rc = queue_enqueue(&queue, work_hai);
+			CT_TRACE("enqueue action '%s' cookie=%#jx, FID="DFID"",
+				 hsm_copytool_action2name(work_hai->hai_action),
+				 (uintmax_t)work_hai->hai_cookie,
+				 PFID(&work_hai->hai_fid));
+			if (rc) {
+				CT_ERROR(ECANCELED, "enqueue action '%s'"
+					 "cookie=%#jx, FID="DFID" failed",
+				 hsm_copytool_action2name(work_hai->hai_action),
+				 (uintmax_t)work_hai->hai_cookie,
+				 PFID(&work_hai->hai_fid));
+			}
+
+			/* Free the lock of the queue. */
+			pthread_mutex_unlock(&queue_mutex);
+
+			/* Signal a thread that it should check for new work. */
+			pthread_cond_signal(&queue_cond);
+
+#if 0
 			rc = ct_process_item_async(hai, hal->hal_flags);
 			if (rc < 0)
 				CT_ERROR(rc, "'%s' item %d process",
 					 opt.o_mnt, i);
 			if (opt.o_abort_on_error && err_major)
 				break;
+#endif
 			hai = hai_next(hai);
 		}
 
@@ -675,6 +652,117 @@ static int ct_run(void)
 	llapi_hsm_copytool_unregister(&ctdata);
 	if (opt.o_event_fifo != NULL)
 		llapi_hsm_unregister_event_fifo(opt.o_event_fifo);
+
+	return rc;
+}
+
+static int ct_connect_sessions(void)
+{
+	int rc;
+	login_t login;
+	uint16_t n;
+
+	rc = tsm_init(DSM_MULTITHREAD);
+
+	bzero(&login, sizeof(login));
+	login_fill(&login, opt.o_servername,
+		   opt.o_node, opt.o_password,
+		   opt.o_owner, LOGIN_PLATFORM,
+		   FSNAME, FSTYPE); /* TODO: opt.o_fsname, opt.o_fstype */
+
+	session = calloc(N_THREADS, sizeof(session_t *));
+	if (session == NULL) {
+		rc = errno;
+		CT_ERROR(rc, "malloc failed");
+		return rc;
+	}
+
+	/* session = calloc(N_THREADS, sizeof(session_t)); */
+	for (n = 0; n < N_THREADS; n++) {
+		session[n] = calloc(1, sizeof(session_t));
+		if (session[n] == NULL) {
+			rc = errno;
+			CT_ERROR(rc, "malloc failed");
+			goto cleanup;
+		}
+		session[n]->id = n;
+
+		CT_TRACE("tsm_init: session[%d], session[%d]->%d",
+			 n, session[n]->id);
+
+		rc = tsm_connect(&login, session[n]);
+		if (rc) {
+			rc = ECANCELED;
+			CT_ERROR(rc, "tsm_init failed");
+			goto cleanup;
+		}
+		rc = tsm_query_session(session[n]);
+		if (rc) {
+			rc = ECANCELED;
+			CT_ERROR(rc, "tsm_query_session failed");
+			goto cleanup;
+		}
+	}
+	return rc;
+
+cleanup:
+	for (uint16_t i = 0; i < n; i++) {
+		if (session[i]) {
+			tsm_disconnect(session[i]);
+			free(session[i]);
+		}
+	}
+	free(session);
+	tsm_cleanup(DSM_MULTITHREAD);
+
+	return rc;
+}
+
+static int ct_start_threads(void)
+{
+	int rc;
+	uint16_t n;
+	pthread_attr_t attr;
+
+	thread = calloc(N_THREADS, sizeof(pthread_t *));
+	if (thread == NULL) {
+		rc = errno;
+		CT_ERROR(rc, "malloc failed");
+		return rc;
+	}
+	for (n = 0; n < N_THREADS; n++) {
+		thread[n] = calloc(1, sizeof(pthread_t));
+		if (thread[n] == NULL) {
+			rc = errno;
+			CT_ERROR(rc, "malloc failed");
+			goto cleanup;
+		}
+	}
+
+	rc = pthread_attr_init(&attr);
+	if (rc != 0) {
+		CT_ERROR(rc, "pthread_attr_init failed for");
+		return rc;
+	}
+
+	pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
+
+	for (n = 0; n < N_THREADS; n++) {
+		rc = pthread_create(thread[n], &attr, ct_thread, session[n]);
+		if (rc != 0)
+			CT_ERROR(rc, "cannot create worker thread '%d' for"
+				 "'%s'", n, opt.o_mnt);
+	}
+	pthread_attr_destroy(&attr);
+
+	return rc;
+
+cleanup:
+	for (uint16_t i = 0; i < n; i++) {
+		if (thread[i])
+			free(thread[i]);
+	}
+	free(thread);
 
 	return rc;
 }
@@ -700,9 +788,22 @@ static int ct_setup(void)
 		return rc;
 	}
 
-	rc = pthread_mutex_init(&curnum_mutex, NULL);
+	pthread_mutex_init(&queue_mutex, NULL);
+	pthread_cond_init(&queue_cond, NULL);
+	queue_init(&queue, free);
+
+	/* Create N_THREADS sessions to TSM server. */
+	rc = ct_connect_sessions();
 	if (rc) {
-		CT_ERROR(rc, "pthread_mutex_init failed");
+		rc = ECANCELED;
+		CT_ERROR(rc, "ct_connect_sessions failed");
+		return rc;
+	}
+
+	rc = ct_start_threads();
+	if (rc) {
+		rc = ECANCELED;
+		CT_ERROR(rc, "ct_start_threads failed");
 		return rc;
 	}
 
@@ -711,7 +812,8 @@ static int ct_setup(void)
 
 static int ct_cleanup(void)
 {
-	int rc = 0;
+	int rc;
+	int rc_minor;
 
 	if (opt.o_mnt_fd >= 0) {
 		rc = close(opt.o_mnt_fd);
@@ -720,9 +822,24 @@ static int ct_cleanup(void)
 			CT_ERROR(rc, "cannot close mount point");
 		}
 	}
-	rc = pthread_mutex_destroy(&curnum_mutex);
-	if (rc)
-		CT_ERROR(rc, "pthread_mutex_destroy failed");
+	rc_minor = pthread_mutex_destroy(&queue_mutex);
+	if (rc_minor)
+		CT_ERROR(rc_minor, "pthread_mutex_destroy failed");
+	rc_minor = pthread_cond_destroy(&queue_cond);
+	if (rc_minor)
+		CT_ERROR(rc_minor, "pthread_cond_destroy failed");
+
+	for (uint16_t n = 0; n < N_THREADS; n++) {
+		if (session[n]) {
+			tsm_disconnect(session[n]);
+			free(session[n]);
+		}
+		if (thread[n])
+			free(thread[n]);
+	}
+	free(session);
+	free(thread);
+	tsm_cleanup(DSM_MULTITHREAD);
 
 	return rc;
 }

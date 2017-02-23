@@ -228,7 +228,11 @@ int main(int argc, char *argv[])
 	session_t session;
 	bzero(&session, sizeof(session));
 
-	rc = tsm_init(&login, &session);
+	rc = tsm_init(DSM_SINGLETHREAD);
+	if (rc)
+		goto clean_up;
+
+	rc = tsm_connect(&login, &session);
 	if (rc)
 		goto clean_up;
 
@@ -265,7 +269,8 @@ clean_up:
 		free(files_dirs_arg);
 	}
 
-	tsm_quit(&session);
+	tsm_disconnect(&session);
+	tsm_cleanup(DSM_SINGLETHREAD);
 
 	return rc;
 }
