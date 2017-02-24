@@ -87,26 +87,48 @@ typedef struct {
 	unsigned long capacity;
 	unsigned long N;
 	qryRespArchiveData *data;
-} query_arr_t;
+	struct hsearch_data *htab;
+} qarray_t;
+
+typedef struct {
+	dsUint16_t id;
+	dsUint32_t handle;
+	qarray_t *qarray;
+	dsmBool_t overwrite_older;
+	struct hsm_copytool_private **ctdata;
+	struct hsm_action_item *hai;
+	struct hsm_copyaction_private *hcp;
+	long hal_flags;
+} session_t;
 
 off64_t to_off64_t(const dsStruct64_t size);
 dsStruct64_t to_dsStruct64_t(const off_t size);
 void set_recursive(const dsBool_t recursive);
 void select_latest(const dsBool_t latest);
 
-dsInt16_t tsm_init(login_t *login);
-void tsm_quit();
+void login_fill(login_t *login, const char *servername,
+		const char *node, const char *password,
+		const char *owner, const char *platform,
+		const char *fsname, const char *fstype);
+
+dsInt16_t tsm_init(const dsBool_t mt_flag);
+void tsm_cleanup(const dsBool_t mt_flag);
+
+dsInt16_t tsm_connect(login_t *login, session_t *session);
+void tsm_disconnect(session_t *session);
 
 dsmAppVersion get_appapi_ver();
 dsmApiVersionEx get_libapi_ver();
 
-dsInt16_t tsm_query_session_info();
+dsInt16_t tsm_query_session(session_t *session);
 dsInt16_t tsm_archive_fpath(const char *fs, const char *fpath, const char *desc,
-			    int fd, const lu_fid_t *lu_fid);
+			    int fd, const lu_fid_t *lu_fid, session_t *session);
 dsInt16_t tsm_query_fpath(const char *fs, const char *fpath,
-			  const char *desc, dsBool_t display);
-dsInt16_t tsm_delete_fpath(const char *fs, const char *fpath);
+			  const char *desc, dsBool_t display,
+			  session_t *session);
+dsInt16_t tsm_delete_fpath(const char *fs, const char *fpath,
+			   session_t *session);
 dsInt16_t tsm_retrieve_fpath(const char *fs, const char *fpath,
-			     const char *desc, int fd);
+			     const char *desc, int fd, session_t *session);
 
 #endif /* TSMAPI_H */

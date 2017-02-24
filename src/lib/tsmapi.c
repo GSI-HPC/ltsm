@@ -13,13 +13,15 @@
  */
 
 /*
- * Copyright (c) 2016, Thomas Stibor <t.stibor@gsi.de>
+ * Copyright (c) 2016, 2017, Thomas Stibor <t.stibor@gsi.de>
+ * 			     Jörg Behrendt <j.behrendt@gsi.de>
  */
 
 #ifndef _GNU_SOURCE
 #define _GNU_SOURCE
 #endif
 
+#include <config.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -32,9 +34,15 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/param.h>
+
+#ifdef HAVE_LUSTRE
+# include <lustre/lustreapi.h>
+#endif
+
 #include "tsmapi.h"
 #include "log.h"
 #include "qarray.h"
+
 
 #define OBJ_TYPE(type)							\
 	(DSM_OBJ_FILE == type ? "DSM_OBJ_FILE" :			\
@@ -45,32 +53,57 @@
 	(DSM_OBJ_WILDCARD == type ? "DSM_OBJ_WILDCARD" :		\
 	(DSM_OBJ_ANY_TYPE == type ? "DSM_OBJ_ANY_TYPE" : "UNKNOWN")))))))
 
-static dsUint32_t handle;
 static char rcmsg[DSM_MAX_RC_MSG_LENGTH + 1] = {0};
+#if 0
 static dsUint16_t max_obj_per_txn;
 static dsUint32_t max_bytes_per_txn;
+#endif
 
 static dsBool_t do_recursive;
 static dsBool_t use_latest;
 
-#define TSM_GET_MSG(rc)					\
+#define TSM_GET_MSG(session, rc)			\
 do {							\
 	memset(&rcmsg, 0, DSM_MAX_RC_MSG_LENGTH + 1);	\
-	dsmRCMsg(handle, rc, rcmsg);			\
+	dsmRCMsg(session->handle, rc, rcmsg);		\
 	rcmsg[strlen(rcmsg)-1] = '\0';			\
 } while (0)
 
-#define TSM_ERROR(rc, func)					\
-do {								\
-	TSM_GET_MSG(rc);					\
-	CT_ERROR(0, "%s: handle: %d %s", func, handle, rcmsg);	\
+#define TSM_ERROR(session, rc, func)					\
+do {									\
+	TSM_GET_MSG(session, rc);					\
+	CT_ERROR(0, "%s: handle: %d %s", func, session->handle, rcmsg);	\
 } while (0)
 
-#define TSM_TRACE(rc, func)					\
-do {								\
-	TSM_GET_MSG(rc);					\
-	CT_TRACE("%s: handle: %d %s", func, handle, rcmsg);	\
+#define TSM_TRACE(session, rc, func)					\
+do {									\
+	TSM_GET_MSG(session, rc);					\
+	CT_TRACE("%s: session: %d handle: %d %s", func, session->id,	\
+		 session->handle, rcmsg);				\
 } while (0)
+
+void login_fill(login_t *login, const char *servername,
+		const char *node, const char *password,
+		const char *owner, const char *platform,
+		const char *fsname, const char *fstype)
+{
+	memset(login, 0, sizeof(*login));
+	strcpy(login->node, node);
+	strcpy(login->password, password);
+	strcpy(login->owner, owner);
+	strcpy(login->platform, platform);
+	strcpy(login->fsname, fsname);
+	strcpy(login->fstype, fstype);
+
+	const unsigned short s_arg_len = 1 + strlen(servername) +
+		strlen("-se=");
+	if (s_arg_len < MAX_OPTIONS_LENGTH)
+		snprintf(login->options, s_arg_len, "-se=%s", servername);
+	else
+		CT_WARN("Option parameter \'-se=%s\' is larger than "
+			"MAX_OPTIONS_LENGTH: %d and is ignored\n",
+			servername, MAX_OPTIONS_LENGTH);
+}
 
 /**
  * @brief Set internal boolean variable recursive to flag recursive archiving.
@@ -132,6 +165,41 @@ dsStruct64_t to_dsStruct64_t(const off64_t size)
 
 	return res;
 }
+
+
+#ifdef HAVE_LUSTRE
+static int ct_hsm_progress(session_t *session, off64_t moved, off64_t from, off64_t offset){
+	int rc;
+
+	CT_TRACE(" |%2i| off64_t  returning progress %li / %li  off: %li to hsm controller", session->id, moved, from, offset);
+
+	if(session->hai == NULL || session->ctdata == NULL){
+		rc = EFAULT;
+		CT_ERROR(rc, " |%2i| hsm action item or ctdata missing", session->id);
+		return rc;
+	}
+
+	session->hai->hai_extent.length = offset;
+	session->hai->hai_extent.offset = moved;
+
+	//if hsm_action not started yet get handle for returning progress
+	if(session->hcp == NULL){
+		rc = llapi_hsm_action_begin(&session->hcp, *session->ctdata, session->hai, -1, 0, 0);
+		if (rc) {
+			CT_ERROR(rc, " |%2i| llapi_hsm_action_begin() failed", session->id);
+			return rc;
+		}
+	}
+
+	rc = llapi_hsm_action_progress(session->hcp, &session->hai->hai_extent, from, 0 );
+	if (rc) {
+		CT_ERROR(rc, " |%2i| llapi_hsm_action_progress() failed", session->id);
+		return rc;
+	}
+
+	return DSM_RC_SUCCESSFUL;
+}
+#endif
 
 /**
  * @brief Fallback for determining d_type with lstat().
@@ -254,7 +322,8 @@ static dsInt16_t extract_fpath(const qryRespArchiveData *query_data, char *fpath
  * @return DSM_RC_SUCCESSFUL on success otherwise DSM_RC_UNSUCCESSFUL.
  */
 static dsInt16_t retrieve_obj(qryRespArchiveData *query_data,
-			      const obj_info_t *obj_info, int fd)
+			      const obj_info_t *obj_info, int fd,
+			      session_t* session)
 {
 	char *buf = NULL;
 	DataBlk dataBlk;
@@ -309,13 +378,18 @@ static dsInt16_t retrieve_obj(qryRespArchiveData *query_data,
 
 	/* Request data with a single dsmGetObj call, otherwise data is larger and we need
 	   additional dsmGetData calls. */
-	rc = dsmGetObj(handle, &(query_data->objId), &dataBlk);
-	TSM_TRACE(rc, "dsmGetObj");
+	rc = dsmGetObj(session->handle, &(query_data->objId), &dataBlk);
+	TSM_TRACE(session, rc,  "dsmGetObj");
+
+	#ifdef HAVE_LUSTRE
+		off64_t b_total = to_off64_t(obj_info->size);
+		off64_t b_done = 0;
+	#endif
 
 	while (!done) {
 		/* Note: dataBlk.numBytes always returns TSM_BUF_LENGTH (65536). */
 		if (!(rc == DSM_RC_MORE_DATA || rc == DSM_RC_FINISHED)) {
-			TSM_ERROR(rc, "dsmGetObj or dsmGetData");
+			TSM_ERROR(session, rc, "dsmGetObj or dsmGetData");
 			rc_minor = rc;
 			done = bTrue;
 		} else {
@@ -331,17 +405,27 @@ static dsInt16_t retrieve_obj(qryRespArchiveData *query_data,
 			else {
 				obj_size -= TSM_BUF_LENGTH;
 				dataBlk.numBytes = 0;
-				rc = dsmGetData(handle, &dataBlk);
-				TSM_TRACE(rc, "dsmGetData");
+				rc = dsmGetData(session->handle, &dataBlk);
+				TSM_TRACE(session, rc,  "dsmGetData");
 			}
 		}
+		#ifdef HAVE_LUSTRE
+			b_done += obj_size_written;
+			int rc_progress;
+			rc_progress = ct_hsm_progress(session, b_done, b_total, obj_size_written);
+			if(rc_progress){
+				rc_minor = DSM_RC_UNSUCCESSFUL;
+				CT_ERROR(rc, " |%2i| Can not propagate progress to hsm api.", session->id);
+				goto cleanup;
+			}
+		#endif
 	} /* End while (!done) */
 
 cleanup:
-	rc = dsmEndGetObj(handle);
-	TSM_TRACE(rc, "dsmEndGetObj");
+	rc = dsmEndGetObj(session->handle);
+	TSM_TRACE(session, rc,  "dsmEndGetObj");
 	if (rc != DSM_RC_SUCCESSFUL)
-		TSM_ERROR(rc, "dsmEndGetObj");
+		TSM_ERROR(session, rc, "dsmEndGetObj");
 
 	if (buf)
 		free(buf);
@@ -409,7 +493,41 @@ void tsm_print_query_node(const qryRespArchiveData *qry_resp_arv_data,
 	fflush(stdout);
 }
 
-dsInt16_t tsm_init(login_t *login)
+dsInt16_t tsm_init(const dsBool_t mt_flag)
+{
+	dsInt16_t rc;
+	session_t *empty_session = NULL;
+	empty_session = calloc(1, sizeof(session_t));
+	if (empty_session == NULL)
+		return DSM_RC_UNSUCCESSFUL;
+
+	/* The dsmSetUp call must be the first call
+	   after the dsmQueryApiVersionEx call. This
+	   call must return before any thread calls
+	   the dsmInitEx call. When all threads complete processing,
+	   enter a call to dsmCleanUp.
+	 */
+	get_libapi_ver();	/* Calls dsmQueryApiVersionEx.*/
+	rc = dsmSetUp(mt_flag, NULL);
+	TSM_TRACE(empty_session, rc, "dsmSetUp");
+	if (rc) {
+		TSM_ERROR(empty_session, rc, "dsmSetUp");
+		dsmCleanUp(mt_flag);
+		free(empty_session);
+		return DSM_RC_UNSUCCESSFUL;
+	}
+	free(empty_session);
+	return DSM_RC_SUCCESSFUL;
+}
+
+void tsm_cleanup(const dsBool_t mt_flag)
+{
+	/* The dsmCleanUp function call should be called after dsmTerminate.
+	   You cannot make any other calls after you call dsmCleanUp. */
+	dsmCleanUp(mt_flag);
+}
+
+dsInt16_t tsm_connect(login_t *login, session_t *session)
 {
 	dsmInitExIn_t init_in;
 	dsmInitExOut_t init_out;
@@ -435,10 +553,10 @@ dsInt16_t tsm_init(login_t *login)
 	init_in.userPasswordP    = NULL; /* Administrative password. */
 	init_in.appVersionP      = &appapi_ver;
 
-	rc = dsmInitEx(&handle, &init_in, &init_out);
-	TSM_TRACE(rc, "dsmInitEx");
+	rc = dsmInitEx(&(session->handle), &init_in, &init_out);
+	TSM_TRACE(session, rc,  "dsmInitEx");
 	if (rc) {
-		TSM_ERROR(rc, "dsmInitEx");
+		TSM_ERROR(session, rc, "dsmInitEx");
 		return rc;
 	}
 
@@ -454,18 +572,18 @@ dsInt16_t tsm_init(login_t *login)
 	strcpy(reg_fs_data.fsAttr.unixFSAttr.fsInfo, "fsinfo");
 	reg_fs_data.fsAttr.unixFSAttr.fsInfoLength = strlen("fsinfo");
 
-	rc = dsmRegisterFS(handle, &reg_fs_data);
-	TSM_TRACE(rc, "dsmRegisterFS");
+	rc = dsmRegisterFS(session->handle, &reg_fs_data);
+	TSM_TRACE(session, rc,  "dsmRegisterFS");
 	if (rc == DSM_RC_FS_ALREADY_REGED || rc == DSM_RC_OK)
 		return DSM_RC_OK;
 
-	TSM_ERROR(rc, "dsmRegisterFS");
+	TSM_ERROR(session, rc, "dsmRegisterFS");
 	return rc;
 }
 
-void tsm_quit()
+void tsm_disconnect(session_t *session)
 {
-	dsmTerminate(handle);
+	dsmTerminate(session->handle);
 }
 
 /**
@@ -505,14 +623,14 @@ dsmApiVersionEx get_libapi_ver()
 	return libapi_ver;
 }
 
-dsInt16_t tsm_query_session_info()
+dsInt16_t tsm_query_session(session_t *session)
 {
 	optStruct dsmOpt;
 	dsInt16_t rc;
-	rc = dsmQuerySessOptions(handle, &dsmOpt);
-	TSM_TRACE(rc, "dsmQuerySessOptions");
+	rc = dsmQuerySessOptions(session->handle, &dsmOpt);
+	TSM_TRACE(session, rc,  "dsmQuerySessOptions");
 	if (rc) {
-		TSM_ERROR(rc, "dsmQuerySessOptions");
+		TSM_ERROR(session, rc, "dsmQuerySessOptions");
 		return rc;
 	}
 
@@ -534,16 +652,16 @@ dsInt16_t tsm_query_session_info()
 	ApiSessInfo dsmSessInfo;
 	memset(&dsmSessInfo, 0, sizeof(ApiSessInfo));
 
-	rc = dsmQuerySessInfo(handle, &dsmSessInfo);
-	TSM_TRACE(rc, "dsmQuerySessInfo");
+	rc = dsmQuerySessInfo(session->handle, &dsmSessInfo);
+	TSM_TRACE(session, rc,  "dsmQuerySessInfo");
 	if (rc) {
-		TSM_ERROR(rc, "dsmQuerySessInfo");
+		TSM_ERROR(session, rc, "dsmQuerySessInfo");
 		return rc;
 	}
-
+#if 0
 	max_obj_per_txn = dsmSessInfo.maxObjPerTxn;
 	max_bytes_per_txn = dsmSessInfo.maxBytesPerTxn;
-
+#endif
 	CT_INFO("\n"
 		 "Server's ver.rel.lev       : %d.%d.%d.%d\n"
 		 "ArchiveRetentionProtection : %s\n",
@@ -571,7 +689,7 @@ dsInt16_t tsm_query_session_info()
 
 	if (libapi_ver < appapi_ver) {
 		rc = DSM_RC_UNSUCCESSFUL;
-		TSM_ERROR(rc, "The TSM API library is lower than the application version\n"
+		TSM_ERROR(session, rc, "The TSM API library is lower than the application version\n"
 			  "Install the current library version.");
 	}
 
@@ -584,7 +702,9 @@ dsInt16_t tsm_query_session_info()
 	return rc;
 }
 
-dsInt16_t tsm_query_hl_ll(const char *fs, const char *hl, const char *ll, const char *desc, dsBool_t display)
+dsInt16_t tsm_query_hl_ll(const char *fs, const char *hl, const char *ll,
+			  const char *desc, dsBool_t display,
+			  session_t *session)
 {
 	qryArchiveData qry_ar_data;
 	dsmObjName obj_name;
@@ -617,10 +737,10 @@ dsInt16_t tsm_query_hl_ll(const char *fs, const char *hl, const char *ll, const 
 		 qry_ar_data.owner,
 		 qry_ar_data.descr);
 
-	rc = dsmBeginQuery(handle, qtArchive, &qry_ar_data);
-	TSM_TRACE(rc, "dsmBeginQuery");
+	rc = dsmBeginQuery(session->handle, qtArchive, &qry_ar_data);
+	TSM_TRACE(session, rc,  "dsmBeginQuery");
 	if (rc) {
-		TSM_ERROR(rc, "dsmBeginQuery");
+		TSM_ERROR(session, rc, "dsmBeginQuery");
 		goto cleanup;
 	}
 
@@ -634,8 +754,8 @@ dsInt16_t tsm_query_hl_ll(const char *fs, const char *hl, const char *ll, const 
 	dsBool_t done = bFalse;
 	unsigned long n = 0;
 	while (!done) {
-		rc = dsmGetNextQObj(handle, &data_blk);
-		TSM_TRACE(rc, "dsmGetNextQObj");
+		rc = dsmGetNextQObj(session->handle, &data_blk);
+		TSM_TRACE(session, rc,  "dsmGetNextQObj");
 
 		if (((rc == DSM_RC_OK) || (rc == DSM_RC_MORE_DATA) || (rc == DSM_RC_FINISHED))
 		    && data_blk.numBytes) {
@@ -645,7 +765,8 @@ dsInt16_t tsm_query_hl_ll(const char *fs, const char *hl, const char *ll, const 
 			if (display)	/* If query is only for printing, we are not filling the query array. */
 				tsm_print_query_node(&qry_resp_ar_data, ++n);
 			else {
-				rc = add_query(&qry_resp_ar_data, use_latest);
+				rc = insert_query(&qry_resp_ar_data, &session->qarray,
+						  session->overwrite_older);
 				if (rc) {
 					CT_ERROR(0, "add_query");
 					goto cleanup;
@@ -659,13 +780,13 @@ dsInt16_t tsm_query_hl_ll(const char *fs, const char *hl, const char *ll, const 
 			if (rc == DSM_RC_ABORT_NO_MATCH)
 				CT_MESSAGE("query has no match");
 			else if (rc != DSM_RC_FINISHED)
-				TSM_ERROR(rc, "dsmGetNextQObj");
+				TSM_ERROR(session, rc, "dsmGetNextQObj");
 		}
 	}
 
-	rc = dsmEndQuery(handle);
+	rc = dsmEndQuery(session->handle);
 	if (rc)  {
-		TSM_ERROR(rc, "dsmEndQuery");
+		TSM_ERROR(session, rc, "dsmEndQuery");
 		goto cleanup;
 	}
 
@@ -730,34 +851,35 @@ static dsInt16_t obj_attr_prepare(ObjAttr *obj_attr,
 	return DSM_RC_SUCCESSFUL;
 }
 
-static dsInt16_t tsm_del_obj(const qryRespArchiveData *qry_resp_ar_data)
+static dsInt16_t tsm_del_obj(const qryRespArchiveData *qry_resp_ar_data,
+			     session_t *session)
 {
 	dsmDelInfo del_info;
 	dsInt16_t rc;
 	dsUint16_t reason;
 
-	rc = dsmBeginTxn(handle);
-	TSM_TRACE(rc, "dsmBeginTxn");
+	rc = dsmBeginTxn(session->handle);
+	TSM_TRACE(session, rc,  "dsmBeginTxn");
 	if (rc != DSM_RC_SUCCESSFUL) {
-		TSM_ERROR(rc, "dsmBeginTxn");
+		TSM_ERROR(session, rc, "dsmBeginTxn");
 		return rc;
 	}
 
 	del_info.archInfo.stVersion = delArchVersion;
 	del_info.archInfo.objId = qry_resp_ar_data->objId;
 
-	rc = dsmDeleteObj(handle, dtArchive, del_info);
-	TSM_TRACE(rc, "dsmDeleteObj");
+	rc = dsmDeleteObj(session->handle, dtArchive, del_info);
+	TSM_TRACE(session, rc,  "dsmDeleteObj");
 	if (rc != DSM_RC_SUCCESSFUL) {
-		TSM_ERROR(rc, "dsmDeleteObj");
-		dsmEndTxn(handle, DSM_VOTE_COMMIT, &reason);
+		TSM_ERROR(session, rc, "dsmDeleteObj");
+		dsmEndTxn(session->handle, DSM_VOTE_COMMIT, &reason);
 		return rc;
 	}
 
-	rc = dsmEndTxn(handle, DSM_VOTE_COMMIT, &reason);
-	TSM_TRACE(rc, "dsmEndTxn");
+	rc = dsmEndTxn(session->handle, DSM_VOTE_COMMIT, &reason);
+	TSM_TRACE(session, rc,  "dsmEndTxn");
 	if (rc != DSM_RC_SUCCESSFUL) {
-		TSM_ERROR(rc, "dsmEndTxn");
+		TSM_ERROR(session, rc, "dsmEndTxn");
 		return rc;
 	}
 
@@ -765,29 +887,29 @@ static dsInt16_t tsm_del_obj(const qryRespArchiveData *qry_resp_ar_data)
 }
 
 static dsInt16_t tsm_delete_hl_ll(const char *fs, const char *hl,
-				  const char *ll)
+				  const char *ll, session_t *session)
 {
 	dsInt16_t rc;
 
-	rc = init_qarray();
-	if (rc != DSM_RC_SUCCESSFUL)
+	rc = init_qarray(&(session->qarray));
+	if (rc)
 		return rc;
 
-	rc = tsm_query_hl_ll(fs, hl, ll, NULL, bFalse);
-	if (rc != DSM_RC_SUCCESSFUL)
+	rc = tsm_query_hl_ll(fs, hl, ll, NULL, bFalse, session);
+	if (rc)
 		goto cleanup;
 
 	qryRespArchiveData query_data;
 
-	for (unsigned long n = 0; n < qarray_size(); n++) {
-		rc = get_query(&query_data, n);
+	for (unsigned long n = 0; n < qarray_size(session->qarray); n++) {
+		rc = get_query(&query_data, session->qarray, n);
 		CT_INFO("get_query: %lu, rc: %d", n, rc);
 		if (rc != DSM_RC_SUCCESSFUL) {
 			errno = ENODATA; /* No data available */
 			CT_ERROR(errno, "get_query");
 			goto cleanup;
 		}
-		rc = tsm_del_obj(&query_data);
+		rc = tsm_del_obj(&query_data, session);
 		if (rc != DSM_RC_SUCCESSFUL) {
 			CT_WARN("\ncannot delete obj %s\n"
 				"\t\tfs: %s\n"
@@ -810,11 +932,12 @@ static dsInt16_t tsm_delete_hl_ll(const char *fs, const char *hl,
 	}
 
 cleanup:
-	destroy_qarray();
+	destroy_qarray(&(session->qarray));
 	return rc;
 }
 
-dsInt16_t tsm_delete_fpath(const char *fs, const char *fpath)
+dsInt16_t tsm_delete_fpath(const char *fs, const char *fpath,
+			   session_t *session)
 {
 	dsInt16_t rc;
 	char hl[DSM_MAX_HL_LENGTH + 1] = {0};
@@ -829,13 +952,13 @@ dsInt16_t tsm_delete_fpath(const char *fs, const char *fpath)
 		CT_ERROR(rc, "extract_hl_ll");
 		return rc;
 	}
-	rc = tsm_delete_hl_ll(fs, hl, ll);
+	rc = tsm_delete_hl_ll(fs, hl, ll, session);
 
 	return rc;
 }
 
 dsInt16_t tsm_query_fpath(const char *fs, const char *fpath, const char *desc,
-			  dsBool_t display)
+			  dsBool_t display, session_t *session)
 {
 	dsInt16_t rc;
 	char hl[DSM_MAX_HL_LENGTH + 1] = {0};
@@ -850,14 +973,14 @@ dsInt16_t tsm_query_fpath(const char *fs, const char *fpath, const char *desc,
 		CT_ERROR(rc, "extract_hl_ll");
 		return rc;
 	}
-	rc = tsm_query_hl_ll(fs, hl, ll, desc, display);
+	rc = tsm_query_hl_ll(fs, hl, ll, desc, display, session);
 
 	return rc;
 }
 
 static dsInt16_t tsm_retrieve_generic(const char *fs, const char *hl,
 				      const char *ll, int fd,
-				      const char *desc)
+				      const char *desc, session_t *session)
 {
 	dsInt16_t rc;
 	dsInt16_t rc_minor = 0;
@@ -865,17 +988,17 @@ static dsInt16_t tsm_retrieve_generic(const char *fs, const char *hl,
 
 	get_list.objId = NULL;
 
-	rc = init_qarray();
-	if (rc != DSM_RC_SUCCESSFUL)
-		goto cleanup;
+	rc = init_qarray(&session->qarray);
+	if (rc)
+		return rc;
 
-	rc = tsm_query_hl_ll(fs, hl, ll, desc, bFalse);
+	rc = tsm_query_hl_ll(fs, hl, ll, desc, bFalse, session);
 	if (rc != DSM_RC_SUCCESSFUL)
 		goto cleanup;
 
 	/* Sort query replies to ensure that the data are read from the server in the most efficient order.
 	   At least this is written on page Chapter 3. API design recommendations and considerations 57. */
-	sort_qarray();
+	sort_qarray(&session->qarray);
 
 	/* TODO: Implement later also partialObjData handling. See page 56.*/
 	get_list.stVersion = dsmGetListVersion; /* dsmGetListVersion: Not using Partial Obj data,
@@ -887,8 +1010,8 @@ static dsInt16_t tsm_retrieve_generic(const char *fs, const char *hl,
 	   the query replies in chunks of maximum size DSM_MAX_GET_OBJ and call
 	   dsmBeginGetData on each chunk. */
 	unsigned long c_begin = 0;
-	unsigned long c_end = MIN(qarray_size(), DSM_MAX_GET_OBJ) - 1;
-	unsigned int c_total = ceil((double)qarray_size() / (double)DSM_MAX_GET_OBJ);
+	unsigned long c_end = MIN(qarray_size(session->qarray), DSM_MAX_GET_OBJ) - 1;
+	unsigned int c_total = ceil((double)qarray_size(session->qarray) / (double)DSM_MAX_GET_OBJ);
 	unsigned int c_cur = 0;
 	unsigned long num_objs;
 	qryRespArchiveData query_data;
@@ -907,30 +1030,30 @@ static dsInt16_t tsm_retrieve_generic(const char *fs, const char *hl,
 		}
 		for (unsigned long c_iter = c_begin; c_iter <= c_end; c_iter++) {
 
-			rc = get_query(&query_data, c_iter);
+			rc = get_query(&query_data, session->qarray, c_iter);
 			CT_INFO("get_query: %lu, rc: %d", c_iter, rc);
 			if (rc != DSM_RC_SUCCESSFUL) {
 				errno = ENODATA; /* No data available */
 				CT_ERROR(errno, "get_query");
 				goto cleanup;
-			} else if (qarray_size() == 0) {
+			} else if (qarray_size(session->qarray) == 0) {
 				CT_INFO("get_query has no match");
 				goto cleanup;
 			}
 			get_list.objId[i++] = query_data.objId;
 		}
 
-		rc = dsmBeginGetData(handle, bTrue /* mountWait */, gtArchive, &get_list);
-		TSM_TRACE(rc, "dsmBeginGetData");
+		rc = dsmBeginGetData(session->handle, bTrue /* mountWait */, gtArchive, &get_list);
+		TSM_TRACE(session, rc,  "dsmBeginGetData");
 		if (rc) {
-			TSM_ERROR(rc, "dsmBeginGetData");
+			TSM_ERROR(session, rc, "dsmBeginGetData");
 			goto cleanup;
 		}
 
 		obj_info_t obj_info;
 		for (unsigned long c_iter = c_begin; c_iter <= c_end; c_iter++) {
 
-			rc = get_query(&query_data, c_iter);
+			rc = get_query(&query_data, session->qarray, c_iter);
 			CT_INFO("get_query: %lu, rc: %d", c_iter, rc);
 			if (rc != DSM_RC_SUCCESSFUL) {
 				rc_minor = ENODATA; /* No data available */
@@ -966,7 +1089,7 @@ static dsInt16_t tsm_retrieve_generic(const char *fs, const char *hl,
 
 			switch (query_data.objName.objType) {
 			case DSM_OBJ_FILE: {
-				rc_minor = retrieve_obj(&query_data, &obj_info, fd);
+				rc_minor = retrieve_obj(&query_data, &obj_info, fd, session);
 				CT_INFO("retrieve_obj, rc: %d\n", rc_minor);
 				if (rc_minor != DSM_RC_SUCCESSFUL) {
 					CT_ERROR(0, "retrieve_obj");
@@ -1000,16 +1123,16 @@ static dsInt16_t tsm_retrieve_generic(const char *fs, const char *hl,
 		} /* End-for iterate objid's. */
 cleanup_getdata:
 		/* There are no return codes that are specific to this call. */
-		rc = dsmEndGetData(handle);
-		TSM_TRACE(rc, "dsmEndGetData");
+		rc = dsmEndGetData(session->handle);
+		TSM_TRACE(session, rc,  "dsmEndGetData");
 		if (rc_minor)
 			break;
 
 		c_cur++;
 		c_begin = c_end + 1;
 		/* Process last chunk and size not a multiple of DSM_MAX_GET_OBJ.*/
-		c_end = (c_cur == c_total - 1 && qarray_size() % DSM_MAX_GET_OBJ != 0) ?
-			c_begin + (qarray_size() % DSM_MAX_GET_OBJ) - 1 :
+		c_end = (c_cur == c_total - 1 && qarray_size(session->qarray) % DSM_MAX_GET_OBJ != 0) ?
+			c_begin + (qarray_size(session->qarray) % DSM_MAX_GET_OBJ) - 1 :
 			c_begin + DSM_MAX_GET_OBJ - 1; /* Process not last chunk. */
 	} while (c_cur < c_total);
 
@@ -1017,13 +1140,13 @@ cleanup:
 	if (get_list.objId)
 		free(get_list.objId);
 
-	destroy_qarray();
+	destroy_qarray(&session->qarray);
 
 	return (rc_minor == 0 ? rc : rc_minor);
 }
 
 dsInt16_t tsm_retrieve_fpath(const char *fs, const char *fpath,
-			     const char *desc, int fd)
+			     const char *desc, int fd, session_t *session)
 {
 	dsInt16_t rc;
 	char hl[DSM_MAX_HL_LENGTH + 1] = {0};
@@ -1034,12 +1157,12 @@ dsInt16_t tsm_retrieve_fpath(const char *fs, const char *fpath,
 		CT_ERROR(rc, "extract_hl_ll");
 		return rc;
 	}
-	rc = tsm_retrieve_generic(fs, hl, ll, fd, desc);
+	rc = tsm_retrieve_generic(fs, hl, ll, fd, desc, session);
 
 	return rc;
 }
 
-static dsInt16_t tsm_archive_generic(archive_info_t *archive_info, int fd)
+static dsInt16_t tsm_archive_generic(archive_info_t *archive_info, int fd, session_t *session)
 {
 	dsInt16_t rc;
 	dsInt16_t rc_minor = 0;
@@ -1069,18 +1192,18 @@ static dsInt16_t tsm_archive_generic(archive_info_t *archive_info, int fd)
 	}
 
 	/* Start transaction. */
-	rc = dsmBeginTxn(handle);
-	TSM_TRACE(rc, "dsmBeginTxn");
+	rc = dsmBeginTxn(session->handle);
+	TSM_TRACE(session, rc,  "dsmBeginTxn");
 	if (rc) {
-		TSM_ERROR(rc, "dsmBeginTxn");
+		TSM_ERROR(session, rc, "dsmBeginTxn");
 		goto cleanup;
 	}
 
 	mc_bind_key.stVersion = mcBindKeyVersion;
-	rc = dsmBindMC(handle, &(archive_info->obj_name), stArchive, &mc_bind_key);
-	TSM_TRACE(rc, "dsmBindMC");
+	rc = dsmBindMC(session->handle, &(archive_info->obj_name), stArchive, &mc_bind_key);
+	TSM_TRACE(session, rc,  "dsmBindMC");
 	if (rc) {
-		TSM_ERROR(rc, "dsmBindMC");
+		TSM_ERROR(session, rc, "dsmBindMC");
 		goto cleanup_transaction;
 	}
 
@@ -1095,11 +1218,11 @@ static dsInt16_t tsm_archive_generic(archive_info_t *archive_info, int fd)
 		goto cleanup_transaction;
 
 	/* Start sending object. */
-	rc = dsmSendObj(handle, stArchive, &arch_data,
+	rc = dsmSendObj(session->handle, stArchive, &arch_data,
 			&(archive_info->obj_name), &obj_attr, NULL);
-	TSM_TRACE(rc, "dsmSendObj");
+	TSM_TRACE(session, rc,  "dsmSendObj");
 	if (rc) {
-		TSM_ERROR(rc, "dsmSendObj");
+		TSM_ERROR(session, rc, "dsmSendObj");
 		goto cleanup_transaction;
 	}
 
@@ -1113,6 +1236,11 @@ static dsInt16_t tsm_archive_generic(archive_info_t *archive_info, int fd)
 		data_blk.stVersion = DataBlkVersion;
 		data_blk.numBytes = 0;
 
+		#ifdef HAVE_LUSTRE
+			off64_t b_total = to_off64_t(archive_info->obj_info.size);
+			off64_t b_done = 0;
+		#endif
+
 		while (!done) {
 			obj_size_read = read(fd, data_blk.bufferPtr, TSM_BUF_LENGTH);
 			if (obj_size_read < 0) {
@@ -1125,16 +1253,26 @@ static dsInt16_t tsm_archive_generic(archive_info_t *archive_info, int fd)
 				total_read += obj_size_read;
 				data_blk.bufferLen = obj_size_read;
 
-				rc = dsmSendData(handle, &data_blk);
-				TSM_TRACE(rc, "dsmSendData");
+				rc = dsmSendData(session->handle, &data_blk);
+				TSM_TRACE(session, rc,  "dsmSendData");
 				if (rc) {
-					TSM_ERROR(rc, "dsmSendData");
+					TSM_ERROR(session, rc, "dsmSendData");
 					goto cleanup_transaction;
 				}
 				CT_TRACE("data_blk.numBytes: %zu, current_read: %zu, total_read: %zu, obj_size: %zu",
 					 data_blk.numBytes, obj_size_read, total_read, to_off64_t(archive_info->obj_info.size));
 				data_blk.numBytes = 0;
+
+				#ifdef HAVE_LUSTRE
+					b_done += obj_size_read;
+					rc = ct_hsm_progress(session, b_done, b_total, obj_size_read);
+					if(rc){
+						CT_ERROR(rc, " |%2i| Can not propagate progress to hsm api.", session->id);
+						goto cleanup_transaction;
+					}
+				#endif
 			}
+
 		}
 		/* File obj. was archived, verify that the number of bytes read
 		   from file descriptor matches the number of bytes we
@@ -1144,10 +1282,10 @@ static dsInt16_t tsm_archive_generic(archive_info_t *archive_info, int fd)
 	} else /* dsmSendObj was successful and we archived a directory obj. */
 		success = bTrue;
 
-	rc = dsmEndSendObj(handle);
-	TSM_TRACE(rc, "dsmEndSendObj");
+	rc = dsmEndSendObj(session->handle);
+	TSM_TRACE(session, rc,  "dsmEndSendObj");
 	if (rc) {
-		TSM_ERROR(rc, "dsmEndSendObj");
+		TSM_ERROR(session, rc, "dsmEndSendObj");
 		success = bFalse;
 	}
 
@@ -1155,11 +1293,11 @@ cleanup_transaction:
 	/* Commit transaction (DSM_VOTE_COMMIT) on success, otherwise
 	   roll back current transaction (DSM_VOTE_ABORT). */
 	vote_txn = success == bTrue ? DSM_VOTE_COMMIT : DSM_VOTE_ABORT;
-	rc = dsmEndTxn(handle, vote_txn, &err_reason);
-	TSM_TRACE(rc, "dsmEndTxn");
+	rc = dsmEndTxn(session->handle, vote_txn, &err_reason);
+	TSM_TRACE(session, rc,  "dsmEndTxn");
 	if (rc || err_reason) {
-		TSM_ERROR(rc, "dsmEndTxn");
-		TSM_ERROR(err_reason, "dsmEndTxn reason");
+		TSM_ERROR(session, rc, "dsmEndTxn");
+		TSM_ERROR(session, err_reason, "dsmEndTxn reason");
 		success = bFalse;
 	}
 
@@ -1273,7 +1411,7 @@ cleanup:
 	return rc;
 }
 
-static dsInt16_t tsm_archive_recursive(archive_info_t *archive_info)
+static dsInt16_t tsm_archive_recursive(archive_info_t *archive_info, session_t *session)
 {
 	int rc;
         DIR *dir;
@@ -1348,7 +1486,7 @@ static dsInt16_t tsm_archive_recursive(archive_info_t *archive_info)
 					archive_info->obj_name.ll);
 				break;
 			}
-			rc = tsm_archive_generic(archive_info, -1);
+			rc = tsm_archive_generic(archive_info, -1, session);
 			if (rc)
 				CT_WARN("tsm_archive_generic failed: %s", archive_info->fpath);
 			break;
@@ -1370,14 +1508,14 @@ static dsInt16_t tsm_archive_recursive(archive_info_t *archive_info)
 					archive_info->obj_name.ll);
 				break;
 			}
-			rc = tsm_archive_generic(archive_info, -1);
+			rc = tsm_archive_generic(archive_info, -1, session);
 			if (rc) {
 				CT_WARN("tsm_archive_generic failed: %s", archive_info->fpath);
 				break;
 			}
 			if (do_recursive) {
 				snprintf(archive_info->fpath, PATH_MAX, "%s/%s", dpath, entry->d_name);
-				rc = tsm_archive_recursive(archive_info);
+				rc = tsm_archive_recursive(archive_info, session);
 			}
 			break;
 		}
@@ -1408,10 +1546,13 @@ static dsInt16_t tsm_archive_recursive(archive_info_t *archive_info)
  * @param[in] fd    File descriptor.
  * @param[in] lu_fid Lustre FID information is set in
  *                   archive_info->obj_info.lu_fid.
+ * @param[in] session
+ *
  * @return DSM_RC_SUCCESSFUL on success otherwise DSM_RC_UNSUCCESSFUL.
  */
 dsInt16_t tsm_archive_fpath(const char *fs, const char *fpath,
-			    const char *desc, int fd, const lu_fid_t *lu_fid)
+			    const char *desc, int fd, const lu_fid_t *lu_fid,
+			    session_t *session)
 {
 	int rc;
 	archive_info_t archive_info;
@@ -1434,9 +1575,11 @@ dsInt16_t tsm_archive_fpath(const char *fs, const char *fpath,
 	   inside D. If do_recursive is bTrue, archive recursively
 	   regular files and directories inside D. */
 	if (archive_info.obj_name.objType == DSM_OBJ_DIRECTORY)
-		return tsm_archive_recursive(&archive_info); /* Archive (recursively) inside D. */
+		/* Archive (recursively) inside D. */
+		return tsm_archive_recursive(&archive_info, session);
 	else
-		return tsm_archive_generic(&archive_info, fd); /* Archive regular file. */
+		/* Archive regular file. */
+		return tsm_archive_generic(&archive_info, fd, session);
 
 	return rc;
 }

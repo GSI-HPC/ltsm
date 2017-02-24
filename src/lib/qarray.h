@@ -23,12 +23,14 @@
 
 #define INITIAL_CAPACITY 32
 
-dsInt16_t init_qarray();
-dsInt16_t add_query(const qryRespArchiveData *query_data, const dsmBool_t use_latest);
-dsInt16_t get_query(qryRespArchiveData *query_data, const unsigned long n);
-unsigned long qarray_size();
-void sort_qarray();
+dsInt16_t init_qarray(qarray_t **qarray);
+dsInt16_t insert_query(qryRespArchiveData *query_data, qarray_t **qarray,
+		       const dsmBool_t overwrite_oldest);
+dsInt16_t get_query(qryRespArchiveData *query_data, const qarray_t *qarray,
+		    const unsigned long n);
+unsigned long qarray_size(const qarray_t *qarray);
+void sort_qarray(qarray_t **qarray);
 int cmp_restore_order(const void *a, const void *b);
-void destroy_qarray();
+void destroy_qarray(qarray_t **qarray);
 
 #endif /* QARRAY_H */
