@@ -29,12 +29,14 @@
 #include <signal.h>
 #include <stdarg.h>
 #include <pthread.h>
+#include <stdint.h>
 #include <linux/limits.h>
 #include <sys/syscall.h>
 #include <sys/time.h>
 #include <lustre/lustre_idl.h>
 #include <lustre/lustreapi.h>
 #include "tsmapi.h"
+#include "queue.h"
 
 struct options {
 	int o_daemonize;
@@ -50,6 +52,8 @@ struct options {
 	char o_node[DSM_MAX_NODE_LENGTH + 1];
 	char o_owner[DSM_MAX_OWNER_LENGTH + 1];
 	char o_password[DSM_MAX_VERIFIER_LENGTH + 1];
+	char o_fsname[DSM_MAX_FSNAME_LENGTH + 1];
+	char o_fstype[DSM_MAX_FSTYPE_LENGTH + 1];
 };
 
 struct options opt = {
@@ -58,7 +62,16 @@ struct options opt = {
 	.o_node = {0},
 	.o_owner = {0},
 	.o_password = {0},
+	.o_fsname = {0},
+	.o_fstype = {0},
 };
+
+static uint16_t N_THREADS = 2;
+static pthread_t **thread = NULL;
+static pthread_mutex_t queue_mutex;
+static pthread_cond_t queue_cond;
+static session_t **session = NULL;
+static queue_t queue;
 
 static int err_major;
 static int err_minor;
@@ -207,33 +220,29 @@ static int fid_realpath(const char *mnt, const lustre_fid *fid,
 	return rc;
 }
 
-static int ct_finish(struct hsm_copyaction_private **phcp,
-		     const struct hsm_action_item *hai, int hp_flags,
-		     int ct_rc, char *fpath)
+static int ct_finish(session_t *session, int ct_rc, char *fpath)
 {
-	struct hsm_copyaction_private *hcp;
 	int rc;
 
 	CT_TRACE("Action completed, notifying coordinator "
-		 "cookie=%#jx, FID="DFID", hp_flags=%d err=%d",
-		 (uintmax_t)hai->hai_cookie, PFID(&hai->hai_fid),
-		 hp_flags, -ct_rc);
+		 "cookie=%#jx, FID="DFID", err=%d",
+		 (uintmax_t)session->hai->hai_cookie, PFID(&session->hai->hai_fid),
+		 -ct_rc);
 
-	if (phcp == NULL || *phcp == NULL) {
-		rc = llapi_hsm_action_begin(&hcp, ctdata, hai, -1, 0, true);
+	if (session->hcp == NULL) {
+		rc = llapi_hsm_action_begin(&session->hcp, ctdata, session->hai,
+					    -1, 0, true);
 		if (rc < 0) {
 			CT_ERROR(rc, "llapi_hsm_action_begin() on '%s' failed",
 				 fpath);
 			return rc;
 		}
-		phcp = &hcp;
 	}
-
-	rc = llapi_hsm_action_end(phcp, &hai->hai_extent, hp_flags, abs(ct_rc));
+	rc = llapi_hsm_action_end(&session->hcp, &session->hai->hai_extent, 0, abs(ct_rc));
 	if (rc == -ECANCELED)
 		CT_ERROR(rc, "completed action on '%s' has been canceled: "
 			 "cookie=%#jx, FID="DFID, fpath,
-			 (uintmax_t)hai->hai_cookie, PFID(&hai->hai_fid));
+			 (uintmax_t)session->hai->hai_cookie, PFID(&session->hai->hai_fid));
 	else if (rc < 0)
 		CT_ERROR(rc, "llapi_hsm_action_end() on '%s' failed", fpath);
 	else
@@ -243,24 +252,21 @@ static int ct_finish(struct hsm_copyaction_private **phcp,
 	return rc;
 }
 
-static int ct_archive(const struct hsm_action_item *hai, const long hal_flags)
+static int ct_archive(session_t *session)
 {
-	struct hsm_copyaction_private *hcp = NULL;
 	char fpath[PATH_MAX + 1] = {0};
 	int rc;
-	int rcf = 0;
-	int hp_flags = 0;
 	int src_fd = -1;
 
-	rc = fid_realpath(opt.o_mnt, &hai->hai_fid, fpath, sizeof(fpath));
+	rc = fid_realpath(opt.o_mnt, &session->hai->hai_fid, fpath, sizeof(fpath));
 	if (rc < 0) {
-		CT_ERROR(rc, "fid_realpath()");
+		CT_ERROR(rc, "fid_realpath failed");
 		goto cleanup;
 	}
 
-	rc = llapi_hsm_action_begin(&hcp, ctdata, hai, -1, 0, false);
+	rc = llapi_hsm_action_begin(&session->hcp, ctdata, session->hai, -1, 0, false);
 	if (rc < 0) {
-		CT_ERROR(rc, "llapi_hsm_action_begin() on '%s' failed", fpath);
+		CT_ERROR(rc, "llapi_hsm_action_begin on '%s' failed", fpath);
 		goto cleanup;
 	}
 
@@ -271,7 +277,7 @@ static int ct_archive(const struct hsm_action_item *hai, const long hal_flags)
 		goto cleanup;
 	}
 
-	src_fd = llapi_hsm_action_get_fd(hcp);
+	src_fd = llapi_hsm_action_get_fd(session->hcp);
 	if (src_fd < 0) {
 		rc = src_fd;
 		CT_ERROR(rc, "cannot open '%s' for read", fpath);
@@ -279,60 +285,59 @@ static int ct_archive(const struct hsm_action_item *hai, const long hal_flags)
 	}
 
 	rc = tsm_archive_fpath(FSNAME, fpath, NULL, -1,
-			       (const void *)&hai->hai_fid);
+			       (const void *)&session->hai->hai_fid, session);
 	if (rc != DSM_RC_SUCCESSFUL) {
 		CT_ERROR(rc, "tsm_archive_fpath_fid on '%s' failed", fpath);
 		goto cleanup;
 	}
 
-	CT_TRACE("data archiving for '%s' to TSM storage done", fpath);
+	CT_TRACE("archiving '%s' to TSM storage done", fpath);
 
 cleanup:
 	if (!(src_fd < 0))
 		close(src_fd);
 
-	rc = ct_finish(&hcp, hai, hp_flags, rcf, fpath);
+	rc = ct_finish(session, rc, fpath);
 
 	return rc;
 }
 
-static int ct_restore(const struct hsm_action_item *hai, const long hal_flags)
+static int ct_restore(session_t *session)
 {
-	struct hsm_copyaction_private *hcp = NULL;
 	int rc;
 	int dst_fd = -1;
 	int mdt_index = -1;
 	int open_flags = 0;
-	int hp_flags = 0;
 	char fpath[PATH_MAX + 1] = {0};
 	struct lu_fid dfid;
 
-	rc = fid_realpath(opt.o_mnt, &hai->hai_fid, fpath, sizeof(fpath));
+	rc = fid_realpath(opt.o_mnt, &session->hai->hai_fid, fpath,
+			  sizeof(fpath));
 	if (rc < 0) {
-		CT_ERROR(rc, "fid_realpath()");
+		CT_ERROR(rc, "fid_realpath failed");
 		return rc;
 	}
 
-	rc = llapi_get_mdt_index_by_fid(opt.o_mnt_fd, &hai->hai_fid,
+	rc = llapi_get_mdt_index_by_fid(opt.o_mnt_fd, &session->hai->hai_fid,
 					&mdt_index);
 	if (rc < 0) {
 		CT_ERROR(rc, "cannot get mdt index "DFID"",
-			 PFID(&hai->hai_fid));
+			 PFID(&session->hai->hai_fid));
 		return rc;
 	}
 
-	rc = llapi_hsm_action_begin(&hcp, ctdata, hai, mdt_index, open_flags,
+	rc = llapi_hsm_action_begin(&session->hcp, ctdata, session->hai, mdt_index, open_flags,
 				    false);
 	if (rc < 0) {
-		CT_ERROR(rc, "llapi_hsm_action_begin() on '%s' failed", fpath);
+		CT_ERROR(rc, "llapi_hsm_action_begin on '%s' failed", fpath);
 		return rc;
 	}
 
-	rc = llapi_hsm_action_get_dfid(hcp, &dfid);
+	rc = llapi_hsm_action_get_dfid(session->hcp, &dfid);
 	if (rc < 0) {
 	    CT_ERROR(rc, "restoring "DFID
 		     ", cannot get FID of created volatile file",
-		     PFID(&hai->hai_fid));
+		     PFID(&session->hai->hai_fid));
 	    goto cleanup;
 	}
 
@@ -342,23 +347,22 @@ static int ct_restore(const struct hsm_action_item *hai, const long hal_flags)
 	    goto cleanup;
 	}
 
-	dst_fd = llapi_hsm_action_get_fd(hcp);
+	dst_fd = llapi_hsm_action_get_fd(session->hcp);
 	if (dst_fd < 0) {
 		rc = dst_fd;
 		CT_ERROR(rc, "cannot open '%s' for write", fpath);
 		goto cleanup;
 	}
 
-	rc = tsm_retrieve_fpath(FSNAME, fpath, NULL, dst_fd);
+	rc = tsm_retrieve_fpath(FSNAME, fpath, NULL, dst_fd, session);
 	if (rc != DSM_RC_SUCCESSFUL) {
 		CT_ERROR(rc, "tsm_retrieve_fpath on '%s' failed", fpath);
 		goto cleanup;
 	}
-
 	CT_TRACE("data restore from TSM storage to '%s' done", fpath);
 
 cleanup:
-	rc = ct_finish(&hcp, hai, hp_flags, rc, fpath);
+	rc = ct_finish(session, rc, fpath);
 
 	if (!(dst_fd < 0))
 		close(dst_fd);
@@ -366,19 +370,18 @@ cleanup:
 	return rc;
 }
 
-static int ct_remove(const struct hsm_action_item *hai, const long hal_flags)
+static int ct_remove(session_t *session)
 {
-	struct hsm_copyaction_private *hcp = NULL;
 	char fpath[PATH_MAX + 1] = {0};
 	int rc;
 
-	rc = fid_realpath(opt.o_mnt, &hai->hai_fid, fpath, sizeof(fpath));
+	rc = fid_realpath(opt.o_mnt, &session->hai->hai_fid, fpath, sizeof(fpath));
 	if (rc < 0) {
 		CT_ERROR(rc, "fid_realpath()");
 		goto cleanup;
 	}
 
-	rc = llapi_hsm_action_begin(&hcp, ctdata, hai, -1, 0, false);
+	rc = llapi_hsm_action_begin(&session->hcp, ctdata, session->hai, -1, 0, false);
 	if (rc < 0) {
 		CT_ERROR(rc, "llapi_hsm_action_begin() on '%s' failed", fpath);
 		goto cleanup;
@@ -390,19 +393,19 @@ static int ct_remove(const struct hsm_action_item *hai, const long hal_flags)
 		rc = 0;
 		goto cleanup;
 	}
-	rc = tsm_delete_fpath(FSNAME, fpath);
+	rc = tsm_delete_fpath(FSNAME, fpath, session);
 	if (rc != DSM_RC_SUCCESSFUL) {
 		CT_ERROR(rc, "tsm_delete_fpath on '%s' failed", fpath);
 		goto cleanup;
 	}
 
 cleanup:
-	rc = ct_finish(&hcp, hai, 0, rc, fpath);
+	rc = ct_finish(session, rc, fpath);
 
 	return rc;
 }
 
-static int ct_process_item(struct hsm_action_item *hai, const long hal_flags)
+static int ct_process_item(session_t *session)
 {
 	int rc = 0;
 
@@ -413,10 +416,11 @@ static int ct_process_item(struct hsm_action_item *hai, const long hal_flags)
 		long long recno = -1;
 		int linkno = 0;
 
-		sprintf(fid, DFID, PFID(&hai->hai_fid));
+		sprintf(fid, DFID, PFID(&session->hai->hai_fid));
 		CT_TRACE("'%s' action %s reclen %d, cookie=%#jx",
-			 fid, hsm_copytool_action2name(hai->hai_action),
-			 hai->hai_len, (uintmax_t)hai->hai_cookie);
+			 fid, hsm_copytool_action2name(session->hai->hai_action),
+			 session->hai->hai_len,
+			 (uintmax_t)session->hai->hai_cookie);
 		rc = llapi_fid2path(opt.o_mnt, fid, path,
 				    sizeof(path), &recno, &linkno);
 		if (rc < 0)
@@ -425,93 +429,58 @@ static int ct_process_item(struct hsm_action_item *hai, const long hal_flags)
 			CT_TRACE("processing file '%s'", path);
 	}
 
-	switch (hai->hai_action) {
-	/* set err_major, minor inside these functions */
+	switch (session->hai->hai_action) {
+		/* set err_major, minor inside these functions */
 	case HSMA_ARCHIVE:
-		rc = ct_archive(hai, hal_flags);
+		rc = ct_archive(session);
 		break;
 	case HSMA_RESTORE:
-		rc = ct_restore(hai, hal_flags);
+		rc = ct_restore(session);
 		break;
 	case HSMA_REMOVE:
-		rc = ct_remove(hai, hal_flags);
-		break;
-	case HSMA_CANCEL:
-		CT_TRACE("cancel not implemented for file system '%s'",
-			 opt.o_mnt);
-		/* Don't report progress to coordinator for this cookie:
-		 * the copy function will get ECANCELED when reporting
-		 * progress. */
-		err_minor++;
-		return 0;
+		rc = ct_remove(session);
 		break;
 	default:
 		rc = -EINVAL;
-		CT_ERROR(rc, "unknown action %d, on '%s'", hai->hai_action,
+		CT_ERROR(rc, "unknown action %d, on '%s'", session->hai->hai_action,
 			 opt.o_mnt);
 		err_minor++;
-		ct_finish(NULL, hai, 0, rc, NULL);
+		ct_finish(session, rc, NULL);
 	}
+	free(session->hai);
 
 	return 0;
 }
-
-struct ct_th_data {
-	long hal_flags;
-	struct hsm_action_item *hai;
-};
 
 static void *ct_thread(void *data)
 {
-	struct ct_th_data *cttd = data;
+	session_t *session = data;
 	int rc;
 
-	rc = ct_process_item(cttd->hai, cttd->hal_flags);
+	for (;;) {
+		/* Crticial region, lock. */
+		pthread_mutex_lock(&queue_mutex);
+		while (queue_size(&queue) == 0)
+			pthread_cond_wait(&queue_cond, &queue_mutex);
 
-	free(cttd->hai);
-	free(cttd);
+		rc = queue_dequeue(&queue, (void **)&session->hai);
+		CT_TRACE("dequeue action '%s' cookie=%#jx, FID="DFID"",
+			 hsm_copytool_action2name(session->hai->hai_action),
+			 (uintmax_t)session->hai->hai_cookie,
+			 PFID(&session->hai->hai_fid));
+		if (rc)
+			CT_ERROR(ECANCELED, "dequeue action '%s'"
+				 "cookie=%#jx, FID="DFID" failed",
+				 hsm_copytool_action2name(session->hai->hai_action),
+				 (uintmax_t)session->hai->hai_cookie,
+				 PFID(&session->hai->hai_fid));
+		pthread_mutex_unlock(&queue_mutex);
+		/* Unlock. */
+
+		rc = ct_process_item(session);
+	}
+
 	pthread_exit((void *)(intptr_t)rc);
-}
-
-static int ct_process_item_async(const struct hsm_action_item *hai,
-				 long hal_flags)
-{
-	pthread_attr_t attr;
-	pthread_t thread;
-	struct ct_th_data *data;
-	int rc;
-
-	data = malloc(sizeof(*data));
-	if (data == NULL)
-		return -ENOMEM;
-
-	data->hai = malloc(hai->hai_len);
-	if (data->hai == NULL) {
-		free(data);
-		return -ENOMEM;
-	}
-
-	memcpy(data->hai, hai, hai->hai_len);
-	data->hal_flags = hal_flags;
-
-	rc = pthread_attr_init(&attr);
-	if (rc != 0) {
-		CT_ERROR(rc, "pthread_attr_init failed for '%s' service",
-			 opt.o_mnt);
-		free(data->hai);
-		free(data);
-		return -rc;
-	}
-
-	pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
-
-	rc = pthread_create(&thread, &attr, ct_thread, data);
-	if (rc != 0)
-		CT_ERROR(rc, "cannot create thread for '%s' service",
-			 opt.o_mnt);
-
-	pthread_attr_destroy(&attr);
-	return 0;
 }
 
 static void handler(int signal)
@@ -526,6 +495,8 @@ static void handler(int signal)
 	/* Also remove fifo upon signal as during normal/error exit */
 	if (opt.o_event_fifo != NULL)
 		llapi_hsm_unregister_event_fifo(opt.o_event_fifo);
+
+	/* TODO: Cleanup TSM session */
 	_exit(1);
 }
 
@@ -615,12 +586,38 @@ static int ct_run(void)
 				err_major++;
 				break;
 			}
-			rc = ct_process_item_async(hai, hal->hal_flags);
-			if (rc < 0)
-				CT_ERROR(rc, "'%s' item %d process",
-					 opt.o_mnt, i);
-			if (opt.o_abort_on_error && err_major)
+
+			struct hsm_action_item *work_hai;
+			work_hai = malloc(sizeof(struct hsm_action_item));
+			if (work_hai == NULL) {
+				CT_ERROR(errno, "malloc failed");
 				break;
+			}
+			memcpy(work_hai, hai, sizeof(struct hsm_action_item));
+
+			/* Lock queue to avoid thread access. */
+			pthread_mutex_lock(&queue_mutex);
+
+			/* Insert hsm action into queue. */
+			rc = queue_enqueue(&queue, work_hai);
+			CT_TRACE("enqueue action '%s' cookie=%#jx, FID="DFID"",
+				 hsm_copytool_action2name(work_hai->hai_action),
+				 (uintmax_t)work_hai->hai_cookie,
+				 PFID(&work_hai->hai_fid));
+			if (rc) {
+				CT_ERROR(ECANCELED, "enqueue action '%s'"
+					 "cookie=%#jx, FID="DFID" failed",
+				 hsm_copytool_action2name(work_hai->hai_action),
+				 (uintmax_t)work_hai->hai_cookie,
+				 PFID(&work_hai->hai_fid));
+			}
+
+			/* Free the lock of the queue. */
+			pthread_mutex_unlock(&queue_mutex);
+
+			/* Signal a thread that it should check for new work. */
+			pthread_cond_signal(&queue_cond);
+
 			hai = hai_next(hai);
 		}
 
@@ -635,9 +632,120 @@ static int ct_run(void)
 	return rc;
 }
 
+static int ct_connect_sessions(void)
+{
+	int rc;
+	login_t login;
+	uint16_t n;
+
+	rc = tsm_init(DSM_MULTITHREAD);
+
+	bzero(&login, sizeof(login));
+	login_fill(&login, opt.o_servername,
+		   opt.o_node, opt.o_password,
+		   opt.o_owner, LOGIN_PLATFORM,
+		   FSNAME, FSTYPE); /* TODO: opt.o_fsname, opt.o_fstype */
+
+	session = calloc(N_THREADS, sizeof(session_t *));
+	if (session == NULL) {
+		rc = errno;
+		CT_ERROR(rc, "malloc failed");
+		return rc;
+	}
+
+	/* session = calloc(N_THREADS, sizeof(session_t)); */
+	for (n = 0; n < N_THREADS; n++) {
+		session[n] = calloc(1, sizeof(session_t));
+		if (session[n] == NULL) {
+			rc = errno;
+			CT_ERROR(rc, "malloc failed");
+			goto cleanup;
+		}
+		session[n]->id = n;
+
+		CT_TRACE("tsm_init: session[%d], session[%d]->%d",
+			 n, session[n]->id);
+
+		rc = tsm_connect(&login, session[n]);
+		if (rc) {
+			rc = ECANCELED;
+			CT_ERROR(rc, "tsm_init failed");
+			goto cleanup;
+		}
+		/* Querying session is optional. */
+		rc = tsm_query_session(session[n]);
+		if (rc) {
+			rc = ECANCELED;
+			CT_ERROR(rc, "tsm_query_session failed");
+			goto cleanup;
+		}
+	}
+	return rc;
+
+cleanup:
+	for (uint16_t i = 0; i < n; i++) {
+		if (session[i]) {
+			tsm_disconnect(session[i]);
+			free(session[i]);
+		}
+	}
+	free(session);
+	tsm_cleanup(DSM_MULTITHREAD);
+
+	return rc;
+}
+
+static int ct_start_threads(void)
+{
+	int rc;
+	uint16_t n;
+	pthread_attr_t attr;
+
+	thread = calloc(N_THREADS, sizeof(pthread_t *));
+	if (thread == NULL) {
+		rc = errno;
+		CT_ERROR(rc, "malloc failed");
+		return rc;
+	}
+	for (n = 0; n < N_THREADS; n++) {
+		thread[n] = calloc(1, sizeof(pthread_t));
+		if (thread[n] == NULL) {
+			rc = errno;
+			CT_ERROR(rc, "malloc failed");
+			goto cleanup;
+		}
+	}
+
+	rc = pthread_attr_init(&attr);
+	if (rc != 0) {
+		CT_ERROR(rc, "pthread_attr_init failed");
+		return rc;
+	}
+
+	pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
+
+	for (n = 0; n < N_THREADS; n++) {
+		rc = pthread_create(thread[n], &attr, ct_thread, session[n]);
+		if (rc != 0)
+			CT_ERROR(rc, "cannot create worker thread '%d' for"
+				 "'%s'", n, opt.o_mnt);
+	}
+	pthread_attr_destroy(&attr);
+
+	return rc;
+
+cleanup:
+	for (uint16_t i = 0; i < n; i++) {
+		if (thread[i])
+			free(thread[i]);
+	}
+	free(thread);
+
+	return rc;
+}
+
 static int ct_setup(void)
 {
-	login_t login;
 	int rc;
 
 	llapi_msg_set_level(opt.o_verbose);
@@ -657,46 +765,58 @@ static int ct_setup(void)
 		return rc;
 	}
 
-	memset(&login, 0, sizeof(login));
-	strcpy(login.node, opt.o_node);
-	strcpy(login.password, opt.o_password);
-	strcpy(login.owner, opt.o_owner);
-	strcpy(login.platform, LOGIN_PLATFORM);
-	strcpy(login.fsname, FSNAME);
-	strcpy(login.fstype, FSTYPE);
-	const unsigned short o_servername_len = 1 + strlen(opt.o_servername) + strlen("-se=");
-	if (o_servername_len < MAX_OPTIONS_LENGTH)
-		snprintf(login.options, o_servername_len, "-se=%s", opt.o_servername);
-	else
-		CT_WARN("Option parameter \'-se=%s\' is larger than "
-			"MAX_OPTIONS_LENGTH: %d and is ignored\n",
-			opt.o_servername, MAX_OPTIONS_LENGTH);
+	pthread_mutex_init(&queue_mutex, NULL);
+	pthread_cond_init(&queue_cond, NULL);
+	queue_init(&queue, free);
 
-	rc = tsm_init(&login);
-	if (rc)
-		return -rc;
-	rc = tsm_query_session_info();
-	if (rc)
-		return -rc;
+	/* Create N_THREADS sessions to TSM server. */
+	rc = ct_connect_sessions();
+	if (rc) {
+		rc = ECANCELED;
+		CT_ERROR(rc, "ct_connect_sessions failed");
+		return rc;
+	}
+
+	rc = ct_start_threads();
+	if (rc) {
+		rc = ECANCELED;
+		CT_ERROR(rc, "ct_start_threads failed");
+		return rc;
+	}
 
 	return rc;
 }
 
 static int ct_cleanup(void)
 {
-	int rc = 0;
+	int rc;
+	int rc_minor;
 
 	if (opt.o_mnt_fd >= 0) {
 		rc = close(opt.o_mnt_fd);
 		if (rc < 0) {
 			rc = -errno;
 			CT_ERROR(rc, "cannot close mount point");
-			goto cleanup;
 		}
 	}
+	rc_minor = pthread_mutex_destroy(&queue_mutex);
+	if (rc_minor)
+		CT_ERROR(rc_minor, "pthread_mutex_destroy failed");
+	rc_minor = pthread_cond_destroy(&queue_cond);
+	if (rc_minor)
+		CT_ERROR(rc_minor, "pthread_cond_destroy failed");
 
-cleanup:
-	tsm_quit();
+	for (uint16_t n = 0; n < N_THREADS; n++) {
+		if (session[n]) {
+			tsm_disconnect(session[n]);
+			free(session[n]);
+		}
+		if (thread[n])
+			free(thread[n]);
+	}
+	free(session);
+	free(thread);
+	tsm_cleanup(DSM_MULTITHREAD);
 
 	return rc;
 }
