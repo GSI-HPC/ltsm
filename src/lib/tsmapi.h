@@ -13,12 +13,12 @@
  */
 
 /*
- * Copyright (c) 2016, Thomas Stibor <t.stibor@gsi.de>
+ * Copyright (c) 2016, 2017 Thomas Stibor <t.stibor@gsi.de>
  */
 
-/* Important note: The API can only restore or retrieve objects that were
+/* Important note: The API can only retrieve objects that were
    archived using TSM API calls, that is, data archived with dsmc cannot
-   be retrieved with these TSM API calls and console client ltsmc.
+   be retrieved with these TSM API calls or console client ltsmc.
    Moreover the API doesn't support subdir opperations, that is, hl/ll
    queries must be constructed (in a clever way) with wildcard (*) and
    question mark (?) to match sub directories and files. For more detail c.f.
@@ -41,9 +41,7 @@
 #include "dapint64.h"
 #include "log.h"
 
-#ifndef FSNAME
 #define FSNAME "/"
-#endif
 #define FSTYPE "ltsm"
 #define LOGIN_PLATFORM "GNU/Linux"
 
