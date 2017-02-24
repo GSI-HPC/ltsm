@@ -618,14 +618,6 @@ static int ct_run(void)
 			/* Signal a thread that it should check for new work. */
 			pthread_cond_signal(&queue_cond);
 
-#if 0
-			rc = ct_process_item_async(hai, hal->hal_flags);
-			if (rc < 0)
-				CT_ERROR(rc, "'%s' item %d process",
-					 opt.o_mnt, i);
-			if (opt.o_abort_on_error && err_major)
-				break;
-#endif
 			hai = hai_next(hai);
 		}
 
