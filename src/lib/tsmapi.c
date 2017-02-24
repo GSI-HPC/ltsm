@@ -503,10 +503,6 @@ dsInt16_t tsm_connect(login_t *login, session_t *session)
 		return rc;
 	}
 
-	/* DEBUG START */
-	printf("session id: %d\n", session->id);
-	/* DEBUG END */
-
 	regFSData reg_fs_data;
 	memset(&reg_fs_data, 0, sizeof(reg_fs_data));
 	reg_fs_data.fsName = login->fsname;

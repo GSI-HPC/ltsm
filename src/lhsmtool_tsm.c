@@ -302,44 +302,42 @@ cleanup:
 	return rc;
 }
 
-#if 0
-static int ct_restore(const struct hsm_action_item *hai, const long hal_flags)
+static int ct_restore(session_t *session)
 {
-	struct hsm_copyaction_private *hcp = NULL;
 	int rc;
 	int dst_fd = -1;
 	int mdt_index = -1;
 	int open_flags = 0;
-	int hp_flags = 0;
 	char fpath[PATH_MAX + 1] = {0};
 	struct lu_fid dfid;
 
-	rc = fid_realpath(opt.o_mnt, &hai->hai_fid, fpath, sizeof(fpath));
+	rc = fid_realpath(opt.o_mnt, &session->hai->hai_fid, fpath,
+			  sizeof(fpath));
 	if (rc < 0) {
-		CT_ERROR(rc, "fid_realpath()");
+		CT_ERROR(rc, "fid_realpath failed");
 		return rc;
 	}
 
-	rc = llapi_get_mdt_index_by_fid(opt.o_mnt_fd, &hai->hai_fid,
+	rc = llapi_get_mdt_index_by_fid(opt.o_mnt_fd, &session->hai->hai_fid,
 					&mdt_index);
 	if (rc < 0) {
 		CT_ERROR(rc, "cannot get mdt index "DFID"",
-			 PFID(&hai->hai_fid));
+			 PFID(&session->hai->hai_fid));
 		return rc;
 	}
 
-	rc = llapi_hsm_action_begin(&hcp, ctdata, hai, mdt_index, open_flags,
+	rc = llapi_hsm_action_begin(&session->hcp, ctdata, session->hai, mdt_index, open_flags,
 				    false);
 	if (rc < 0) {
-		CT_ERROR(rc, "llapi_hsm_action_begin() on '%s' failed", fpath);
+		CT_ERROR(rc, "llapi_hsm_action_begin on '%s' failed", fpath);
 		return rc;
 	}
 
-	rc = llapi_hsm_action_get_dfid(hcp, &dfid);
+	rc = llapi_hsm_action_get_dfid(session->hcp, &dfid);
 	if (rc < 0) {
 	    CT_ERROR(rc, "restoring "DFID
 		     ", cannot get FID of created volatile file",
-		     PFID(&hai->hai_fid));
+		     PFID(&session->hai->hai_fid));
 	    goto cleanup;
 	}
 
@@ -349,45 +347,41 @@ static int ct_restore(const struct hsm_action_item *hai, const long hal_flags)
 	    goto cleanup;
 	}
 
-	dst_fd = llapi_hsm_action_get_fd(hcp);
+	dst_fd = llapi_hsm_action_get_fd(session->hcp);
 	if (dst_fd < 0) {
 		rc = dst_fd;
 		CT_ERROR(rc, "cannot open '%s' for write", fpath);
 		goto cleanup;
 	}
 
-	rc = tsm_retrieve_fpath(FSNAME, fpath, NULL, dst_fd);
+	rc = tsm_retrieve_fpath(FSNAME, fpath, NULL, dst_fd, session);
 	if (rc != DSM_RC_SUCCESSFUL) {
 		CT_ERROR(rc, "tsm_retrieve_fpath on '%s' failed", fpath);
 		goto cleanup;
 	}
-
 	CT_TRACE("data restore from TSM storage to '%s' done", fpath);
 
 cleanup:
-	rc = ct_finish(&hcp, hai, hp_flags, rc, fpath);
+	rc = ct_finish(session, rc, fpath);
 
 	if (!(dst_fd < 0))
 		close(dst_fd);
 
 	return rc;
 }
-#endif
 
-#if 0
-static int ct_remove(const struct hsm_action_item *hai, const long hal_flags)
+static int ct_remove(session_t *session)
 {
-	struct hsm_copyaction_private *hcp = NULL;
 	char fpath[PATH_MAX + 1] = {0};
 	int rc;
 
-	rc = fid_realpath(opt.o_mnt, &hai->hai_fid, fpath, sizeof(fpath));
+	rc = fid_realpath(opt.o_mnt, &session->hai->hai_fid, fpath, sizeof(fpath));
 	if (rc < 0) {
 		CT_ERROR(rc, "fid_realpath()");
 		goto cleanup;
 	}
 
-	rc = llapi_hsm_action_begin(&hcp, ctdata, hai, -1, 0, false);
+	rc = llapi_hsm_action_begin(&session->hcp, ctdata, session->hai, -1, 0, false);
 	if (rc < 0) {
 		CT_ERROR(rc, "llapi_hsm_action_begin() on '%s' failed", fpath);
 		goto cleanup;
@@ -399,18 +393,17 @@ static int ct_remove(const struct hsm_action_item *hai, const long hal_flags)
 		rc = 0;
 		goto cleanup;
 	}
-	rc = tsm_delete_fpath(FSNAME, fpath);
+	rc = tsm_delete_fpath(FSNAME, fpath, session);
 	if (rc != DSM_RC_SUCCESSFUL) {
 		CT_ERROR(rc, "tsm_delete_fpath on '%s' failed", fpath);
 		goto cleanup;
 	}
 
 cleanup:
-	rc = ct_finish(&hcp, hai, 0, rc, fpath);
+	rc = ct_finish(session, rc, fpath);
 
 	return rc;
 }
-#endif
 
 static int ct_process_item(session_t *session)
 {
@@ -436,31 +429,16 @@ static int ct_process_item(session_t *session)
 			CT_TRACE("processing file '%s'", path);
 	}
 
-	return 0;
-
 	switch (session->hai->hai_action) {
-	/* set err_major, minor inside these functions */
+		/* set err_major, minor inside these functions */
 	case HSMA_ARCHIVE:
 		rc = ct_archive(session);
 		break;
 	case HSMA_RESTORE:
-#if 0
-		rc = ct_restore(hai, hal_flags);
-#endif
+		rc = ct_restore(session);
 		break;
 	case HSMA_REMOVE:
-#if 0
-		rc = ct_remove(hai, hal_flags);
-#endif
-		break;
-	case HSMA_CANCEL:
-		CT_TRACE("cancel not implemented for file system '%s'",
-			 opt.o_mnt);
-		/* Don't report progress to coordinator for this cookie:
-		 * the copy function will get ECANCELED when reporting
-		 * progress. */
-		err_minor++;
-		return 0;
+		rc = ct_remove(session);
 		break;
 	default:
 		rc = -EINVAL;
@@ -469,7 +447,6 @@ static int ct_process_item(session_t *session)
 		err_minor++;
 		ct_finish(session, rc, NULL);
 	}
-
 	free(session->hai);
 
 	return 0;
@@ -480,7 +457,6 @@ static void *ct_thread(void *data)
 	session_t *session = data;
 	int rc;
 
-	/* TODO: How to break properly the for-loop? */
 	for (;;) {
 		/* Crticial region, lock. */
 		pthread_mutex_lock(&queue_mutex);
@@ -488,8 +464,16 @@ static void *ct_thread(void *data)
 			pthread_cond_wait(&queue_cond, &queue_mutex);
 
 		rc = queue_dequeue(&queue, (void **)&session->hai);
+		CT_TRACE("dequeue action '%s' cookie=%#jx, FID="DFID"",
+			 hsm_copytool_action2name(session->hai->hai_action),
+			 (uintmax_t)session->hai->hai_cookie,
+			 PFID(&session->hai->hai_fid));
 		if (rc)
-			CT_WARN("queue_dequeue failed");
+			CT_ERROR(ECANCELED, "dequeue action '%s'"
+				 "cookie=%#jx, FID="DFID" failed",
+				 hsm_copytool_action2name(session->hai->hai_action),
+				 (uintmax_t)session->hai->hai_cookie,
+				 PFID(&session->hai->hai_fid));
 		pthread_mutex_unlock(&queue_mutex);
 		/* Unlock. */
 
@@ -696,6 +680,7 @@ static int ct_connect_sessions(void)
 			CT_ERROR(rc, "tsm_init failed");
 			goto cleanup;
 		}
+		/* Querying session is optional. */
 		rc = tsm_query_session(session[n]);
 		if (rc) {
 			rc = ECANCELED;
@@ -741,7 +726,7 @@ static int ct_start_threads(void)
 
 	rc = pthread_attr_init(&attr);
 	if (rc != 0) {
-		CT_ERROR(rc, "pthread_attr_init failed for");
+		CT_ERROR(rc, "pthread_attr_init failed");
 		return rc;
 	}
 
