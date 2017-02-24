@@ -95,6 +95,7 @@ typedef struct {
 	dsUint32_t handle;
 	qarray_t *qarray;
 	dsmBool_t overwrite_older;
+	struct hsm_copytool_private **ctdata;
 	struct hsm_action_item *hai;
 	struct hsm_copyaction_private *hcp;
 	long hal_flags;

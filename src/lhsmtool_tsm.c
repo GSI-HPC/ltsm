@@ -662,9 +662,10 @@ static int ct_connect_sessions(void)
 			goto cleanup;
 		}
 		session[n]->id = n;
+		session[n]->ctdata = &ctdata;
 
-		CT_TRACE("tsm_init: session[%d], session[%d]->%d",
-			 n, session[n]->id);
+        CT_TRACE("tsm_init: session[%d], session[%d]->%d",
+                 n, session[n]->id);
 
 		rc = tsm_connect(&login, session[n]);
 		if (rc) {
