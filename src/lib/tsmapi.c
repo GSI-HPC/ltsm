@@ -168,10 +168,20 @@ dsStruct64_t to_dsStruct64_t(const off64_t size)
 
 
 #ifdef HAVE_LUSTRE
+/**
+ * @brief Return progress of current archive or restore transaction to hsm-controler
+ *
+ * @param[int] session Session structure which holds hsm action item and hsm handle
+ * @param[int] moved   Bytes already moved in transaction
+ * @param[int] from    Total bytes to be moved in transaction
+ * @param[int] offset  Bytes moved since last progress callback
+ * @return DSM_RC_SUCCESSFUL on success, EFAULT on missing session options, otherwise llapi error code.
+ */
 static int ct_hsm_progress(session_t *session, off64_t moved, off64_t from, off64_t offset){
 	int rc;
 
-	CT_TRACE(" |%2i| off64_t  returning progress %li / %li  off: %li to hsm controller", session->id, moved, from, offset);
+	CT_TRACE(" |%2i| off64_t  returning progress %li / %li  off: %li to hsm controller",
+		 session->id, moved, from, offset);
 
 	if(session->hai == NULL || session->ctdata == NULL){
 		rc = EFAULT;
@@ -184,7 +194,8 @@ static int ct_hsm_progress(session_t *session, off64_t moved, off64_t from, off6
 
 	//if hsm_action not started yet get handle for returning progress
 	if(session->hcp == NULL){
-		rc = llapi_hsm_action_begin(&session->hcp, *session->ctdata, session->hai, -1, 0, 0);
+		rc = llapi_hsm_action_begin(&session->hcp, *session->ctdata,
+					    session->hai, -1, 0, 0);
 		if (rc) {
 			CT_ERROR(rc, " |%2i| llapi_hsm_action_begin() failed", session->id);
 			return rc;
@@ -196,6 +207,7 @@ static int ct_hsm_progress(session_t *session, off64_t moved, off64_t from, off6
 		CT_ERROR(rc, " |%2i| llapi_hsm_action_progress() failed", session->id);
 		return rc;
 	}
+
 
 	return DSM_RC_SUCCESSFUL;
 }
@@ -415,7 +427,7 @@ static dsInt16_t retrieve_obj(qryRespArchiveData *query_data,
 			rc_progress = ct_hsm_progress(session, b_done, b_total, obj_size_written);
 			if(rc_progress){
 				rc_minor = DSM_RC_UNSUCCESSFUL;
-				CT_ERROR(rc, " |%2i| Can not propagate progress to hsm api.", session->id);
+				CT_ERROR(rc, " |%2i| Can not propagate progress to hsm coordinator.", session->id);
 				goto cleanup;
 			}
 		#endif
@@ -1267,7 +1279,7 @@ static dsInt16_t tsm_archive_generic(archive_info_t *archive_info, int fd, sessi
 					b_done += obj_size_read;
 					rc = ct_hsm_progress(session, b_done, b_total, obj_size_read);
 					if(rc){
-						CT_ERROR(rc, " |%2i| Can not propagate progress to hsm api.", session->id);
+						CT_ERROR(rc, " |%2i| Can not propagate progress to hsm coordinator.", session->id);
 						goto cleanup_transaction;
 					}
 				#endif

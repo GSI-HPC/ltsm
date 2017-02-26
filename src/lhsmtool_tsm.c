@@ -163,37 +163,35 @@ static int ct_parseopts(int argc, char *argv[])
 		{0, 0, 0, 0}
 	};
 
-
-
+	/* Load basic options from env */
 	if(getenv("LHSMTSM_D_SERVERNAME")){
-		char * optarg = getenv("LHSMTSM_D_SERVERNAME");
+		char *optarg = getenv("LHSMTSM_D_SERVERNAME");
 		strncpy(opt.o_servername, optarg,
                                 strlen(optarg) < DSM_MAX_SERVERNAME_LENGTH ?
                                 strlen(optarg) : DSM_MAX_SERVERNAME_LENGTH);
 		CT_INFO("Got servername from config:%s\n", opt.o_servername);
 	}
 	if(getenv("LHSMTSM_D_NODE")){
-		char * optarg = getenv("LHSMTSM_D_NODE");
+		char *optarg = getenv("LHSMTSM_D_NODE");
 		strncpy(opt.o_node, optarg,
                                 strlen(optarg) < DSM_MAX_NODE_LENGTH ?
                                 strlen(optarg) : DSM_MAX_NODE_LENGTH);
 		CT_INFO("Got node from config:%s\n", opt.o_node);
 	}
 	if(getenv("LHSMTSM_D_OWNER")){
-		char * optarg = getenv("LHSMTSM_D_OWNER");
+		char *optarg = getenv("LHSMTSM_D_OWNER");
                         strncpy(opt.o_owner, optarg,
                                 strlen(optarg) < DSM_MAX_OWNER_LENGTH ?
                                 strlen(optarg) : DSM_MAX_OWNER_LENGTH);
 		CT_INFO("Got owner from config:%s\n", opt.o_owner);
 	}
 	if(getenv("LHSMTSM_D_PASSWORD")){
-		char * optarg = getenv("LHSMTSM_D_PASSWORD");
+		char *optarg = getenv("LHSMTSM_D_PASSWORD");
                         strncpy(opt.o_password, optarg,
                                 strlen(optarg) < DSM_MAX_VERIFIER_LENGTH ?
                                 strlen(optarg) : DSM_MAX_VERIFIER_LENGTH);
 		CT_INFO("Got password from config:%s\n", opt.o_password);
 	}
-
 
 	int c, rc;
 	optind = 0;
