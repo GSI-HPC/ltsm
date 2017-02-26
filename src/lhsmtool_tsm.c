@@ -35,6 +35,7 @@
 #include <sys/time.h>
 #include <lustre/lustre_idl.h>
 #include <lustre/lustreapi.h>
+#include "log.h"
 #include "tsmapi.h"
 #include "queue.h"
 
@@ -156,7 +157,7 @@ static int ct_parseopts(int argc, char *argv[])
 		{"owner",          required_argument, NULL,            'o'},
 		{"servername",     required_argument, NULL,            's'},
 		{"fsname",         optional_argument, NULL,            'f'},
-		{"verbose",        optional_argument, NULL,            'v'},
+		{"verbose",        required_argument, NULL,            'v'},
 		{"dry-run",	   no_argument,	&opt.o_dry_run,        'r'},
 		{"help",           no_argument, NULL,		       'h'},
 		{0, 0, 0, 0}
@@ -241,18 +242,24 @@ static int ct_parseopts(int argc, char *argv[])
 			break;
 		}
 		case 'v': {
-			if (strncmp(optarg, "error", 5) == 0)
+			if (strncmp(optarg, "error", 5) == 0) {
 				opt.o_verbose = LLAPI_MSG_ERROR;
-			else if (strncmp(optarg, "warn", 4) == 0)
+				api_msg_set_level(API_MSG_ERROR);
+			} else if (strncmp(optarg, "warn", 4) == 0) {
 				opt.o_verbose = LLAPI_MSG_WARN;
-			else if (strncmp(optarg, "info", 4) == 0)
+				api_msg_set_level(API_MSG_WARN);
+			} else if (strncmp(optarg, "info", 4) == 0) {
 				opt.o_verbose = LLAPI_MSG_INFO;
-			else if (strncmp(optarg, "debug", 5) == 0)
+				api_msg_set_level(API_MSG_INFO);
+			} else if (strncmp(optarg, "debug", 5) == 0) {
 				opt.o_verbose = LLAPI_MSG_DEBUG;
-			else
+				api_msg_set_level(API_MSG_DEBUG);
+			} else {
 				fprintf(stdout, "wrong argument for -v, "
 					"--verbose='%s'\n", optarg);
-			usage(argv[0], 1);
+				usage(argv[0], 1);
+			}
+			CT_INFO("argument '%s' set verbose level to '%i'", optarg, opt.o_verbose);
 			break;
 		}
 		case 'h': {
@@ -902,6 +909,7 @@ int main(int argc, char *argv[], char** envp)
 {
 
 	int rc;
+	api_msg_set_level(API_MSG_INFO);
 
 	rc = ct_parseopts(argc, argv);
 	if (rc < 0) {
