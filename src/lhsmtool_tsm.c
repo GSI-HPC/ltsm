@@ -9,11 +9,11 @@
  * General Public License version 2 for more details (a copy is included
  * in the LICENSE file that accompanied this code).
  * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
 /*
- * Copyright (c) 2016, Thomas Stibor <t.stibor@gsi.de>
+ * Copyright (c) 2016, 2017, Thomas Stibor <t.stibor@gsi.de>
  */
 
 #ifndef _GNU_SOURCE
@@ -38,15 +38,19 @@
 #include "tsmapi.h"
 #include "queue.h"
 
+#ifndef PACKAGE_VERSION
+#define PACKAGE_VERSION "NA"
+#endif
+
 struct options {
 	int o_daemonize;
 	int o_dry_run;
+	int o_nthreads;
 	int o_verbose;
 	int o_abort_on_error;
-	int o_archive_cnt;
-	int o_archive_id[LL_HSM_MAX_ARCHIVE];
+        int o_archive_cnt;
+        int o_archive_id[LL_HSM_MAX_ARCHIVE];
 	char *o_mnt;
-	char *o_event_fifo;
 	int o_mnt_fd;
 	char o_servername[DSM_MAX_SERVERNAME_LENGTH + 1];
 	char o_node[DSM_MAX_NODE_LENGTH + 1];
@@ -66,7 +70,7 @@ struct options opt = {
 	.o_fstype = {0},
 };
 
-static uint16_t N_THREADS = 2;
+static uint16_t nthreads = 2;
 static pthread_t **thread = NULL;
 static pthread_mutex_t queue_mutex;
 static pthread_cond_t queue_cond;
@@ -76,46 +80,85 @@ static queue_t queue;
 static int err_major;
 static int err_minor;
 
-static char cmd_name[PATH_MAX] = {0};
 static char fs_name[MAX_OBD_NAME + 1] = {0};
-
 static struct hsm_copytool_private *ctdata = NULL;
 
-static void usage(int rc)
+#define STABS "\t\t"
+static void usage(const char *cmd_name, const int rc)
 {
-	fprintf(stdout, "Usage: %s [options]... <lustre_mount_point>\n"
-		"\t--abort-on-error\t\tAbort operation on major error\n"
-		"\t-A, --archive <#>\t\tArchive number (repeatable)\n"
-		"\t--daemon\t\t\tDaemon mode, run in background\n"
-		"\t--dry-run\t\t\tDon't run, just show what would be done\n"
-		"\t-f, --event-fifo <path>\t\tWrite events stream to fifo\n"
-		"\t-n, --node <string>\t\tNode registered on TSM server\n"
-		"\t-p, --password <string>\t\tPassword of TSM node/owner\n"
-		"\t-s, --servername <string>\tHostname of TSM server\n"
-		"\t-u, --owner <string>\t\tOwner of TSM node\n"
-		"\t-v, --verbose\t\t\tProduce more verbose output\n",
-		cmd_name);
+	dsmApiVersionEx libapi_ver = get_libapi_ver();
+	dsmAppVersion appapi_ver = get_appapi_ver();
+
+	fprintf(stdout, "usage: %s [options]...<lustre_mount_point>\n"
+		"\t-a, --abort-on-error\n"
+		STABS"abort operation on major error\n"
+		"\t-i, --archive-id=<int> [default: 0]\n"
+		STABS"archive id number\n"
+		"\t-d, --daemon\n"
+		STABS"daemon mode run in background\n"
+		"\t-t, --threads=<int>\n"
+		STABS" number of working threads [default: 2]\n"
+		"\t-n, --node=<string>\n"
+		STABS"node name registered on tsm server\n"
+		"\t-p, --password=<string>\n"
+		STABS"password of tsm node/owner\n"
+		"\t-o, --owner=<string>\n"
+		STABS"owner of tsm node\n"
+		"\t-s, --servername=<string>\n"
+		STABS"hostname of tsm server\n"
+		"\t-f, --fsname=<string>\n"
+		STABS"filespace name on tsm server [default: '/']\n"
+		"\t-v, --verbose={error, warn, info, debug} [default: info]\n"
+		STABS"produce more verbose output\n"
+		"\t-r, --dry-run\n"
+		STABS"don't run, just show what would be done\n"
+		"\t-h, --help\n"
+		STABS"show this help\n"
+		"\nIBM API library version: %d.%d.%d.%d, "
+		"IBM API application client version: %d.%d.%d.%d\n"
+		"version: %s © 2017 by Thomas Stibor <t.stibor@gsi.de>,"
+		" Jörg Behrendt <j.behrendt@gsi.de>\n",
+		cmd_name,
+		libapi_ver.version, libapi_ver.release, libapi_ver.level,
+		libapi_ver.subLevel,
+		appapi_ver.applicationVersion, appapi_ver.applicationRelease,
+		appapi_ver.applicationLevel, appapi_ver.applicationSubLevel,
+		PACKAGE_VERSION);
 	exit(rc);
+}
+
+static void sanity_arg_check(const struct options *opts, const char *argv)
+{
+	if (!strlen(opt.o_node)) {
+		fprintf(stdout, "missing argument -n, --node=<string>\n\n");
+		usage(argv, 1);
+	} else if (!strlen(opt.o_password)) {
+		fprintf(stdout, "missing argument -p, --password=<string>\n\n");
+		usage(argv, 1);
+	} else if (!strlen(opt.o_servername)) {
+		fprintf(stdout, "missing argument -s, --servername=<string>\n\n");
+		usage(argv, 1);
+	} else if (!strlen(opt.o_fsname)) {
+		strncpy(opt.o_fsname, FSNAME, strlen(FSNAME));
+	}
 }
 
 static int ct_parseopts(int argc, char *argv[])
 {
 
 	struct option long_opts[] = {
-		{"abort-on-error", no_argument, &opt.o_abort_on_error, 1},
-		{"abort_on_error", no_argument, &opt.o_abort_on_error, 1},
-		{"archive",	   required_argument, NULL,	     'A'},
-		{"daemon",	   no_argument, &opt.o_daemonize,      1},
-		{"event-fifo",	   required_argument, NULL,	     'f'},
-		{"event_fifo",	   required_argument, NULL,	     'f'},
-		{"dry-run",	   no_argument,	      &opt.o_dry_run, 1},
-		{"help",           no_argument, NULL,		     'h'},
-		{"node",           no_argument, NULL,                'n'},
-		{"password",       no_argument, NULL,                'p'},
-		{"quiet",          no_argument, NULL,                'q'},
-		{"servername",     no_argument, NULL,                's'},
-		{"owner",          no_argument, NULL,                'o'},
-		{"verbose",        no_argument, NULL,                'v'},
+		{"abort-on-error", no_argument, &opt.o_abort_on_error, 'a'},
+		{"archive-id",	   required_argument, NULL,	       'i'},
+		{"daemon",	   no_argument, &opt.o_daemonize,      'd'},
+		{"threads",        optional_argument, NULL,	       't'},
+		{"node",           required_argument, NULL,            'n'},
+		{"password",       required_argument, NULL,            'p'},
+		{"owner",          required_argument, NULL,            'o'},
+		{"servername",     required_argument, NULL,            's'},
+		{"fsname",         optional_argument, NULL,            'f'},
+		{"verbose",        optional_argument, NULL,            'v'},
+		{"dry-run",	   no_argument,	&opt.o_dry_run,        'r'},
+		{"help",           no_argument, NULL,		       'h'},
 		{0, 0, 0, 0}
 	};
 
@@ -154,27 +197,23 @@ static int ct_parseopts(int argc, char *argv[])
 	int c, rc;
 	optind = 0;
 
-	while ((c = getopt_long(argc, argv, "A:f:hn:p:qs:o:v",
+	while ((c = getopt_long(argc, argv, "ai:dt:n:p:o:s:v:rh",
 				long_opts, NULL)) != -1) {
 		switch (c) {
-		case 'A': {
-			if ((opt.o_archive_cnt >= LL_HSM_MAX_ARCHIVE) ||
-			    (atoi(optarg) >= LL_HSM_MAX_ARCHIVE)) {
-				rc = -E2BIG;
-				CT_ERROR(rc, "archive number must be less"
-					 "than %zu", LL_HSM_MAX_ARCHIVE);
-				return rc;
-			}
-			opt.o_archive_id[opt.o_archive_cnt] = atoi(optarg);
-			opt.o_archive_cnt++;
-			break;
-		}
-		case 'f': {
-			opt.o_event_fifo = optarg;
-			break;
-		}
-		case 'h': {
-			usage(0);
+		case 'i': {
+                        if ((opt.o_archive_cnt >= LL_HSM_MAX_ARCHIVE) ||
+                            (atoi(optarg) >= LL_HSM_MAX_ARCHIVE)) {
+                                rc = -E2BIG;
+                                CT_ERROR(rc, "archive number must be less"
+                                         "than %zu", LL_HSM_MAX_ARCHIVE);
+                                return rc;
+                        }
+                        opt.o_archive_id[opt.o_archive_cnt] = atoi(optarg);
+                        opt.o_archive_cnt++;
+                        break;
+                }
+		case 't': {
+			nthreads = atoi(optarg);
 			break;
 		}
 		case 'n': {
@@ -189,8 +228,10 @@ static int ct_parseopts(int argc, char *argv[])
 				strlen(optarg) : DSM_MAX_VERIFIER_LENGTH);
 			break;
 		}
-		case 'q': {
-			opt.o_verbose--;
+		case 'o': {
+			strncpy(opt.o_owner, optarg,
+				strlen(optarg) < DSM_MAX_OWNER_LENGTH ?
+				strlen(optarg) : DSM_MAX_OWNER_LENGTH);
 			break;
 		}
 		case 's': {
@@ -199,23 +240,35 @@ static int ct_parseopts(int argc, char *argv[])
 				strlen(optarg) : DSM_MAX_SERVERNAME_LENGTH);
 			break;
 		}
-		case 'o': {
-			strncpy(opt.o_owner, optarg,
-				strlen(optarg) < DSM_MAX_OWNER_LENGTH ?
-				strlen(optarg) : DSM_MAX_OWNER_LENGTH);
+		case 'v': {
+			if (strncmp(optarg, "error", 5) == 0)
+				opt.o_verbose = LLAPI_MSG_ERROR;
+			else if (strncmp(optarg, "warn", 4) == 0)
+				opt.o_verbose = LLAPI_MSG_WARN;
+			else if (strncmp(optarg, "info", 4) == 0)
+				opt.o_verbose = LLAPI_MSG_INFO;
+			else if (strncmp(optarg, "debug", 5) == 0)
+				opt.o_verbose = LLAPI_MSG_DEBUG;
+			else
+				fprintf(stdout, "wrong argument for -v, "
+					"--verbose='%s'\n", optarg);
+			usage(argv[0], 1);
 			break;
 		}
-		case 'v': {
-			opt.o_verbose++;
+		case 'h': {
+			usage(argv[0], 0);
 			break;
 		}
 		case 0: {
+			usage(argv[0], 0);
 			break;
 		}
 		default:
 			return -EINVAL;
 		}
 	}
+
+	sanity_arg_check(&opt, argv[0]);
 
 	if (argc != optind + 1) {
 		rc = -EINVAL;
@@ -525,10 +578,6 @@ static void handler(int signal)
 	 * mtab entry remains. So this just makes mtab happier. */
 	llapi_hsm_copytool_unregister(&ctdata);
 
-	/* Also remove fifo upon signal as during normal/error exit */
-	if (opt.o_event_fifo != NULL)
-		llapi_hsm_unregister_event_fifo(opt.o_event_fifo);
-
 	/* TODO: Cleanup TSM session */
 	_exit(1);
 }
@@ -549,15 +598,6 @@ static int ct_run(void)
 	}
 
 	setbuf(stdout, NULL);
-
-	if (opt.o_event_fifo != NULL) {
-		rc = llapi_hsm_register_event_fifo(opt.o_event_fifo);
-		if (rc < 0) {
-			CT_ERROR(rc, "failed to register event fifo");
-			return rc;
-		}
-		llapi_error_callback_set(llapi_hsm_log_error);
-	}
 
 	rc = llapi_hsm_copytool_register(&ctdata, opt.o_mnt,
 					 opt.o_archive_cnt,
@@ -659,8 +699,6 @@ static int ct_run(void)
 	}
 
 	llapi_hsm_copytool_unregister(&ctdata);
-	if (opt.o_event_fifo != NULL)
-		llapi_hsm_unregister_event_fifo(opt.o_event_fifo);
 
 	return rc;
 }
@@ -672,6 +710,11 @@ static int ct_connect_sessions(void)
 	uint16_t n;
 
 	rc = tsm_init(DSM_MULTITHREAD);
+	if (rc) {
+		rc = -ECANCELED;
+		CT_ERROR(rc, "tsm_init failed");
+		return rc;
+	}
 
 	bzero(&login, sizeof(login));
 	login_fill(&login, opt.o_servername,
@@ -679,18 +722,18 @@ static int ct_connect_sessions(void)
 		   opt.o_owner, LOGIN_PLATFORM,
 		   FSNAME, FSTYPE); /* TODO: opt.o_fsname, opt.o_fstype */
 
-	session = calloc(N_THREADS, sizeof(session_t *));
+	session = calloc(nthreads, sizeof(session_t *));
 	if (session == NULL) {
-		rc = errno;
+		rc = -errno;
 		CT_ERROR(rc, "malloc failed");
 		return rc;
 	}
 
 	/* session = calloc(N_THREADS, sizeof(session_t)); */
-	for (n = 0; n < N_THREADS; n++) {
+	for (n = 0; n < nthreads; n++) {
 		session[n] = calloc(1, sizeof(session_t));
 		if (session[n] == NULL) {
-			rc = errno;
+			rc = -errno;
 			CT_ERROR(rc, "malloc failed");
 			goto cleanup;
 		}
@@ -702,14 +745,14 @@ static int ct_connect_sessions(void)
 
 		rc = tsm_connect(&login, session[n]);
 		if (rc) {
-			rc = ECANCELED;
+			rc = -ECANCELED;
 			CT_ERROR(rc, "tsm_init failed");
 			goto cleanup;
 		}
 		/* Querying session is optional. */
 		rc = tsm_query_session(session[n]);
 		if (rc) {
-			rc = ECANCELED;
+			rc = -ECANCELED;
 			CT_ERROR(rc, "tsm_query_session failed");
 			goto cleanup;
 		}
@@ -735,16 +778,16 @@ static int ct_start_threads(void)
 	uint16_t n;
 	pthread_attr_t attr;
 
-	thread = calloc(N_THREADS, sizeof(pthread_t *));
+	thread = calloc(nthreads, sizeof(pthread_t *));
 	if (thread == NULL) {
-		rc = errno;
+		rc = -errno;
 		CT_ERROR(rc, "malloc failed");
 		return rc;
 	}
-	for (n = 0; n < N_THREADS; n++) {
+	for (n = 0; n < nthreads; n++) {
 		thread[n] = calloc(1, sizeof(pthread_t));
 		if (thread[n] == NULL) {
-			rc = errno;
+			rc = -errno;
 			CT_ERROR(rc, "malloc failed");
 			goto cleanup;
 		}
@@ -758,7 +801,7 @@ static int ct_start_threads(void)
 
 	pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
 
-	for (n = 0; n < N_THREADS; n++) {
+	for (n = 0; n < nthreads; n++) {
 		rc = pthread_create(thread[n], &attr, ct_thread, session[n]);
 		if (rc != 0)
 			CT_ERROR(rc, "cannot create worker thread '%d' for"
@@ -803,17 +846,15 @@ static int ct_setup(void)
 	pthread_cond_init(&queue_cond, NULL);
 	queue_init(&queue, free);
 
-	/* Create N_THREADS sessions to TSM server. */
+	/* Create nthreads sessions to TSM server. */
 	rc = ct_connect_sessions();
 	if (rc) {
-		rc = ECANCELED;
 		CT_ERROR(rc, "ct_connect_sessions failed");
 		return rc;
 	}
 
 	rc = ct_start_threads();
 	if (rc) {
-		rc = ECANCELED;
 		CT_ERROR(rc, "ct_start_threads failed");
 		return rc;
 	}
@@ -840,7 +881,7 @@ static int ct_cleanup(void)
 	if (rc_minor)
 		CT_ERROR(rc_minor, "pthread_cond_destroy failed");
 
-	for (uint16_t n = 0; n < N_THREADS; n++) {
+	for (uint16_t n = 0; n < nthreads && session && thread; n++) {
 		if (session[n]) {
 			tsm_disconnect(session[n]);
 			free(session[n]);
@@ -848,8 +889,10 @@ static int ct_cleanup(void)
 		if (thread[n])
 			free(thread[n]);
 	}
-	free(session);
-	free(thread);
+	if (session)
+		free(session);
+	if (thread)
+		free(thread);
 	tsm_cleanup(DSM_MULTITHREAD);
 
 	return rc;
@@ -860,10 +903,9 @@ int main(int argc, char *argv[], char** envp)
 
 	int rc;
 
-	strncpy(cmd_name, basename(argv[0]), sizeof(cmd_name));
 	rc = ct_parseopts(argc, argv);
 	if (rc < 0) {
-		CT_WARN("try '%s --help' for more information", cmd_name);
+		CT_WARN("try '%s --help' for more information", argv[0]);
 		return -rc;
 	}
 
