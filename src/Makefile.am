@@ -13,4 +13,8 @@ if HAVE_LUSTRE
     bin_PROGRAMS += lhsmtool_tsm
     lhsmtool_tsm_SOURCES = lhsmtool_tsm.c
     lhsmtool_tsm_LDADD = $(top_srcdir)/src/lib/libtsmapi.a
+
+    lhsmtool_tsmdir = $(sysconfdir)/ltsm-hsmtool/
+    lhsmtool_tsm_DATA = $(top_srcdir)/config/lhsmtool_tsm.cfg
+    lhsmtool_tsm_DATA += $(top_srcdir)/script/lhsmtool_tsm.service
 endif

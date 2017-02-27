@@ -35,6 +35,7 @@
 #include <sys/time.h>
 #include <lustre/lustre_idl.h>
 #include <lustre/lustreapi.h>
+#include "log.h"
 #include "tsmapi.h"
 #include "queue.h"
 
@@ -68,6 +69,7 @@ struct options opt = {
 	.o_password = {0},
 	.o_fsname = {0},
 	.o_fstype = {0},
+	.o_mnt_fd = 0
 };
 
 static uint16_t nthreads = 2;
@@ -145,6 +147,7 @@ static void sanity_arg_check(const struct options *opts, const char *argv)
 
 static int ct_parseopts(int argc, char *argv[])
 {
+
 	struct option long_opts[] = {
 		{"abort-on-error", no_argument, &opt.o_abort_on_error, 'a'},
 		{"archive-id",	   required_argument, NULL,	       'i'},
@@ -155,11 +158,47 @@ static int ct_parseopts(int argc, char *argv[])
 		{"owner",          required_argument, NULL,            'o'},
 		{"servername",     required_argument, NULL,            's'},
 		{"fsname",         optional_argument, NULL,            'f'},
-		{"verbose",        optional_argument, NULL,            'v'},
+		{"verbose",        required_argument, NULL,            'v'},
 		{"dry-run",	   no_argument,	&opt.o_dry_run,        'r'},
 		{"help",           no_argument, NULL,		       'h'},
 		{0, 0, 0, 0}
 	};
+
+	/* Load basic options from env */
+	if (getenv("LHSMTSM_D_SERVERNAME")) {
+		char *optarg = getenv("LHSMTSM_D_SERVERNAME");
+		strncpy(opt.o_servername, optarg,
+                                strlen(optarg) < DSM_MAX_SERVERNAME_LENGTH ?
+                                strlen(optarg) : DSM_MAX_SERVERNAME_LENGTH);
+		CT_INFO("Got servername from config:%s\n", opt.o_servername);
+	}
+	if (getenv("LHSMTSM_D_NODE")) {
+		char *optarg = getenv("LHSMTSM_D_NODE");
+		strncpy(opt.o_node, optarg,
+                                strlen(optarg) < DSM_MAX_NODE_LENGTH ?
+                                strlen(optarg) : DSM_MAX_NODE_LENGTH);
+		CT_INFO("Got node from config:%s\n", opt.o_node);
+	}
+	if (getenv("LHSMTSM_D_OWNER")) {
+		char *optarg = getenv("LHSMTSM_D_OWNER");
+                        strncpy(opt.o_owner, optarg,
+                                strlen(optarg) < DSM_MAX_OWNER_LENGTH ?
+                                strlen(optarg) : DSM_MAX_OWNER_LENGTH);
+		CT_INFO("Got owner from config:%s\n", opt.o_owner);
+	}
+	if (getenv("LHSMTSM_D_PASSWORD")) {
+		char *optarg = getenv("LHSMTSM_D_PASSWORD");
+                        strncpy(opt.o_password, optarg,
+                                strlen(optarg) < DSM_MAX_VERIFIER_LENGTH ?
+                                strlen(optarg) : DSM_MAX_VERIFIER_LENGTH);
+		CT_INFO("Got password from config:%s\n", opt.o_password);
+	}
+	if (getenv("LHSMTSM_D_MOUNT")) {
+		char *optarg = getenv("LHSMTSM_D_MOUNT");
+                        strncpy(opt.o_mnt, optarg, strlen(optarg));
+        opt.o_mnt_fd = -1;
+		CT_INFO("Got mountpoint from config:%s\n", opt.o_mnt);
+	}
 
 	int c, rc;
 	optind = 0;
@@ -208,18 +247,24 @@ static int ct_parseopts(int argc, char *argv[])
 			break;
 		}
 		case 'v': {
-			if (strncmp(optarg, "error", 5) == 0)
+			if (strncmp(optarg, "error", 5) == 0) {
 				opt.o_verbose = LLAPI_MSG_ERROR;
-			else if (strncmp(optarg, "warn", 4) == 0)
+				api_msg_set_level(API_MSG_ERROR);
+			} else if (strncmp(optarg, "warn", 4) == 0) {
 				opt.o_verbose = LLAPI_MSG_WARN;
-			else if (strncmp(optarg, "info", 4) == 0)
+				api_msg_set_level(API_MSG_WARN);
+			} else if (strncmp(optarg, "info", 4) == 0) {
 				opt.o_verbose = LLAPI_MSG_INFO;
-			else if (strncmp(optarg, "debug", 5) == 0)
+				api_msg_set_level(API_MSG_INFO);
+			} else if (strncmp(optarg, "debug", 5) == 0) {
 				opt.o_verbose = LLAPI_MSG_DEBUG;
-			else
+				api_msg_set_level(API_MSG_DEBUG);
+			} else {
 				fprintf(stdout, "wrong argument for -v, "
 					"--verbose='%s'\n", optarg);
-			usage(argv[0], 1);
+				usage(argv[0], 1);
+			}
+			CT_INFO("argument '%s' set verbose level to '%i'", optarg, opt.o_verbose);
 			break;
 		}
 		case 'h': {
@@ -237,14 +282,15 @@ static int ct_parseopts(int argc, char *argv[])
 
 	sanity_arg_check(&opt, argv[0]);
 
-	if (argc != optind + 1) {
-		rc = -EINVAL;
-		CT_ERROR(rc, "no mount point specified");
-		return rc;
+	if (opt.o_mnt_fd != -1) {
+		if (argc != optind + 1) {
+			rc = -EINVAL;
+			CT_ERROR(rc, "no mount point specified");
+			return rc;
+		}
+		opt.o_mnt = argv[optind];
+		opt.o_mnt_fd = -1;
 	}
-
-	opt.o_mnt = argv[optind];
-	opt.o_mnt_fd = -1;
 
 	return 0;
 }
@@ -705,9 +751,10 @@ static int ct_connect_sessions(void)
 			goto cleanup;
 		}
 		session[n]->id = n;
+		session[n]->ctdata = &ctdata;
 
-		CT_TRACE("tsm_init: session[%d], session[%d]->%d",
-			 n, session[n]->id);
+        CT_TRACE("tsm_init: session[%d], session[%d]->%d",
+                 n, session[n]->id);
 
 		rc = tsm_connect(&login, session[n]);
 		if (rc) {
@@ -795,7 +842,7 @@ static int ct_setup(void)
 
 	rc = llapi_search_fsname(opt.o_mnt, fs_name);
 	if (rc < 0) {
-		CT_ERROR(rc, "can find a Lustre filesystem mounted at '%s'",
+		CT_ERROR(rc, "cannot find a Lustre filesystem mounted at '%s'",
 			 opt.o_mnt);
 		return rc;
 	}
@@ -864,9 +911,11 @@ static int ct_cleanup(void)
 	return rc;
 }
 
-int main(int argc, char *argv[])
+int main(int argc, char *argv[], char** envp)
 {
+
 	int rc;
+	api_msg_set_level(API_MSG_INFO);
 
 	rc = ct_parseopts(argc, argv);
 	if (rc < 0) {

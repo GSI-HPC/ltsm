@@ -10,6 +10,7 @@ Moreover, a Lustre TSM Copytool (called *lhsmtool_tsm*) is provided which hooks 
 In addition a simple console client (called *ltsmc*) is provided which demonstrates the use of *tsmapi* and 
 can be used to retrieve data which was archived with the Lustre Copytool. This is especially useful when a Lustre storage deployment is decommissioned
 and the archived data still needs to be retrieved afterwards.
+You can find most recent debian packages [here](https://www.joergbehrendt.com/files/projects/ltsm/debian-packages/amd64/).
 
 ## Getting Started <a id="getting.started"></a>
 Before using LTSM a working access to a TSM server is required. One can install for testing purposes a fully working

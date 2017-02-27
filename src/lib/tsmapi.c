@@ -21,6 +21,7 @@
 #define _GNU_SOURCE
 #endif
 
+#include <config.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -33,9 +34,11 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/param.h>
+
 #include "tsmapi.h"
 #include "log.h"
 #include "qarray.h"
+
 
 #define OBJ_TYPE(type)							\
 	(DSM_OBJ_FILE == type ? "DSM_OBJ_FILE" :			\
@@ -158,6 +161,53 @@ dsStruct64_t to_dsStruct64_t(const off64_t size)
 
 	return res;
 }
+
+
+#ifdef HAVE_LUSTRE
+/**
+ * @brief Return progress of current archive or restore transaction to hsm-controler
+ *
+ * @param[int] session Session structure which holds hsm action item and hsm handle
+ * @param[int] moved   Bytes already moved in transaction
+ * @param[int] from    Total bytes to be moved in transaction
+ * @param[int] offset  Bytes moved since last progress callback
+ * @return DSM_RC_SUCCESSFUL on success, EFAULT on missing session options, otherwise llapi error code.
+ */
+static int ct_hsm_progress(session_t *session, off64_t moved, off64_t from, off64_t offset){
+	int rc;
+
+	CT_TRACE(" |%2i| off64_t  returning progress %li / %li  off: %li to hsm controller",
+		 session->id, moved, from, offset);
+
+	if (session->hai == NULL || session->ctdata == NULL) {
+		rc = EFAULT;
+		CT_ERROR(rc, " |%2i| hsm action item or ctdata missing", session->id);
+		return rc;
+	}
+
+	session->hai->hai_extent.length = offset;
+	session->hai->hai_extent.offset = moved;
+
+	//if hsm_action not started yet get handle for returning progress
+	if (session->hcp == NULL) {
+		rc = llapi_hsm_action_begin(&session->hcp, *session->ctdata,
+					    session->hai, -1, 0, 0);
+		if (rc) {
+			CT_ERROR(rc, " |%2i| llapi_hsm_action_begin() failed", session->id);
+			return rc;
+		}
+	}
+
+	rc = llapi_hsm_action_progress(session->hcp, &session->hai->hai_extent, from, 0 );
+	if (rc) {
+		CT_ERROR(rc, " |%2i| llapi_hsm_action_progress() failed", session->id);
+		return rc;
+	}
+
+
+	return DSM_RC_SUCCESSFUL;
+}
+#endif
 
 /**
  * @brief Fallback for determining d_type with lstat().
@@ -314,7 +364,7 @@ static dsInt16_t retrieve_obj(qryRespArchiveData *query_data,
 		if (rc != DSM_RC_SUCCESSFUL)
 			return  DSM_RC_UNSUCCESSFUL;
 
-		fd = open(fpath, O_WRONLY | O_CREAT, obj_info->st_mode);
+		fd = open(fpath, O_WRONLY | O_TRUNC | O_CREAT, obj_info->st_mode);
 		if (fd < 0) {
 			CT_ERROR(errno, "open '%s'", fpath);
 			return DSM_RC_UNSUCCESSFUL;
@@ -339,6 +389,11 @@ static dsInt16_t retrieve_obj(qryRespArchiveData *query_data,
 	rc = dsmGetObj(session->handle, &(query_data->objId), &dataBlk);
 	TSM_TRACE(session, rc,  "dsmGetObj");
 
+#ifdef HAVE_LUSTRE
+	off64_t b_total = to_off64_t(obj_info->size);
+	off64_t b_done = 0;
+#endif
+
 	while (!done) {
 		/* Note: dataBlk.numBytes always returns TSM_BUF_LENGTH (65536). */
 		if (!(rc == DSM_RC_MORE_DATA || rc == DSM_RC_FINISHED)) {
@@ -362,6 +417,16 @@ static dsInt16_t retrieve_obj(qryRespArchiveData *query_data,
 				TSM_TRACE(session, rc,  "dsmGetData");
 			}
 		}
+#ifdef HAVE_LUSTRE
+		b_done += obj_size_written;
+		int rc_progress;
+		rc_progress = ct_hsm_progress(session, b_done, b_total, obj_size_written);
+		if (rc_progress) {
+			rc_minor = DSM_RC_UNSUCCESSFUL;
+			CT_ERROR(rc, " |%2i| Can not propagate progress to hsm coordinator.", session->id);
+			goto cleanup;
+		}
+#endif
 	} /* End while (!done) */
 
 cleanup:
@@ -1179,6 +1244,11 @@ static dsInt16_t tsm_archive_generic(archive_info_t *archive_info, int fd, sessi
 		data_blk.stVersion = DataBlkVersion;
 		data_blk.numBytes = 0;
 
+#ifdef HAVE_LUSTRE
+		off64_t b_total = to_off64_t(archive_info->obj_info.size);
+		off64_t b_done = 0;
+#endif
+
 		while (!done) {
 			obj_size_read = read(fd, data_blk.bufferPtr, TSM_BUF_LENGTH);
 			if (obj_size_read < 0) {
@@ -1200,7 +1270,17 @@ static dsInt16_t tsm_archive_generic(archive_info_t *archive_info, int fd, sessi
 				CT_TRACE("data_blk.numBytes: %zu, current_read: %zu, total_read: %zu, obj_size: %zu",
 					 data_blk.numBytes, obj_size_read, total_read, to_off64_t(archive_info->obj_info.size));
 				data_blk.numBytes = 0;
+
+#ifdef HAVE_LUSTRE
+				b_done += obj_size_read;
+				rc = ct_hsm_progress(session, b_done, b_total, obj_size_read);
+				if (rc) {
+					CT_ERROR(rc, " |%2i| Can not propagate progress to hsm coordinator.", session->id);
+					goto cleanup_transaction;
+				}
+#endif
 			}
+
 		}
 		/* File obj. was archived, verify that the number of bytes read
 		   from file descriptor matches the number of bytes we
