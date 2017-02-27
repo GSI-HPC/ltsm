@@ -256,6 +256,20 @@ static int ct_parseopts(int argc, char *argv[])
 	return 0;
 }
 
+static void progress_callback(void *data, void *s)
+{
+	progress_size_t *pg_size = (progress_size_t *)data;
+	session_t *session = (session_t *)s;
+	int rc;
+
+	session->hai->hai_extent.length = pg_size->cur;
+	session->hai->hai_extent.offset = pg_size->cur_total - pg_size->cur;
+	rc = llapi_hsm_action_progress(session->hcp, &session->hai->hai_extent,
+				       pg_size->total, 0);
+	if (rc)
+		CT_ERROR(rc, "llapi_hsm_action_progress failed");
+}
+
 static int fid_realpath(const char *mnt, const lustre_fid *fid,
 			char *resolved_path, size_t resolved_path_len)
 {
@@ -703,7 +717,6 @@ static int ct_connect_sessions(void)
 		return rc;
 	}
 
-	/* session = calloc(N_THREADS, sizeof(session_t)); */
 	for (n = 0; n < nthreads; n++) {
 		session[n] = calloc(1, sizeof(session_t));
 		if (session[n] == NULL) {
@@ -712,6 +725,7 @@ static int ct_connect_sessions(void)
 			goto cleanup;
 		}
 		session[n]->id = n;
+		session[n]->progress = progress_callback;
 
 		CT_TRACE("tsm_init: session[%d], session[%d]->%d",
 			 n, session[n]->id);

@@ -345,8 +345,8 @@ static dsInt16_t retrieve_obj(qryRespArchiveData *query_data,
 			done = bTrue;
 		} else {
 			cur_written = write(fd, buf, remain_to_write <
-						 TSM_BUF_LENGTH ?
-						 remain_to_write : TSM_BUF_LENGTH);
+					    TSM_BUF_LENGTH ?
+					    remain_to_write : TSM_BUF_LENGTH);
 			if (cur_written < 0) {
 				CT_ERROR(errno, "write");
 				rc_minor = DSM_RC_UNSUCCESSFUL;
@@ -365,19 +365,15 @@ static dsInt16_t retrieve_obj(qryRespArchiveData *query_data,
 			CT_TRACE("cur_written: %zu, total_written: %zu,"
 				 " obj_size: %zu", cur_written, total_written,
 				 total_size);
-#ifdef HAVE_LUSTRE
-			session->hai->hai_extent.length = cur_written;
-			session->hai->hai_extent.offset = total_written - cur_written;
-			rc_minor = llapi_hsm_action_progress(
-				session->hcp,
-				&session->hai->hai_extent,
-				total_size, 0);
-			if (rc_minor) {
-				CT_ERROR(rc, "llapi_hsm_action_progress failed");
-				rc_minor = DSM_RC_UNSUCCESSFUL;
-				goto cleanup;
+
+			/* Function callback on progress */
+			if (session->progress != NULL) {
+				progress_size_t progress_size;
+				progress_size.cur = cur_written;
+				progress_size.cur_total = total_written;
+				progress_size.total = total_size;
+				session->progress(&progress_size, session);
 			}
-#endif
 		}
 	} /* End while (!done) */
 
@@ -1219,19 +1215,15 @@ static dsInt16_t tsm_archive_generic(archive_info_t *archive_info, int fd, sessi
 					 " total_size: %zu", cur_read,
 					 total_read, total_size);
 				data_blk.numBytes = 0;
-#ifdef HAVE_LUSTRE
-				session->hai->hai_extent.length = cur_read;
-				session->hai->hai_extent.offset = total_read - cur_read;
-				int rc_minor = llapi_hsm_action_progress(
-					session->hcp,
-					&session->hai->hai_extent,
-					total_size, 0);
-				if (rc_minor) {
-					CT_ERROR(rc, "llapi_hsm_action progress failed");
-					rc_minor = DSM_RC_UNSUCCESSFUL;
-					goto cleanup_transaction;
+
+				/* Function callback on progress */
+				if (session->progress != NULL) {
+					progress_size_t progress_size;
+					progress_size.cur = cur_read;
+					progress_size.cur_total = total_read;
+					progress_size.total = total_size;
+					session->progress(&progress_size, session);
 				}
-#endif
 			}
 		}
 		/* File obj. was archived, verify that the number of bytes read

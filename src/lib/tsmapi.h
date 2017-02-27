@@ -100,7 +100,14 @@ typedef struct {
 	struct hsm_action_item *hai;
 	struct hsm_copyaction_private *hcp;
 	long hal_flags;
+	void (*progress)(void *data, void *session);
 } session_t;
+
+typedef struct {
+	ssize_t cur;
+	ssize_t cur_total;
+	ssize_t total;
+} progress_size_t;
 
 off64_t to_off64_t(const dsStruct64_t size);
 dsStruct64_t to_dsStruct64_t(const off_t size);
