@@ -42,6 +42,10 @@
 #define PACKAGE_VERSION "NA"
 #endif
 
+#define OPTNCMP(str1, str2)			\
+	((strlen(str1) == strlen(str2)) &&	\
+	 (strncmp(str1, str2, strlen(str1)) == 0))
+
 struct options {
 	int o_daemonize;
 	int o_dry_run;
@@ -208,19 +212,20 @@ static int ct_parseopts(int argc, char *argv[])
 			break;
 		}
 		case 'v': {
-			if (strncmp(optarg, "error", 5) == 0)
+			if (OPTNCMP("error", optarg))
 				opt.o_verbose = LLAPI_MSG_ERROR;
-			else if (strncmp(optarg, "warn", 4) == 0)
+			else if (OPTNCMP("warn", optarg))
 				opt.o_verbose = LLAPI_MSG_WARN;
-			else if (strncmp(optarg, "info", 4) == 0)
+			else if (OPTNCMP("info", optarg))
 				opt.o_verbose = LLAPI_MSG_INFO;
-			else if (strncmp(optarg, "debug", 5) == 0)
+			else if (OPTNCMP("debug", optarg))
 				opt.o_verbose = LLAPI_MSG_DEBUG;
-			else
+			else {
 				fprintf(stdout, "wrong argument for -v, "
 					"--verbose='%s'\n", optarg);
-			usage(argv[0], 1);
-			break;
+				usage(argv[0], 1);
+			}
+				break;
 		}
 		case 'h': {
 			usage(argv[0], 0);
