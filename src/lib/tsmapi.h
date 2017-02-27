@@ -93,7 +93,6 @@ typedef struct {
 } qarray_t;
 
 typedef struct {
-	dsUint16_t id;
 	dsUint32_t handle;
 	qarray_t *qarray;
 	dsmBool_t overwrite_older;

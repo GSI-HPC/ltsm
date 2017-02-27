@@ -67,8 +67,7 @@ do {									\
 #define TSM_TRACE(session, rc, func)					\
 do {									\
 	TSM_GET_MSG(session, rc);					\
-	CT_TRACE("%s: session: %d handle: %d %s", func, session->id,	\
-		 session->handle, rcmsg);				\
+	CT_TRACE("%s: handle: %d %s", func, session->handle, rcmsg);	\
 } while (0)
 
 void login_fill(login_t *login, const char *servername,

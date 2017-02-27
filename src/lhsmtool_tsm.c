@@ -724,11 +724,8 @@ static int ct_connect_sessions(void)
 			CT_ERROR(rc, "malloc failed");
 			goto cleanup;
 		}
-		session[n]->id = n;
 		session[n]->progress = progress_callback;
-
-		CT_TRACE("tsm_init: session[%d], session[%d]->%d",
-			 n, session[n]->id);
+		CT_TRACE("tsm_init: session: %d", n);
 
 		rc = tsm_connect(&login, session[n]);
 		if (rc) {
