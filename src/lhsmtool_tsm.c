@@ -167,6 +167,7 @@ static int ct_parseopts(int argc, char *argv[])
 
 	int c, rc;
 	optind = 0;
+	api_msg_set_level(opt.o_verbose);
 
 	while ((c = getopt_long(argc, argv, "ai:dt:n:p:o:s:v:rh",
 				long_opts, NULL)) != -1) {
@@ -225,7 +226,8 @@ static int ct_parseopts(int argc, char *argv[])
 					"--verbose='%s'\n", optarg);
 				usage(argv[0], 1);
 			}
-				break;
+			api_msg_set_level(opt.o_verbose);
+			break;
 		}
 		case 'h': {
 			usage(argv[0], 0);
@@ -795,8 +797,6 @@ cleanup:
 static int ct_setup(void)
 {
 	int rc;
-
-	llapi_msg_set_level(opt.o_verbose);
 
 	rc = llapi_search_fsname(opt.o_mnt, fs_name);
 	if (rc < 0) {
