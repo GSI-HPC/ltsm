@@ -310,7 +310,8 @@ static dsInt16_t retrieve_obj(qryRespArchiveData *query_data,
 		if (rc != DSM_RC_SUCCESSFUL)
 			return  DSM_RC_UNSUCCESSFUL;
 
-		fd = open(fpath, O_WRONLY | O_CREAT, obj_info->st_mode);
+		fd = open(fpath, O_WRONLY | O_TRUNC | O_CREAT,
+			  obj_info->st_mode);
 		if (fd < 0) {
 			CT_ERROR(errno, "open '%s'", fpath);
 			return DSM_RC_UNSUCCESSFUL;
