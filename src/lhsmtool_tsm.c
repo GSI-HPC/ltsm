@@ -69,6 +69,7 @@ struct options opt = {
 	.o_password = {0},
 	.o_fsname = {0},
 	.o_fstype = {0},
+	.o_mnt_fd = 0
 };
 
 static uint16_t nthreads = 2;
@@ -164,33 +165,39 @@ static int ct_parseopts(int argc, char *argv[])
 	};
 
 	/* Load basic options from env */
-	if(getenv("LHSMTSM_D_SERVERNAME")){
+	if (getenv("LHSMTSM_D_SERVERNAME")) {
 		char *optarg = getenv("LHSMTSM_D_SERVERNAME");
 		strncpy(opt.o_servername, optarg,
                                 strlen(optarg) < DSM_MAX_SERVERNAME_LENGTH ?
                                 strlen(optarg) : DSM_MAX_SERVERNAME_LENGTH);
 		CT_INFO("Got servername from config:%s\n", opt.o_servername);
 	}
-	if(getenv("LHSMTSM_D_NODE")){
+	if (getenv("LHSMTSM_D_NODE")) {
 		char *optarg = getenv("LHSMTSM_D_NODE");
 		strncpy(opt.o_node, optarg,
                                 strlen(optarg) < DSM_MAX_NODE_LENGTH ?
                                 strlen(optarg) : DSM_MAX_NODE_LENGTH);
 		CT_INFO("Got node from config:%s\n", opt.o_node);
 	}
-	if(getenv("LHSMTSM_D_OWNER")){
+	if (getenv("LHSMTSM_D_OWNER")) {
 		char *optarg = getenv("LHSMTSM_D_OWNER");
                         strncpy(opt.o_owner, optarg,
                                 strlen(optarg) < DSM_MAX_OWNER_LENGTH ?
                                 strlen(optarg) : DSM_MAX_OWNER_LENGTH);
 		CT_INFO("Got owner from config:%s\n", opt.o_owner);
 	}
-	if(getenv("LHSMTSM_D_PASSWORD")){
+	if (getenv("LHSMTSM_D_PASSWORD")) {
 		char *optarg = getenv("LHSMTSM_D_PASSWORD");
                         strncpy(opt.o_password, optarg,
                                 strlen(optarg) < DSM_MAX_VERIFIER_LENGTH ?
                                 strlen(optarg) : DSM_MAX_VERIFIER_LENGTH);
 		CT_INFO("Got password from config:%s\n", opt.o_password);
+	}
+	if (getenv("LHSMTSM_D_MOUNT")) {
+		char *optarg = getenv("LHSMTSM_D_MOUNT");
+                        strncpy(opt.o_mnt, optarg, strlen(optarg));
+        opt.o_mnt_fd = -1;
+		CT_INFO("Got mountpoint from config:%s\n", opt.o_mnt);
 	}
 
 	int c, rc;
@@ -275,14 +282,15 @@ static int ct_parseopts(int argc, char *argv[])
 
 	sanity_arg_check(&opt, argv[0]);
 
-	if (argc != optind + 1) {
-		rc = -EINVAL;
-		CT_ERROR(rc, "no mount point specified");
-		return rc;
+	if (opt.o_mnt_fd != -1) {
+		if (argc != optind + 1) {
+			rc = -EINVAL;
+			CT_ERROR(rc, "no mount point specified");
+			return rc;
+		}
+		opt.o_mnt = argv[optind];
+		opt.o_mnt_fd = -1;
 	}
-
-	opt.o_mnt = argv[optind];
-	opt.o_mnt_fd = -1;
 
 	return 0;
 }

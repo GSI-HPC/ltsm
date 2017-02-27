@@ -33,6 +33,10 @@
 #include <config.h>
 #endif
 
+#ifdef HAVE_LUSTRE
+# include <lustre/lustreapi.h>
+#endif
+
 #include <sys/types.h>
 #include "dsmapitd.h"
 #include "dsmapifp.h"

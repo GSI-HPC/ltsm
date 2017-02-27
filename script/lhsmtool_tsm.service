@@ -3,7 +3,7 @@ Description=lhsmtool_tsm service
 
 [Service]
 EnvironmentFile=/etc/ltsm-hsmtool/lhsmtool_tsm.cfg
-ExecStart=/usr/bin/lhsmtool_tsm -vvv /lustre
+ExecStart=/usr/bin/lhsmtool_tsm /lustre
 
 [Install]
 WantedBy=multi-user.target
