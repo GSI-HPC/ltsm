@@ -47,10 +47,6 @@
 	(DSM_OBJ_ANY_TYPE == type ? "DSM_OBJ_ANY_TYPE" : "UNKNOWN")))))))
 
 static char rcmsg[DSM_MAX_RC_MSG_LENGTH + 1] = {0};
-#if 0
-static dsUint16_t max_obj_per_txn;
-static dsUint32_t max_bytes_per_txn;
-#endif
 
 static dsBool_t do_recursive;
 static dsBool_t use_latest;
@@ -286,8 +282,9 @@ static dsInt16_t retrieve_obj(qryRespArchiveData *query_data,
 	char *buf = NULL;
 	DataBlk dataBlk;
 	dsBool_t done = bFalse;
-	off64_t obj_size = to_off64_t(obj_info->size);
-	ssize_t obj_size_written = 0;
+	off64_t remain_to_write = to_off64_t(obj_info->size);
+	ssize_t total_written = 0;
+	ssize_t cur_written = 0;
 	dsInt16_t rc;
 	dsInt16_t rc_minor = 0;
 	dsBool_t is_local_fd = bFalse;
@@ -334,10 +331,11 @@ static dsInt16_t retrieve_obj(qryRespArchiveData *query_data,
 	dataBlk.bufferPtr = buf;
 	memset(dataBlk.bufferPtr, 0, TSM_BUF_LENGTH);
 
-	/* Request data with a single dsmGetObj call, otherwise data is larger and we need
-	   additional dsmGetData calls. */
+	/* Request data with a single dsmGetObj call, otherwise data
+	   is larger and we need additional dsmGetData calls. */
 	rc = dsmGetObj(session->handle, &(query_data->objId), &dataBlk);
 	TSM_TRACE(session, rc,  "dsmGetObj");
+	off64_t total_size = to_off64_t(obj_info->size);
 
 	while (!done) {
 		/* Note: dataBlk.numBytes always returns TSM_BUF_LENGTH (65536). */
@@ -346,21 +344,40 @@ static dsInt16_t retrieve_obj(qryRespArchiveData *query_data,
 			rc_minor = rc;
 			done = bTrue;
 		} else {
-			obj_size_written = write(fd, buf, obj_size < TSM_BUF_LENGTH ? obj_size : TSM_BUF_LENGTH);
-			if (obj_size_written < 0) {
+			cur_written = write(fd, buf, remain_to_write <
+						 TSM_BUF_LENGTH ?
+						 remain_to_write : TSM_BUF_LENGTH);
+			if (cur_written < 0) {
 				CT_ERROR(errno, "write");
 				rc_minor = DSM_RC_UNSUCCESSFUL;
 				goto cleanup;
 			}
 
-			if (obj_size < TSM_BUF_LENGTH)
+			if (remain_to_write < TSM_BUF_LENGTH)
 				done = bTrue;
 			else {
-				obj_size -= TSM_BUF_LENGTH;
+				total_written += cur_written;
+				remain_to_write -= TSM_BUF_LENGTH;
 				dataBlk.numBytes = 0;
 				rc = dsmGetData(session->handle, &dataBlk);
 				TSM_TRACE(session, rc,  "dsmGetData");
 			}
+			CT_TRACE("cur_written: %zu, total_written: %zu,"
+				 " obj_size: %zu", cur_written, total_written,
+				 total_size);
+#ifdef HAVE_LUSTRE
+			session->hai->hai_extent.length = cur_written;
+			session->hai->hai_extent.offset = total_written - cur_written;
+			rc_minor = llapi_hsm_action_progress(
+				session->hcp,
+				&session->hai->hai_extent,
+				total_size, 0);
+			if (rc_minor) {
+				CT_ERROR(rc, "llapi_hsm_action_progress failed");
+				rc_minor = DSM_RC_UNSUCCESSFUL;
+				goto cleanup;
+			}
+#endif
 		}
 	} /* End while (!done) */
 
@@ -1116,7 +1133,7 @@ static dsInt16_t tsm_archive_generic(archive_info_t *archive_info, int fd, sessi
 	dsUint16_t err_reason;
 	dsBool_t success = bFalse;
 	ssize_t total_read = 0;
-	ssize_t obj_size_read = 0;
+	ssize_t cur_read = 0;
 	dsBool_t done = bFalse;
 	dsUint8_t vote_txn;
 	dsBool_t is_local_fd = bFalse;
@@ -1178,18 +1195,19 @@ static dsInt16_t tsm_archive_generic(archive_info_t *archive_info, int fd, sessi
 		}
 		data_blk.stVersion = DataBlkVersion;
 		data_blk.numBytes = 0;
+		off64_t total_size = to_off64_t(archive_info->obj_info.size);
 
 		while (!done) {
-			obj_size_read = read(fd, data_blk.bufferPtr, TSM_BUF_LENGTH);
-			if (obj_size_read < 0) {
+			cur_read = read(fd, data_blk.bufferPtr, TSM_BUF_LENGTH);
+			if (cur_read < 0) {
 				CT_ERROR(errno, "read");
 				rc_minor = DSM_RC_UNSUCCESSFUL;
 				goto cleanup_transaction;
-			} else if (obj_size_read == 0) /* Zero indicates end of file. */
+			} else if (cur_read == 0) /* Zero indicates end of file. */
 				done = bTrue;
 			else {
-				total_read += obj_size_read;
-				data_blk.bufferLen = obj_size_read;
+				total_read += cur_read;
+				data_blk.bufferLen = cur_read;
 
 				rc = dsmSendData(session->handle, &data_blk);
 				TSM_TRACE(session, rc,  "dsmSendData");
@@ -1197,9 +1215,23 @@ static dsInt16_t tsm_archive_generic(archive_info_t *archive_info, int fd, sessi
 					TSM_ERROR(session, rc, "dsmSendData");
 					goto cleanup_transaction;
 				}
-				CT_TRACE("data_blk.numBytes: %zu, current_read: %zu, total_read: %zu, obj_size: %zu",
-					 data_blk.numBytes, obj_size_read, total_read, to_off64_t(archive_info->obj_info.size));
+				CT_TRACE("cur_read: %zu, total_read: %zu,"
+					 " total_size: %zu", cur_read,
+					 total_read, total_size);
 				data_blk.numBytes = 0;
+#ifdef HAVE_LUSTRE
+				session->hai->hai_extent.length = cur_read;
+				session->hai->hai_extent.offset = total_read - cur_read;
+				int rc_minor = llapi_hsm_action_progress(
+					session->hcp,
+					&session->hai->hai_extent,
+					total_size, 0);
+				if (rc_minor) {
+					CT_ERROR(rc, "llapi_hsm_action progress failed");
+					rc_minor = DSM_RC_UNSUCCESSFUL;
+					goto cleanup_transaction;
+				}
+#endif
 			}
 		}
 		/* File obj. was archived, verify that the number of bytes read
