@@ -1,4 +1,4 @@
-# LTSM - Lightweight TSM API, TSM Console Client and Lustre Copytool for Archiving Data
+# LTSM - Lightweight TSM API, TSM Console Client and Lustre Copytool for Archiving Data [![Build Status](https://travis-ci.org/joergbehrendt/ltsm.svg?branch=master)](https://travis-ci.org/joergbehrendt/ltsm)
 
 A lightweight high-level TSM API/library (called *tsmapi*) supporting operations
 * *archiving*

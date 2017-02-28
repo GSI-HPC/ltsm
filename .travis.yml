@@ -1,0 +1,21 @@
+language: c
+
+script: ./autogen.sh && ./configure CFLAGS='-g -DDEBUG -O0' --with-lustre=/opt/lustre-release/ LDFLAGS='-L/usr/include/lustre' && make && ./src/test/test_tsmapi
+
+before_install:
+  - sudo add-apt-repository ppa:dns/gnu --yes
+  - sudo apt-get update -q
+  - sudo apt-get install --only-upgrade autoconf
+  - autoconf --version
+  - wget https://joergbehrendt.com/files/projects/ltsm/debian-packages/amd64/dependencies/gskssl64_8.0-50.66.linux.x86_64.deb
+  - sudo dpkg -i gskssl64_8.0-50.66.linux.x86_64.deb
+  - wget https://joergbehrendt.com/files/projects/ltsm/debian-packages/amd64/dependencies/gskcrypt64_8.0-50.66.linux.x86_64.deb
+  - sudo dpkg -i gskcrypt64_8.0-50.66.linux.x86_64.deb
+  - wget https://joergbehrendt.com/files/projects/ltsm/debian-packages/amd64/dependencies/lustre-server-utils_2.9.0-1_amd64.deb
+  - sudo dpkg -i lustre-server-utils_2.9.0-1_amd64.deb
+  - wget https://joergbehrendt.com/files/projects/ltsm/debian-packages/amd64/dependencies/lustre-dev_2.9.0-1_amd64.deb
+  - sudo dpkg -i lustre-dev_2.9.0-1_amd64.deb
+  - wget https://joergbehrendt.com/files/projects/ltsm/debian-packages/amd64/dependencies/tivsm-api64_amd64.deb
+  - sudo dpkg -i tivsm-api64_amd64.deb
+  - git clone https://github.com/Xyratex/lustre-stable.git /opt/lustre-release
+
