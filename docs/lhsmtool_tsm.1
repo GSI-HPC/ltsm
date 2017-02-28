@@ -1,0 +1,93 @@
+.\" Copyright (c) 2017, Jörg Behrendt
+.\"
+.\" %%%LICENSE_START(GPLv2+_DOC_FULL)
+.\" This is free documentation; you can redistribute it and/or
+.\" modify it under the terms of the GNU General Public License as
+.\" published by the Free Software Foundation; either version 2 of
+.\" the License, or (at your option) any later version.
+.\"
+.\" The GNU General Public License's references to "object code"
+.\" and "executables" are to be interpreted as the output of any
+.\" document formatting or typesetting system, including
+.\" intermediate and printed output.
+.\"
+.\" This manual is distributed in the hope that it will be useful,
+.\" but WITHOUT ANY WARRANTY; without even the implied warranty of
+.\" MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+.\" GNU General Public License for more details.
+.\"
+.\" You should have received a copy of the GNU General Public
+.\" License along with this manual; if not, see
+.\" <http://www.gnu.org/licenses/>.
+.\" %%%LICENSE_END
+
+.TH "lhsmtool_tsm" "1" "26.February 2017" "Thomas Stibor <t.stibor@gsi.de>, Jörg Behrendt <j.behrendt@gsi.de>" "version 0.2.0"
+
+.SH NAME
+lhsmtool_tsm is a Lustre TSM Copytool which hooks into the Lustre framework and provides HSM functionality for Lustre and TSM storage backend.
+.SH SYNOPSIS
+lhsmtool_tsm OPTION... LUSTRE_MOUNT_POINT
+.SH DESCRIPTION
+.SS
+.BR OPTIONS:       
+Mandatory arguments of long options are mandatory for short options
+.PP
+REQUIRED
+.TP
+.BR \-n ", " \-\-node =\fINAME\fR
+The name of the TSM node used during the authentification.
+.TP
+.BR \-p ", " \-\-password =\fIPASSWORD\fR
+The password for the TSM node used during the authentification.
+.TP
+.BR \-s ", " \-\-servername =\fINAME\fR
+The TSM servername to connect to. Name will be resolved to an actual ip adress within the dsm.sys file of your tsm-api-client installation.
+.PP
+OPTIONAL
+.TP
+.BR \-i ", " \-\-archive-id =\fIID\fR
+Archive id.
+.TP
+.BR \-f ", " \-\-fsname =\fIPATH\fR
+TSM Filesystem path to archive to or query from. Defaults to \fI/\fR.
+.TP
+.BR \-o ", " \-\-owner =\fINAME\fR
+If archiving a file the owner's name will be stored with the file objects onto the tsm server. By default an empty string is used.
+On all other actions the name will be used to filter the queries by owner and the wildcards '*' or '?' are allowed. By default all owners will be selected.
+.TP
+.BR \-t ", " \-\-threads =\fICOUNT\fR
+Number of working threads. Defaults to \fI2\fR. 
+.TP
+.BR \-r ", " \-\-dry-run
+Don't run. Just show what would be done. 
+.TP
+.BR \-h ", " \-\-help
+Prints the usage message. 
+.TP
+.BR \-v ", " \-\-verbose =\fIerror\fR|\fIwarn\fR|\fIinfo\fR|\fIdebug\fR
+Sets the debug level for the application. Defaults to \fIinfo\fR .
+.SS
+.BR LUSTRE_MOUNT_POINT:
+.PP
+Directory where a Lustre filesystem is mounted at. This filesystem needs to have hsm functionality enabled.
+.SH ENVIROMENT
+If set some options will be loaded from the enviroment before parsing the passed command arguments.
+.TP
+.BR LHSMTSM_D_SERVERNAME=\fISERVERNAME\fR
+.TP
+.BR LHSMTSM_D_NODE=\fINODE\fR
+.TP
+.BR LHSMTSM_D_PASSWORD=\fIPASSWORD\fR
+.TP
+.BR LHSMTSM_D_OWNER=\fIOWNER\fR
+.TP
+.BR LHSMTSM_D_MOUNT=\fILUSTRE_MOUNT_POINT\fR
+
+.SH FILES
+tsm-api-client 'dsm.sys' file containts the information to look up the ip address of your tsm-server. By default it is located at '/opt/tivoli/tsm/client/api/bin64/dsm.sys'.
+It should containt at least one set of options consisting of SERVERNAME, NODENAME and TCPSERVERADDRESS.
+.SH BUGS
+Please report bugs to <http://github.com/tstibor/ltsm/issues>
+
+.SH SEE ALSO
+Github project at <http://github.com/tstibor/ltsm>

@@ -21,7 +21,7 @@
 .\" <http://www.gnu.org/licenses/>.
 .\" %%%LICENSE_END
 
-.TH "tsmc" "1" "20.December 2016" "Thomas Stibor <t.stibor@gsi.de>" "version 0.1.5"
+.TH "ltsmc" "1" "26.February 2017" "Thomas Stibor <t.stibor@gsi.de>, Jörg Behrendt <j.behrendt@gsi.de>" "version 0.2.0"
 
 .SH NAME
 ltsmc demonstrates the use of the high-level TSM API (tsmapi) which is used by the Lustre TSM Copytool (lhsmtool_tsm) to archive, retrieve, delete and query data on a tsm server. The console client can be used to retrieve data which was archived with the Lustre Copytool. This is especially useful when a Lustre storage deployment is decommissioned and the archived data still needs to be retrieved afterwards.
@@ -63,6 +63,9 @@ OPTIONAL
 .TP
 .BR \-i ", " \-\-recursive
 Archive directory recursively by also processing each subdirectory.
+.TP
+.BR \-l ", " \-\-latest
+Query, restore and delete action will only select the latest version of the stored objects.
 .TP
 .BR \-f ", " \-\-fsname =\fIPATH\fR
 TSM Filesystem path to archive to or query from. Defaults to '/'.
