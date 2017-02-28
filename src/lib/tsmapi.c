@@ -67,7 +67,7 @@ do {									\
 #define TSM_TRACE(session, rc, func)					\
 do {									\
 	TSM_GET_MSG(session, rc);					\
-	CT_TRACE("%s: handle: %d %s", func, session->handle, rcmsg);	\
+	CT_DEBUG("%s: handle: %d %s", func, session->handle, rcmsg);	\
 } while (0)
 
 void login_fill(login_t *login, const char *servername,
@@ -362,7 +362,7 @@ static dsInt16_t retrieve_obj(qryRespArchiveData *query_data,
 				rc = dsmGetData(session->handle, &dataBlk);
 				TSM_TRACE(session, rc,  "dsmGetData");
 			}
-			CT_TRACE("cur_written: %zu, total_written: %zu,"
+			CT_DEBUG("cur_written: %zu, total_written: %zu,"
 				 " obj_size: %zu", cur_written, total_written,
 				 total_size);
 
@@ -650,7 +650,7 @@ dsInt16_t tsm_query_session(session_t *session)
 			  "Install the current library version.");
 	}
 
-	CT_TRACE("IBM API library version = %d.%d.%d.%d\n",
+	CT_DEBUG("IBM API library version = %d.%d.%d.%d\n",
 		 libapi_ver_t.version,
 		 libapi_ver_t.release,
 		 libapi_ver_t.level,
@@ -1021,7 +1021,7 @@ static dsInt16_t tsm_retrieve_generic(const char *fs, const char *hl,
 			       (char *)&(query_data.objInfo),
 			       query_data.objInfolen);
 
-			CT_TRACE("\n"
+			CT_DEBUG("\n"
 				 "retrieving obj  fs          : %s\n"
 				 "                hl          : %s\n"
 				 "                ll          : %s\n"
@@ -1212,7 +1212,7 @@ static dsInt16_t tsm_archive_generic(archive_info_t *archive_info, int fd, sessi
 					TSM_ERROR(session, rc, "dsmSendData");
 					goto cleanup_transaction;
 				}
-				CT_TRACE("cur_read: %zu, total_read: %zu,"
+				CT_DEBUG("cur_read: %zu, total_read: %zu,"
 					 " total_size: %zu", cur_read,
 					 total_read, total_size);
 				data_blk.numBytes = 0;

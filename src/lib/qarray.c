@@ -124,7 +124,7 @@ static dsInt16_t replace_oldest_obj(const qryRespArchiveData *query_data,
 		   the newer one. */
 		if (date_in_sec(&(*qarray)->data[n].insDate) <
 		    date_in_sec(&query_data->insDate)) {
-			CT_TRACE("replacing older date qryRespArchiveData: "
+			CT_DEBUG("replacing older date qryRespArchiveData: "
 				 "%i/%02i/%02i %02i:%02i:%02i with newer "
 				 "date: %i/%02i/%02i %02i:%02i:%02i",
 				 (*qarray)->data[n].insDate.year,

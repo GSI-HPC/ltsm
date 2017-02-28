@@ -298,7 +298,7 @@ static int ct_finish(session_t *session, int ct_rc, char *fpath)
 {
 	int rc;
 
-	CT_TRACE("Action completed, notifying coordinator "
+	CT_DEBUG("action completed, notifying coordinator "
 		 "cookie=%#jx, FID="DFID", err=%d",
 		 (uintmax_t)session->hai->hai_cookie, PFID(&session->hai->hai_fid),
 		 -ct_rc);
@@ -320,7 +320,7 @@ static int ct_finish(session_t *session, int ct_rc, char *fpath)
 	else if (rc < 0)
 		CT_ERROR(rc, "llapi_hsm_action_end() on '%s' failed", fpath);
 	else
-		CT_TRACE("llapi_hsm_action_end() on '%s' ok (rc=%d)",
+		CT_DEBUG("llapi_hsm_action_end() on '%s' ok (rc=%d)",
 			 fpath, rc);
 
 	return rc;
@@ -344,7 +344,7 @@ static int ct_archive(session_t *session)
 		goto cleanup;
 	}
 
-	CT_TRACE("archiving '%s' to TSM storage", fpath);
+	CT_DEBUG("archiving '%s' to TSM storage", fpath);
 
 	if (opt.o_dry_run) {
 		rc = 0;
@@ -365,7 +365,7 @@ static int ct_archive(session_t *session)
 		goto cleanup;
 	}
 
-	CT_TRACE("archiving '%s' to TSM storage done", fpath);
+	CT_DEBUG("archiving '%s' to TSM storage done", fpath);
 
 cleanup:
 	if (!(src_fd < 0))
@@ -415,7 +415,7 @@ static int ct_restore(session_t *session)
 	    goto cleanup;
 	}
 
-	CT_TRACE("restoring data from TSM storage to '%s'", fpath);
+	CT_DEBUG("restoring data from TSM storage to '%s'", fpath);
 	if (opt.o_dry_run) {
 	    rc = 0;
 	    goto cleanup;
@@ -433,7 +433,7 @@ static int ct_restore(session_t *session)
 		CT_ERROR(rc, "tsm_retrieve_fpath on '%s' failed", fpath);
 		goto cleanup;
 	}
-	CT_TRACE("data restore from TSM storage to '%s' done", fpath);
+	CT_DEBUG("data restore from TSM storage to '%s' done", fpath);
 
 cleanup:
 	rc = ct_finish(session, rc, fpath);
@@ -461,7 +461,7 @@ static int ct_remove(session_t *session)
 		goto cleanup;
 	}
 
-	CT_TRACE("removing from TSM storage file '%s'", fpath);
+	CT_DEBUG("removing from TSM storage file '%s'", fpath);
 
 	if (opt.o_dry_run) {
 		rc = 0;
@@ -491,7 +491,7 @@ static int ct_process_item(session_t *session)
 		int linkno = 0;
 
 		sprintf(fid, DFID, PFID(&session->hai->hai_fid));
-		CT_TRACE("'%s' action %s reclen %d, cookie=%#jx",
+		CT_DEBUG("'%s' action %s reclen %d, cookie=%#jx",
 			 fid, hsm_copytool_action2name(session->hai->hai_action),
 			 session->hai->hai_len,
 			 (uintmax_t)session->hai->hai_cookie);
@@ -500,7 +500,7 @@ static int ct_process_item(session_t *session)
 		if (rc < 0)
 			CT_ERROR(rc, "cannot get path of FID %s", fid);
 		else
-			CT_TRACE("processing file '%s'", path);
+			CT_DEBUG("processing file '%s'", path);
 	}
 
 	switch (session->hai->hai_action) {
@@ -538,7 +538,7 @@ static void *ct_thread(void *data)
 			pthread_cond_wait(&queue_cond, &queue_mutex);
 
 		rc = queue_dequeue(&queue, (void **)&session->hai);
-		CT_TRACE("dequeue action '%s' cookie=%#jx, FID="DFID"",
+		CT_DEBUG("dequeue action '%s' cookie=%#jx, FID="DFID"",
 			 hsm_copytool_action2name(session->hai->hai_action),
 			 (uintmax_t)session->hai->hai_cookie,
 			 PFID(&session->hai->hai_fid));
@@ -560,13 +560,15 @@ static void *ct_thread(void *data)
 static void handler(int signal)
 {
 	psignal(signal, "exiting");
+
+	/* TODO: Cleanup TSM sessions */
+
 	/* If we don't clean up upon interrupt, umount thinks there's a ref
 	 * and doesn't remove us from mtab (EINPROGRESS). The lustre client
 	 * does successfully unmount and the mount is actually gone, but the
 	 * mtab entry remains. So this just makes mtab happier. */
 	llapi_hsm_copytool_unregister(&ctdata);
 
-	/* TODO: Cleanup TSM session */
 	_exit(1);
 }
 
@@ -607,11 +609,11 @@ static int ct_run(void)
 		int msgsize;
 		int i = 0;
 
-		CT_TRACE("waiting for message from kernel");
+		CT_DEBUG("waiting for message from kernel");
 
 		rc = llapi_hsm_copytool_recv(ctdata, &hal, &msgsize);
 		if (rc == -ESHUTDOWN) {
-			CT_TRACE("shutting down");
+			CT_DEBUG("shutting down");
 			break;
 		} else if (rc < 0) {
 			CT_WARN("cannot receive action list: %s",
@@ -623,7 +625,7 @@ static int ct_run(void)
 				continue;
 		}
 
-		CT_TRACE("copytool fs=%s archive#=%d item_count=%d",
+		CT_DEBUG("copytool fs=%s archive#=%d item_count=%d",
 			 hal->hal_fsname, hal->hal_archive_id, hal->hal_count);
 
 		if (strcmp(hal->hal_fsname, fs_name) != 0) {
@@ -661,7 +663,7 @@ static int ct_run(void)
 
 			/* Insert hsm action into queue. */
 			rc = queue_enqueue(&queue, work_hai);
-			CT_TRACE("enqueue action '%s' cookie=%#jx, FID="DFID"",
+			CT_DEBUG("enqueue action '%s' cookie=%#jx, FID="DFID"",
 				 hsm_copytool_action2name(work_hai->hai_action),
 				 (uintmax_t)work_hai->hai_cookie,
 				 PFID(&work_hai->hai_fid));
@@ -725,7 +727,7 @@ static int ct_connect_sessions(void)
 			goto cleanup;
 		}
 		session[n]->progress = progress_callback;
-		CT_TRACE("tsm_init: session: %d", n + 1);
+		CT_DEBUG("tsm_init: session: %d", n + 1);
 
 		rc = tsm_connect(&login, session[n]);
 		if (rc) {
@@ -895,7 +897,7 @@ int main(int argc, char *argv[])
 		goto error_cleanup;
 
 	rc = ct_run();
-	CT_TRACE("process finished, rc=%d (%s)", rc, strerror(-rc));
+	CT_DEBUG("process finished, rc=%d (%s)", rc, strerror(-rc));
 
 error_cleanup:
 	ct_cleanup();

@@ -90,7 +90,7 @@ double ct_now(void);
 		  ct_now(), syscall(SYS_gettid), __FILE__, __LINE__, \
 		  ## __VA_ARGS__)
 
-#define CT_TRACE(_format, ...)					     \
+#define CT_DEBUG(_format, ...)					     \
 	api_error(API_MSG_DEBUG | API_MSG_NO_ERRNO, 0,		     \
 		  BLU "[TRACE] " RESET "%f [%ld] %s:%d "_format,     \
 		  ct_now(), syscall(SYS_gettid), __FILE__, __LINE__, \
