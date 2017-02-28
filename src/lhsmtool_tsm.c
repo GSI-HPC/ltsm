@@ -257,10 +257,9 @@ static int ct_parseopts(int argc, char *argv[])
 	return 0;
 }
 
-static int progress_callback(struct progress_size_t *pg_size, session_t *session)
+static int progress_callback(struct progress_size_t *pg_size,
+			     session_t *session)
 {
-	CT_DEBUG("Progress callback cur:%i cur_total:%i total:%i",
-			 pg_size->cur, pg_size->cur_total, pg_size->total);
 	int rc;
 
 	session->hai->hai_extent.length = pg_size->cur;

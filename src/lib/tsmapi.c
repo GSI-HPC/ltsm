@@ -373,9 +373,11 @@ static dsInt16_t retrieve_obj(qryRespArchiveData *query_data,
 					.cur_total = total_written,
 					.total = total_size
 				};
-				rc_minor = session->progress(&progress_size, session);
+				rc_minor = session->progress(&progress_size,
+							     session);
 				if (rc_minor) {
- 					CT_ERROR(rc_minor, "progress callback failed");
+ 					CT_ERROR(rc_minor, "progress function"
+						 " callback failed");
  					goto cleanup;
  				}
 			}
@@ -1228,9 +1230,12 @@ static dsInt16_t tsm_archive_generic(archive_info_t *archive_info, int fd, sessi
 						.cur_total = total_read,
 						.total = total_size
 					};
-					rc_minor = session->progress(&progress_size, session);
+					rc_minor = session->progress(
+						&progress_size, session);
 					if (rc_minor) {
-	 					CT_ERROR(rc_minor, "progress callback failed");
+						CT_ERROR(rc_minor,
+							 "progress function"
+							 " callback failed");
 	 					goto cleanup_transaction;
 	 				}
 				}
