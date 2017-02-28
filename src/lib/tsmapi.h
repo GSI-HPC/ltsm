@@ -19,7 +19,7 @@
 /* Important note: The API can only retrieve objects that were
    archived using TSM API calls, that is, data archived with dsmc cannot
    be retrieved with these TSM API calls or console client ltsmc.
-   Moreover the API doesn't support subdir opperations, that is, hl/ll
+   Moreover the API doesn't support subdir operations, that is, hl/ll
    queries must be constructed (in a clever way) with wildcard (*) and
    question mark (?) to match sub directories and files. For more detail c.f.
    PDF Dokument: Using the Application Programming Interface
