@@ -49,7 +49,6 @@
 static char rcmsg[DSM_MAX_RC_MSG_LENGTH + 1] = {0};
 
 static dsBool_t do_recursive;
-static dsBool_t use_latest;
 
 #define TSM_GET_MSG(session, rc)			\
 do {							\
@@ -101,23 +100,6 @@ void login_fill(login_t *login, const char *servername,
 void set_recursive(const dsBool_t recursive)
 {
 	do_recursive = recursive;
-}
-
-/**
- * @brief Set internal boolean variable use_latest to process the most recent
- *        objects only.
- *
- *        If objects are archived multiple times (e.g. with different content),
- *        then add in the query array only those having the most recent date.
- *        That is, only objects will be retrieved or deleted which have the most
- *        recent insertion date.
- *
- * @param[in] latest Boolean variable flags whether to retrieve or delete the
- *                   most recent files/directories.
- */
-void select_latest(const dsBool_t latest)
-{
-	use_latest = latest;
 }
 
 /**
@@ -415,45 +397,54 @@ void tsm_print_query_node(const qryRespArchiveData *qry_resp_arv_data,
 	date_to_str(exp_str_date, &(qry_resp_arv_data->expDate));
 
 	obj_info_t obj_info;
-	memcpy(&obj_info, (char *)qry_resp_arv_data->objInfo, qry_resp_arv_data->objInfolen);
+	memcpy(&obj_info, (char *)qry_resp_arv_data->objInfo,
+	       qry_resp_arv_data->objInfolen);
 
-	fprintf(stdout, "object # %lu\n"
-		"fs: %s, hl: %s, ll: %s\n"
-		"object id (hi,lo)                          : (%u,%u)\n"
-		"object info length                         : %d\n"
-		"object info size (hi,lo)                   : (%u,%u)\n"
-		"object type                                : %s\n"
-		"object magic id                            : %d\n"
-		"archive description                        : %s\n"
-		"owner                                      : %s\n"
-		"insert date                                : %s\n"
-		"expiration date                            : %s\n"
-		"restore order (top,hi_hi,hi_lo,lo_hi,lo_lo): (%u,%u,%u,%u,%u)\n"
-		"estimated size (hi,lo)                     : (%u,%u)\n",
-		n,
-		qry_resp_arv_data->objName.fs,
-		qry_resp_arv_data->objName.hl,
-		qry_resp_arv_data->objName.ll,
-		qry_resp_arv_data->objId.hi,
-		qry_resp_arv_data->objId.lo,
-		qry_resp_arv_data->objInfolen,
-		obj_info.size.hi,
-		obj_info.size.lo,
-		OBJ_TYPE(qry_resp_arv_data->objName.objType),
-		obj_info.magic,
-		qry_resp_arv_data->descr,
-		qry_resp_arv_data->owner,
-		ins_str_date,
-		exp_str_date,
-		qry_resp_arv_data->restoreOrderExt.top,
-		qry_resp_arv_data->restoreOrderExt.hi_hi,
-		qry_resp_arv_data->restoreOrderExt.hi_lo,
-		qry_resp_arv_data->restoreOrderExt.lo_hi,
-		qry_resp_arv_data->restoreOrderExt.lo_lo,
-		qry_resp_arv_data->sizeEstimate.hi,
-		qry_resp_arv_data->sizeEstimate.lo);
-
-	fflush(stdout);
+	if (api_msg_get_level() >= API_MSG_INFO) {
+		CT_INFO("object # %lu\n"
+			"fs: %s, hl: %s, ll: %s\n"
+			"object id (hi,lo)                          : (%u,%u)\n"
+			"object info length                         : %d\n"
+			"object info size (hi,lo)                   : (%u,%u)\n"
+			"object type                                : %s\n"
+			"object magic id                            : %d\n"
+			"archive description                        : %s\n"
+			"owner                                      : %s\n"
+			"insert date                                : %s\n"
+			"expiration date                            : %s\n"
+			"restore order (top,hi_hi,hi_lo,lo_hi,lo_lo): (%u,%u,%u,%u,%u)\n"
+			"estimated size (hi,lo)                     : (%u,%u)\n",
+			n,
+			qry_resp_arv_data->objName.fs,
+			qry_resp_arv_data->objName.hl,
+			qry_resp_arv_data->objName.ll,
+			qry_resp_arv_data->objId.hi,
+			qry_resp_arv_data->objId.lo,
+			qry_resp_arv_data->objInfolen,
+			obj_info.size.hi,
+			obj_info.size.lo,
+			OBJ_TYPE(qry_resp_arv_data->objName.objType),
+			obj_info.magic,
+			qry_resp_arv_data->descr,
+			qry_resp_arv_data->owner,
+			ins_str_date,
+			exp_str_date,
+			qry_resp_arv_data->restoreOrderExt.top,
+			qry_resp_arv_data->restoreOrderExt.hi_hi,
+			qry_resp_arv_data->restoreOrderExt.hi_lo,
+			qry_resp_arv_data->restoreOrderExt.lo_hi,
+			qry_resp_arv_data->restoreOrderExt.lo_lo,
+			qry_resp_arv_data->sizeEstimate.hi,
+			qry_resp_arv_data->sizeEstimate.lo);
+	} else {
+		fprintf(stdout, "%s %12zu, fs:%s hl:%s ll:%s\n",
+			OBJ_TYPE(qry_resp_arv_data->objName.objType),
+			to_off64_t(obj_info.size),
+			qry_resp_arv_data->objName.fs,
+			qry_resp_arv_data->objName.hl,
+			qry_resp_arv_data->objName.ll);
+		fflush(stdout);
+	}
 }
 
 dsInt16_t tsm_init(const dsBool_t mt_flag)
@@ -734,7 +725,7 @@ dsInt16_t tsm_query_hl_ll(const char *fs, const char *hl, const char *ll,
 			}
 		} else if (rc == DSM_RC_UNKNOWN_FORMAT) {
 			/* head over to next object if format error occurs when trying to access non api archived files */
-                        CT_WARN("DSM_OBJECT not archived by API. Skipping Object!");
+                        CT_WARN("DSM_OBJECT not archived by API, skipping object");
                 } else {
 			done = bTrue;
 			if (rc == DSM_RC_ABORT_NO_MATCH)
@@ -1024,26 +1015,13 @@ static dsInt16_t tsm_retrieve_generic(const char *fs, const char *hl,
 			       (char *)&(query_data.objInfo),
 			       query_data.objInfolen);
 
-			CT_INFO("\n"
-				"retrieving obj  fs          : %s\n"
-				"                hl          : %s\n"
-				"                ll          : %s\n"
-				"objtype                     : %s\n"
-				"objinfo magic               : %d\n"
-				"objinfo size bytes (hi,lo)  : (%u,%u)\n"
-				"estimated size bytes (hi,lo): (%u,%u)\n",
-				query_data.objName.fs,
-				query_data.objName.hl,
-				query_data.objName.ll,
-				OBJ_TYPE(query_data.objName.objType),
-				obj_info.magic,
-				obj_info.size.hi,
-				obj_info.size.lo,
-				query_data.sizeEstimate.hi,
-				query_data.sizeEstimate.lo);
+			if (api_msg_get_level() >= API_MSG_INFO) {
+				CT_INFO("retrieving object:");
+				tsm_print_query_node(&query_data, c_iter);
+			}
 
 			if (obj_info.magic != MAGIC_ID_V1) {
-				CT_WARN("Skip object due magic mismatch with MAGIC_ID: %d\n", obj_info.magic);
+				CT_WARN("skip object due magic mismatch with MAGIC_ID: %d\n", obj_info.magic);
 				continue;	/* Ignore this object and try next one. */
 			}
 

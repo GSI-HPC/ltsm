@@ -42,10 +42,6 @@
 #define PACKAGE_VERSION "NA"
 #endif
 
-#define OPTNCMP(str1, str2)			\
-	((strlen(str1) == strlen(str2)) &&	\
-	 (strncmp(str1, str2, strlen(str1)) == 0))
-
 struct options {
 	int o_daemonize;
 	int o_dry_run;
@@ -144,7 +140,7 @@ static void sanity_arg_check(const struct options *opts, const char *argv)
 		fprintf(stdout, "missing argument -s, --servername=<string>\n\n");
 		usage(argv, 1);
 	} else if (!strlen(opt.o_fsname)) {
-		strncpy(opt.o_fsname, FSNAME, strlen(FSNAME));
+		strncpy(opt.o_fsname, DEFAULT_FSNAME, strlen(DEFAULT_FSNAME));
 	}
 }
 
@@ -367,7 +363,7 @@ static int ct_archive(session_t *session)
 		goto cleanup;
 	}
 
-	rc = tsm_archive_fpath(FSNAME, fpath, NULL, -1,
+	rc = tsm_archive_fpath(DEFAULT_FSNAME, fpath, NULL, -1,
 			       (const void *)&session->hai->hai_fid, session);
 	if (rc != DSM_RC_SUCCESSFUL) {
 		CT_ERROR(rc, "tsm_archive_fpath_fid on '%s' failed", fpath);
@@ -436,7 +432,7 @@ static int ct_restore(session_t *session)
 		goto cleanup;
 	}
 
-	rc = tsm_retrieve_fpath(FSNAME, fpath, NULL, dst_fd, session);
+	rc = tsm_retrieve_fpath(DEFAULT_FSNAME, fpath, NULL, dst_fd, session);
 	if (rc != DSM_RC_SUCCESSFUL) {
 		CT_ERROR(rc, "tsm_retrieve_fpath on '%s' failed", fpath);
 		goto cleanup;
@@ -474,7 +470,7 @@ static int ct_remove(session_t *session)
 		rc = 0;
 		goto cleanup;
 	}
-	rc = tsm_delete_fpath(FSNAME, fpath, session);
+	rc = tsm_delete_fpath(DEFAULT_FSNAME, fpath, session);
 	if (rc != DSM_RC_SUCCESSFUL) {
 		CT_ERROR(rc, "tsm_delete_fpath on '%s' failed", fpath);
 		goto cleanup;
@@ -718,8 +714,8 @@ static int ct_connect_sessions(void)
 	bzero(&login, sizeof(login));
 	login_fill(&login, opt.o_servername,
 		   opt.o_node, opt.o_password,
-		   opt.o_owner, LOGIN_PLATFORM,
-		   FSNAME, FSTYPE); /* TODO: opt.o_fsname, opt.o_fstype */
+		   opt.o_owner, LINUX_PLATFORM,
+		   DEFAULT_FSNAME, DEFAULT_FSTYPE); /* TODO: opt.o_fsname, opt.o_fstype */
 
 	session = calloc(nthreads, sizeof(session_t *));
 	if (session == NULL) {

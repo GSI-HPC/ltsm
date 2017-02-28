@@ -45,14 +45,17 @@
 #include "dapint64.h"
 #include "log.h"
 
-#define FSNAME "/"
-#define FSTYPE "ltsm"
-#define LOGIN_PLATFORM "GNU/Linux"
+#define DEFAULT_FSNAME "/"
+#define DEFAULT_FSTYPE "ltsm"
+#define LINUX_PLATFORM "GNU/Linux"
 
 #define TSM_BUF_LENGTH 65536
 #define MAX_OPTIONS_LENGTH 256
-
 #define MAGIC_ID_V1 71147
+
+#define OPTNCMP(str1, str2)			\
+	((strlen(str1) == strlen(str2)) &&	\
+	 (strncmp(str1, str2, strlen(str1)) == 0))
 
 typedef struct {
 	char node[DSM_MAX_NODE_LENGTH + 1];

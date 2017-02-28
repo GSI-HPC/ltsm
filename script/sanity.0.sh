@@ -131,13 +131,13 @@ find ${PATH_PREFIX} -exec md5sum -b '{}' \; &> ${MD5_ORIG}
 ##########################################################
 # Archive data
 echo "Archiving data please wait ..."
-${LTSM_BIN} -a -i -f '/' -n ${LTSM_NODE} -p ${LTSM_PASSWORD} -s ${LTSM_SERVERNAME} "${PATH_PREFIX}"
+${LTSM_BIN} --verbose warn --archive -r -f '/' -n ${LTSM_NODE} -p ${LTSM_PASSWORD} -s ${LTSM_SERVERNAME} "${PATH_PREFIX}"
 [ $? -eq 0 ] && { echo -e "done\n"; }
 
 # First remove data locally, second retrieve data from TSM storage.
 echo "Deleting data locally in ${PATH_PREFIX} and retrieving data from TSM storage"
 rm -rf ${PATH_PREFIX}
-${LTSM_BIN} -r -f '/' -n ${LTSM_NODE} -p ${LTSM_PASSWORD} -s ${LTSM_SERVERNAME} "${PATH_PREFIX}*/*"
+${LTSM_BIN} --verbose warn --retrieve -f '/' -n ${LTSM_NODE} -p ${LTSM_PASSWORD} -s ${LTSM_SERVERNAME} "${PATH_PREFIX}*/*"
 [ $? -eq 0 ] && { echo -e "done\n"; }
 
 echo "Creating MD5 sum file of retrieved data: ${MD5_RETR}"
@@ -145,7 +145,7 @@ find ${PATH_PREFIX} -exec md5sum -b '{}' \; &> ${MD5_RETR}
 
 # Finally remove data locally and also from TSM storage.
 rm -rf ${PATH_PREFIX}
-${LTSM_BIN} -d -f '/' -n ${LTSM_NODE} -p ${LTSM_PASSWORD} -s ${LTSM_SERVERNAME} "${PATH_PREFIX}*/*"
+${LTSM_BIN} --verbose warn --delete -f '/' -n ${LTSM_NODE} -p ${LTSM_PASSWORD} -s ${LTSM_SERVERNAME} "${PATH_PREFIX}*/*"
 [ $? -eq 0 ] && { echo -e "done\n"; }
 
 # Check for equality

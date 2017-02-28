@@ -28,182 +28,216 @@
 #define PACKAGE_VERSION "NA"
 #endif
 
-/* Arguments */
-static dsBool_t a_arg = bFalse;
-static dsBool_t r_arg = bFalse;
-static dsBool_t q_arg = bFalse;
-static dsBool_t d_arg = bFalse;
-static char f_arg[DSM_MAX_FSNAME_LENGTH + 1] = {0};
-static char c_arg[DSM_MAX_DESCR_LENGTH + 1] = {0};
-static char n_arg[DSM_MAX_NODE_LENGTH + 1] = {0};
-static char o_arg[DSM_MAX_OWNER_LENGTH + 1] = {0};
-static char p_arg[DSM_MAX_VERIFIER_LENGTH + 1] = {0};
-static char s_arg[DSM_MAX_SERVERNAME_LENGTH + 1] = {0};
-static char **files_dirs_arg = NULL;
+struct options {
+	int o_archive;
+	int o_retrieve;
+	int o_query;
+	int o_delete;
+	int o_verbose;
+	int o_latest;
+	int o_recursive;
+	char o_servername[DSM_MAX_SERVERNAME_LENGTH + 1];
+	char o_node[DSM_MAX_NODE_LENGTH + 1];
+	char o_owner[DSM_MAX_OWNER_LENGTH + 1];
+	char o_password[DSM_MAX_VERIFIER_LENGTH + 1];
+	char o_fsname[DSM_MAX_FSNAME_LENGTH + 1];
+	char o_fstype[DSM_MAX_FSTYPE_LENGTH + 1];
+	char o_desc[DSM_MAX_DESCR_LENGTH + 1];
+};
 
-void usage(const char *cmd_name)
+struct options opt = {
+	.o_verbose = API_MSG_NORMAL,
+	.o_servername = {0},
+	.o_node = {0},
+	.o_owner = {0},
+	.o_password = {0},
+	.o_fsname = {0},
+	.o_fstype = {0},
+	.o_desc = {0},
+};
+
+static void usage(const char *cmd_name, const int rc)
 {
 	dsmApiVersionEx libapi_ver = get_libapi_ver();
 	dsmAppVersion appapi_ver = get_appapi_ver();
 
-	printf("Syntax: %s\n"
-	       "\t-a, --archive\n"
-	       "\t-r, --retrieve\n"
-	       "\t-q, --query\n"
-	       "\t-d, --delete\n"
-	       "\t-l, --latest\n"
-	       "\t-i, --recursive [archive]\n"
-	       "\t-f, --fsname <STRING> [default '/']\n"
-	       "\t-c, --description <STRING>\n"
-	       "\t-n, --node <STRING>\n"
-	       "\t-o, --owner <STRING>\n"
-	       "\t-p, --password <STRING>\n"
-	       "\t-s, --servername <STRING>\n"
-	       "\t-v, --verbose [optional level <v,vv,vvv>]\n"
-	       "\nVersion: %s © by Thomas Stibor <t.stibor@gsi.de>\n"
-	       "IBM API library version: %d.%d.%d.%d, "
-	       "IBM API application client version: %d.%d.%d.%d\n",
-	       cmd_name, PACKAGE_VERSION,
-	       libapi_ver.version, libapi_ver.release, libapi_ver.level,
-	       libapi_ver.subLevel,
-	       appapi_ver.applicationVersion, appapi_ver.applicationRelease,
-	       appapi_ver.applicationLevel, appapi_ver.applicationSubLevel);
-
-	exit(DSM_RC_UNSUCCESSFUL);
+	fprintf(stdout, "usage: %s [options] <files|directories|wildcards>\n"
+		"\t--archive\n"
+		"\t--retrieve\n"
+		"\t--query\n"
+		"\t--delete\n"
+		"\t-l, --latest [retrieve object with latest timestamp when multiple exists]\n"
+		"\t-r, --recursive [archive directory and all sub-directories]\n"
+		"\t-f, --fsname <string> [default: '/']\n"
+		"\t-d, --description <string>\n"
+		"\t-n, --node <string>\n"
+		"\t-o, --owner <string>\n"
+		"\t-p, --password <string>\n"
+		"\t-s, --servername <string>\n"
+		"\t-v, --verbose {error, warn, message, info, debug} [default: message]\n"
+		"\t-h, --help\n"
+		"\nIBM API library version: %d.%d.%d.%d, "
+		"IBM API application client version: %d.%d.%d.%d\n"
+		"version: %s © 2017 by Thomas Stibor <t.stibor@gsi.de>,"
+		" Jörg Behrendt <j.behrendt@gsi.de>\n",
+		cmd_name,
+		libapi_ver.version, libapi_ver.release, libapi_ver.level,
+		libapi_ver.subLevel,
+		appapi_ver.applicationVersion, appapi_ver.applicationRelease,
+		appapi_ver.applicationLevel, appapi_ver.applicationSubLevel,
+		PACKAGE_VERSION);
+	exit(rc);
 }
 
-void sanity_arg_check(const char *cmd_name)
+static void sanity_arg_check(const struct options *opts, const char *argv)
 {
-	unsigned int count = 0;
-	count = a_arg == bTrue ? count + 1 : count;
-	count = r_arg == bTrue ? count + 1 : count;
-	count = q_arg == bTrue ? count + 1 : count;
-	count = d_arg == bTrue ? count + 1 : count;
+	unsigned char count = 0;
+	count = opt.o_archive  == 1 ? count + 1 : count;
+	count = opt.o_retrieve == 1 ? count + 1 : count;
+	count = opt.o_delete   == 1 ? count + 1 : count;
+	count = opt.o_query    == 1 ? count + 1 : count;
 
-	if (count != 1) {
-		printf("missing or wrong argument combinations of "
-		       "archive, retrieve, query or delete\n");
-		usage(cmd_name);
+	if (count == 0) {
+		fprintf(stdout, "missing argument --archive, --retrieve,"
+			" --query or --delete\n\n");
+		usage(argv, 1);
+	} else if (count != 1) {
+		printf("multiple incompatible arguments"
+		       " --archive, --retrieve, --query or --delete\n\n");
+		usage(argv, 1);
 	}
 
-	if (strlen(n_arg) == 0) {
-		printf("missing argument: -n, --node\n");
-		usage(cmd_name);
-	} else if (strlen(p_arg) == 0) {
-		printf("missing argument: -p, --password\n");
-		usage(cmd_name);
-	} else if (strlen(s_arg) == 0) {
-		printf("missing argument: -s, --servername\n");
-		usage(cmd_name);
-	} /* Owner (arg_o) is not necessarily required. */
+	if (!strlen(opt.o_node)) {
+		fprintf(stdout, "missing argument -n, --node <string>\n\n");
+		usage(argv, 1);
+	} else if (!strlen(opt.o_password)) {
+		fprintf(stdout, "missing argument -p, --password <string>\n\n");
+		usage(argv, 1);
+	} else if (!strlen(opt.o_servername)) {
+		fprintf(stdout, "missing argument -s, --servername "
+			"<string>\n\n");
+		usage(argv, 1);
+	} else if (!strlen(opt.o_fsname)) {
+		strncpy(opt.o_fsname, DEFAULT_FSNAME, strlen(DEFAULT_FSNAME));
+	}
+}
+
+static int parseopts(int argc, char *argv[])
+{
+	struct option long_opts[] = {
+		{"archive",           no_argument, &opt.o_archive,     1},
+		{"retrieve",          no_argument, &opt.o_retrieve,    1},
+		{"query",             no_argument, &opt.o_query,       1},
+		{"delete",            no_argument, &opt.o_delete,      1},
+		{"latest",            no_argument, 0,                'l'},
+		{"recursive",         no_argument, 0,                'r'},
+		{"fsname",      required_argument, 0,                'f'},
+		{"description", required_argument, 0,                'd'},
+		{"node",        required_argument, 0,                'n'},
+		{"owner",       required_argument, 0,                'o'},
+		{"password",    required_argument, 0,                'p'},
+		{"servername",  required_argument, 0,                's'},
+		{"verbose",	required_argument, 0,                'v'},
+		{"help",              no_argument, 0,	             'h'},
+		{0, 0, 0, 0}
+	};
+
+	int c;
+	while ((c = getopt_long(argc, argv, "lrf:d:n:o:p:s:v:h",
+				long_opts, NULL)) != -1) {
+		switch (c) {
+		case 'l': {
+			opt.o_latest = 1;
+			break;
+		}
+		case 'r': {
+			opt.o_recursive = 1;
+			set_recursive(bTrue);
+			break;
+		}
+		case 'f': {
+			strncpy(opt.o_fsname, optarg,
+				strlen(optarg) < DSM_MAX_FSNAME_LENGTH ?
+				strlen(optarg) : DSM_MAX_FSNAME_LENGTH);
+			break;
+		}
+		case 'd': {
+			strncpy(opt.o_desc, optarg,
+				strlen(optarg) < DSM_MAX_DESCR_LENGTH ?
+				strlen(optarg) : DSM_MAX_DESCR_LENGTH);
+			break;
+		}
+		case 'n': {
+			strncpy(opt.o_node, optarg,
+				strlen(optarg) < DSM_MAX_NODE_LENGTH ?
+				strlen(optarg) : DSM_MAX_NODE_LENGTH);
+			break;
+		}
+		case 'o': {
+			strncpy(opt.o_owner, optarg,
+				strlen(optarg) < DSM_MAX_OWNER_LENGTH ?
+				strlen(optarg) : DSM_MAX_OWNER_LENGTH);
+			break;
+		}
+		case 'p': {
+			strncpy(opt.o_password, optarg,
+				strlen(optarg) < DSM_MAX_VERIFIER_LENGTH ?
+				strlen(optarg) : DSM_MAX_VERIFIER_LENGTH);
+			break;
+		}
+		case 's': {
+			strncpy(opt.o_servername, optarg,
+				strlen(optarg) < DSM_MAX_SERVERNAME_LENGTH ?
+				strlen(optarg) : DSM_MAX_SERVERNAME_LENGTH);
+			break;
+		}
+		case 'v': {
+			if (OPTNCMP("error", optarg))
+				opt.o_verbose = API_MSG_ERROR;
+			else if (OPTNCMP("warn", optarg))
+				opt.o_verbose = API_MSG_WARN;
+			else if (OPTNCMP("message", optarg))
+				opt.o_verbose = API_MSG_NORMAL;
+			else if (OPTNCMP("info", optarg))
+				opt.o_verbose = API_MSG_INFO;
+			else if (OPTNCMP("debug", optarg))
+				opt.o_verbose = API_MSG_DEBUG;
+			else {
+				fprintf(stdout, "wrong argument for -v, "
+					"--verbose '%s'\n", optarg);
+				usage(argv[0], 1);
+			}
+			api_msg_set_level(opt.o_verbose);
+			break;
+		}
+		case 'h': {
+			usage(argv[0], 0);
+			break;
+		}
+		case 0: {
+			break;
+		}
+		default:
+			return -EINVAL;
+		}
+	}
+
+	sanity_arg_check(&opt, argv[0]);
+
+	return 0;
 }
 
 int main(int argc, char *argv[])
 {
-	int c;
-
-	api_msg_set_level(API_MSG_NORMAL);
-	set_recursive(bFalse);
-	strncpy(f_arg, FSNAME, strlen(FSNAME));
-	while (1) {
-		static struct option long_options[] = {
-			{"archive",           no_argument, 0, 'a'},
-			{"retrieve",          no_argument, 0, 'r'},
-			{"query",             no_argument, 0, 'q'},
-			{"delete",            no_argument, 0, 'd'},
-			{"latest",            no_argument, 0, 'l'},
-			{"recursive",         no_argument, 0, 'i'},
-			{"fsname",      required_argument, 0, 'f'},
-			{"description", required_argument, 0, 'c'},
-			{"node",        required_argument, 0, 'n'},
-			{"owner",       required_argument, 0, 'o'},
-			{"password",    required_argument, 0, 'p'},
-			{"servername",  required_argument, 0, 's'},
-			{"verbose",	required_argument, 0, 'v'},
-			{0, 0, 0, 0}
-		};
-		/* getopt_long stores the option index here. */
-		int option_index = 0;
-
-		c = getopt_long(argc, argv, "arqdlif:c:n:o:p:s:v::",
-				long_options, &option_index);
-
-		/* Detect the end of the options. */
-		if (c == -1)
-			break;
-
-		switch (c) {
-		case 'a':	/* archive */
-			a_arg = bTrue;
-			break;
-		case 'r':	/* retrieve */
-			r_arg = bTrue;
-			break;
-		case 'q':	/* query */
-			q_arg = bTrue;
-			break;
-		case 'd':	/* delete */
-			d_arg = bTrue;
-			break;
-		case 'l':	/* latest */
-			select_latest(bTrue);
-			break;
-		case 'i':	/* recursive */
-			set_recursive(bTrue);
-			break;
-		case 'f':	/* fsname */
-			strncpy(f_arg, optarg,
-				strlen(optarg) < DSM_MAX_FSNAME_LENGTH ?
-				strlen(optarg) : DSM_MAX_FSNAME_LENGTH);
-			break;
-		case 'c':	/* description */
-			strncpy(c_arg, optarg,
-				strlen(optarg) < DSM_MAX_DESCR_LENGTH ?
-				strlen(optarg) : DSM_MAX_DESCR_LENGTH);
-			break;
-		case 'n':	/* node */
-			strncpy(n_arg, optarg,
-				strlen(optarg) < DSM_MAX_NODE_LENGTH ?
-				strlen(optarg) : DSM_MAX_NODE_LENGTH);
-			break;
-		case 'o':	/* owner */
-			strncpy(o_arg, optarg,
-				strlen(optarg) < DSM_MAX_OWNER_LENGTH ?
-				strlen(optarg) : DSM_MAX_OWNER_LENGTH);
-			break;
-		case 'p':	/* password */
-			strncpy(p_arg, optarg,
-				strlen(optarg) < DSM_MAX_VERIFIER_LENGTH ?
-				strlen(optarg) : DSM_MAX_VERIFIER_LENGTH);
-			break;
-		case 's':	/* servername */
-			strncpy(s_arg, optarg,
-				strlen(optarg) < DSM_MAX_SERVERNAME_LENGTH ?
-				strlen(optarg) : DSM_MAX_SERVERNAME_LENGTH);
-			break;
-		case 'v': {	/* verbosity */
-			if (!optarg)
-				api_msg_set_level(API_MSG_INFO);
-			else {
-				if (strlen(optarg) == 1 && strncmp(optarg, "v", 1) == 0)
-					api_msg_set_level(API_MSG_DEBUG);
-				else if (strlen(optarg) == 2 && strncmp(optarg, "vv", 2) == 0)
-					api_msg_set_level(API_MSG_MAX);
-				else {
-					printf("unknown verbose parameter: %s\n", optarg);
-					usage(argv[0]);
-				}
-			}
-			break;
-		}
-		default:
-			usage(argv[0]);
-		}
+	int rc;
+	rc = parseopts(argc, argv);
+	if (rc) {
+		CT_WARN("try '%s --help' for more information", argv[0]);
+		return 1;
 	}
 
-	argc == 1 ? usage(argv[0]) : sanity_arg_check(argv[0]);
-
 	size_t num_files_dirs = 0;
+	char **files_dirs_arg = NULL;
 
 	/* file or directory parameter */
 	if (optind < argc) {
@@ -219,14 +253,14 @@ int main(int argc, char *argv[])
 	}
 
 	login_t login;
-	login_fill(&login, s_arg,
-		   n_arg, p_arg,
-		   o_arg, LOGIN_PLATFORM,
-		   f_arg, FSTYPE);
+	login_fill(&login, opt.o_servername,
+		   opt.o_node, opt.o_password,
+		   opt.o_owner, LINUX_PLATFORM,
+		   opt.o_fsname, DEFAULT_FSTYPE);
 
-	dsInt16_t rc;
 	session_t session;
 	bzero(&session, sizeof(session));
+	session.overwrite_older = opt.o_latest == 1 ? bTrue : bFalse;
 
 	rc = tsm_init(DSM_SINGLETHREAD);
 	if (rc)
@@ -243,19 +277,19 @@ int main(int argc, char *argv[])
 	/* Handle operations on files and directories resp. */
 	for (size_t i = 0; i < num_files_dirs &&
 		     files_dirs_arg[i]; i++) {
-		if (q_arg)	/* Query. */
-			rc = tsm_query_fpath(f_arg, files_dirs_arg[i],
-					     c_arg, bTrue, &session);
-		else if (r_arg)	/* Retrieve. */
-			rc = tsm_retrieve_fpath(f_arg, files_dirs_arg[i],
-						c_arg, -1, &session);
-		else if (d_arg)	/* Delete. */
-			rc = tsm_delete_fpath(f_arg, files_dirs_arg[i], &session);
-		else if (a_arg) {	/* Archive. */
-			rc = tsm_archive_fpath(f_arg,
+		if (opt.o_query)
+			rc = tsm_query_fpath(opt.o_fsname, files_dirs_arg[i],
+					     opt.o_desc, bTrue, &session);
+		else if (opt.o_retrieve)
+			rc = tsm_retrieve_fpath(opt.o_fsname, files_dirs_arg[i],
+						opt.o_desc, -1, &session);
+		else if (opt.o_delete)
+			rc = tsm_delete_fpath(opt.o_fsname, files_dirs_arg[i],
+					      &session);
+		else if (opt.o_archive)
+			rc = tsm_archive_fpath(opt.o_fsname,
 					       files_dirs_arg[i],
-					       c_arg, -1, NULL, &session);
-		}
+					       opt.o_desc, -1, NULL, &session);
 		if (rc)
 			goto clean_up;
 	}
