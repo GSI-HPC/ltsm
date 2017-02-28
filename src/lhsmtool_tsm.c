@@ -258,7 +258,7 @@ static int ct_parseopts(int argc, char *argv[])
 
 static void progress_callback(void *data, void *s)
 {
-	progress_size_t *pg_size = (progress_size_t *)data;
+	struct progress_size_t *pg_size = (struct progress_size_t *)data;
 	session_t *session = (session_t *)s;
 	int rc;
 
@@ -725,7 +725,7 @@ static int ct_connect_sessions(void)
 			goto cleanup;
 		}
 		session[n]->progress = progress_callback;
-		CT_TRACE("tsm_init: session: %d", n);
+		CT_TRACE("tsm_init: session: %d", n + 1);
 
 		rc = tsm_connect(&login, session[n]);
 		if (rc) {

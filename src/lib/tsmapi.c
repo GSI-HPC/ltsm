@@ -368,10 +368,11 @@ static dsInt16_t retrieve_obj(qryRespArchiveData *query_data,
 
 			/* Function callback on progress */
 			if (session->progress != NULL) {
-				progress_size_t progress_size;
-				progress_size.cur = cur_written;
-				progress_size.cur_total = total_written;
-				progress_size.total = total_size;
+				struct progress_size_t progress_size = {
+					.cur = cur_written,
+					.cur_total = total_written,
+					.total = total_size
+				};
 				session->progress(&progress_size, session);
 			}
 		}
@@ -1218,10 +1219,11 @@ static dsInt16_t tsm_archive_generic(archive_info_t *archive_info, int fd, sessi
 
 				/* Function callback on progress */
 				if (session->progress != NULL) {
-					progress_size_t progress_size;
-					progress_size.cur = cur_read;
-					progress_size.cur_total = total_read;
-					progress_size.total = total_size;
+					struct progress_size_t progress_size = {
+						.cur = cur_read,
+						.cur_total = total_read,
+						.total = total_size
+					};
 					session->progress(&progress_size, session);
 				}
 			}
