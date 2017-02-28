@@ -112,7 +112,7 @@ static void usage(const char *cmd_name, const int rc)
 		STABS"hostname of tsm server\n"
 		"\t-f, --fsname=<string>\n"
 		STABS"filespace name on tsm server [default: '/']\n"
-		"\t-v, --verbose={error, warn, message, debug}"
+		"\t-v, --verbose={error, warn, message, info, debug}"
 		" [default: message]\n"
 		STABS"produce more verbose output\n"
 		"\t-r, --dry-run\n"
@@ -220,6 +220,8 @@ static int ct_parseopts(int argc, char *argv[])
 				opt.o_verbose = API_MSG_WARN;
 			else if (OPTNCMP("message", optarg))
 				opt.o_verbose = API_MSG_NORMAL;
+			else if (OPTNCMP("info", optarg))
+				opt.o_verbose = API_MSG_INFO;
 			else if (OPTNCMP("debug", optarg))
 				opt.o_verbose = API_MSG_DEBUG;
 			else {

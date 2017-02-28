@@ -64,7 +64,7 @@ do {									\
 	CT_ERROR(0, "%s: handle: %d %s", func, session->handle, rcmsg);	\
 } while (0)
 
-#define TSM_TRACE(session, rc, func)					\
+#define TSM_DEBUG(session, rc, func)					\
 do {									\
 	TSM_GET_MSG(session, rc);					\
 	CT_DEBUG("%s: handle: %d %s", func, session->handle, rcmsg);	\
@@ -334,7 +334,7 @@ static dsInt16_t retrieve_obj(qryRespArchiveData *query_data,
 	/* Request data with a single dsmGetObj call, otherwise data
 	   is larger and we need additional dsmGetData calls. */
 	rc = dsmGetObj(session->handle, &(query_data->objId), &dataBlk);
-	TSM_TRACE(session, rc,  "dsmGetObj");
+	TSM_DEBUG(session, rc,  "dsmGetObj");
 	off64_t total_size = to_off64_t(obj_info->size);
 
 	while (!done) {
@@ -360,11 +360,11 @@ static dsInt16_t retrieve_obj(qryRespArchiveData *query_data,
 				remain_to_write -= TSM_BUF_LENGTH;
 				dataBlk.numBytes = 0;
 				rc = dsmGetData(session->handle, &dataBlk);
-				TSM_TRACE(session, rc,  "dsmGetData");
+				TSM_DEBUG(session, rc,  "dsmGetData");
 			}
-			CT_DEBUG("cur_written: %zu, total_written: %zu,"
-				 " obj_size: %zu", cur_written, total_written,
-				 total_size);
+			CT_INFO("cur_written: %zu, total_written: %zu,"
+				" obj_size: %zu", cur_written, total_written,
+				total_size);
 
 			/* Function callback on progress */
 			if (session->progress != NULL) {
@@ -386,7 +386,7 @@ static dsInt16_t retrieve_obj(qryRespArchiveData *query_data,
 
 cleanup:
 	rc = dsmEndGetObj(session->handle);
-	TSM_TRACE(session, rc,  "dsmEndGetObj");
+	TSM_DEBUG(session, rc,  "dsmEndGetObj");
 	if (rc != DSM_RC_SUCCESSFUL)
 		TSM_ERROR(session, rc, "dsmEndGetObj");
 
@@ -472,7 +472,7 @@ dsInt16_t tsm_init(const dsBool_t mt_flag)
 	 */
 	get_libapi_ver();	/* Calls dsmQueryApiVersionEx.*/
 	rc = dsmSetUp(mt_flag, NULL);
-	TSM_TRACE(empty_session, rc, "dsmSetUp");
+	TSM_DEBUG(empty_session, rc, "dsmSetUp");
 	if (rc) {
 		TSM_ERROR(empty_session, rc, "dsmSetUp");
 		dsmCleanUp(mt_flag);
@@ -517,7 +517,7 @@ dsInt16_t tsm_connect(login_t *login, session_t *session)
 	init_in.appVersionP      = &appapi_ver;
 
 	rc = dsmInitEx(&(session->handle), &init_in, &init_out);
-	TSM_TRACE(session, rc,  "dsmInitEx");
+	TSM_DEBUG(session, rc,  "dsmInitEx");
 	if (rc) {
 		TSM_ERROR(session, rc, "dsmInitEx");
 		return rc;
@@ -536,7 +536,7 @@ dsInt16_t tsm_connect(login_t *login, session_t *session)
 	reg_fs_data.fsAttr.unixFSAttr.fsInfoLength = strlen("fsinfo");
 
 	rc = dsmRegisterFS(session->handle, &reg_fs_data);
-	TSM_TRACE(session, rc,  "dsmRegisterFS");
+	TSM_DEBUG(session, rc,  "dsmRegisterFS");
 	if (rc == DSM_RC_FS_ALREADY_REGED || rc == DSM_RC_OK)
 		return DSM_RC_OK;
 
@@ -591,7 +591,7 @@ dsInt16_t tsm_query_session(session_t *session)
 	optStruct dsmOpt;
 	dsInt16_t rc;
 	rc = dsmQuerySessOptions(session->handle, &dsmOpt);
-	TSM_TRACE(session, rc,  "dsmQuerySessOptions");
+	TSM_DEBUG(session, rc,  "dsmQuerySessOptions");
 	if (rc) {
 		TSM_ERROR(session, rc, "dsmQuerySessOptions");
 		return rc;
@@ -616,15 +616,12 @@ dsInt16_t tsm_query_session(session_t *session)
 	memset(&dsmSessInfo, 0, sizeof(ApiSessInfo));
 
 	rc = dsmQuerySessInfo(session->handle, &dsmSessInfo);
-	TSM_TRACE(session, rc,  "dsmQuerySessInfo");
+	TSM_DEBUG(session, rc,  "dsmQuerySessInfo");
 	if (rc) {
 		TSM_ERROR(session, rc, "dsmQuerySessInfo");
 		return rc;
 	}
-#if 0
-	max_obj_per_txn = dsmSessInfo.maxObjPerTxn;
-	max_bytes_per_txn = dsmSessInfo.maxBytesPerTxn;
-#endif
+
 	CT_INFO("\n"
 		 "Server's ver.rel.lev       : %d.%d.%d.%d\n"
 		 "ArchiveRetentionProtection : %s\n",
@@ -656,11 +653,11 @@ dsInt16_t tsm_query_session(session_t *session)
 			  "Install the current library version.");
 	}
 
-	CT_DEBUG("IBM API library version = %d.%d.%d.%d\n",
-		 libapi_ver_t.version,
-		 libapi_ver_t.release,
-		 libapi_ver_t.level,
-		 libapi_ver_t.subLevel);
+	CT_INFO("IBM API library version = %d.%d.%d.%d\n",
+		libapi_ver_t.version,
+		libapi_ver_t.release,
+		libapi_ver_t.level,
+		libapi_ver_t.subLevel);
 
 	return rc;
 }
@@ -701,7 +698,7 @@ dsInt16_t tsm_query_hl_ll(const char *fs, const char *hl, const char *ll,
 		 qry_ar_data.descr);
 
 	rc = dsmBeginQuery(session->handle, qtArchive, &qry_ar_data);
-	TSM_TRACE(session, rc,  "dsmBeginQuery");
+	TSM_DEBUG(session, rc,  "dsmBeginQuery");
 	if (rc) {
 		TSM_ERROR(session, rc, "dsmBeginQuery");
 		goto cleanup;
@@ -718,7 +715,7 @@ dsInt16_t tsm_query_hl_ll(const char *fs, const char *hl, const char *ll,
 	unsigned long n = 0;
 	while (!done) {
 		rc = dsmGetNextQObj(session->handle, &data_blk);
-		TSM_TRACE(session, rc,  "dsmGetNextQObj");
+		TSM_DEBUG(session, rc,  "dsmGetNextQObj");
 
 		if (((rc == DSM_RC_OK) || (rc == DSM_RC_MORE_DATA) || (rc == DSM_RC_FINISHED))
 		    && data_blk.numBytes) {
@@ -822,7 +819,7 @@ static dsInt16_t tsm_del_obj(const qryRespArchiveData *qry_resp_ar_data,
 	dsUint16_t reason;
 
 	rc = dsmBeginTxn(session->handle);
-	TSM_TRACE(session, rc,  "dsmBeginTxn");
+	TSM_DEBUG(session, rc,  "dsmBeginTxn");
 	if (rc != DSM_RC_SUCCESSFUL) {
 		TSM_ERROR(session, rc, "dsmBeginTxn");
 		return rc;
@@ -832,7 +829,7 @@ static dsInt16_t tsm_del_obj(const qryRespArchiveData *qry_resp_ar_data,
 	del_info.archInfo.objId = qry_resp_ar_data->objId;
 
 	rc = dsmDeleteObj(session->handle, dtArchive, del_info);
-	TSM_TRACE(session, rc,  "dsmDeleteObj");
+	TSM_DEBUG(session, rc,  "dsmDeleteObj");
 	if (rc != DSM_RC_SUCCESSFUL) {
 		TSM_ERROR(session, rc, "dsmDeleteObj");
 		dsmEndTxn(session->handle, DSM_VOTE_COMMIT, &reason);
@@ -840,7 +837,7 @@ static dsInt16_t tsm_del_obj(const qryRespArchiveData *qry_resp_ar_data,
 	}
 
 	rc = dsmEndTxn(session->handle, DSM_VOTE_COMMIT, &reason);
-	TSM_TRACE(session, rc,  "dsmEndTxn");
+	TSM_DEBUG(session, rc,  "dsmEndTxn");
 	if (rc != DSM_RC_SUCCESSFUL) {
 		TSM_ERROR(session, rc, "dsmEndTxn");
 		return rc;
@@ -1007,7 +1004,7 @@ static dsInt16_t tsm_retrieve_generic(const char *fs, const char *hl,
 		}
 
 		rc = dsmBeginGetData(session->handle, bTrue /* mountWait */, gtArchive, &get_list);
-		TSM_TRACE(session, rc,  "dsmBeginGetData");
+		TSM_DEBUG(session, rc,  "dsmBeginGetData");
 		if (rc) {
 			TSM_ERROR(session, rc, "dsmBeginGetData");
 			goto cleanup;
@@ -1027,23 +1024,23 @@ static dsInt16_t tsm_retrieve_generic(const char *fs, const char *hl,
 			       (char *)&(query_data.objInfo),
 			       query_data.objInfolen);
 
-			CT_DEBUG("\n"
-				 "retrieving obj  fs          : %s\n"
-				 "                hl          : %s\n"
-				 "                ll          : %s\n"
-				 "objtype                     : %s\n"
-				 "objinfo magic               : %d\n"
-				 "objinfo size bytes (hi,lo)  : (%u,%u)\n"
-				 "estimated size bytes (hi,lo): (%u,%u)\n",
-				 query_data.objName.fs,
-				 query_data.objName.hl,
-				 query_data.objName.ll,
-				 OBJ_TYPE(query_data.objName.objType),
-				 obj_info.magic,
-				 obj_info.size.hi,
-				 obj_info.size.lo,
-				 query_data.sizeEstimate.hi,
-				 query_data.sizeEstimate.lo);
+			CT_INFO("\n"
+				"retrieving obj  fs          : %s\n"
+				"                hl          : %s\n"
+				"                ll          : %s\n"
+				"objtype                     : %s\n"
+				"objinfo magic               : %d\n"
+				"objinfo size bytes (hi,lo)  : (%u,%u)\n"
+				"estimated size bytes (hi,lo): (%u,%u)\n",
+				query_data.objName.fs,
+				query_data.objName.hl,
+				query_data.objName.ll,
+				OBJ_TYPE(query_data.objName.objType),
+				obj_info.magic,
+				obj_info.size.hi,
+				obj_info.size.lo,
+				query_data.sizeEstimate.hi,
+				query_data.sizeEstimate.lo);
 
 			if (obj_info.magic != MAGIC_ID_V1) {
 				CT_WARN("Skip object due magic mismatch with MAGIC_ID: %d\n", obj_info.magic);
@@ -1087,7 +1084,7 @@ static dsInt16_t tsm_retrieve_generic(const char *fs, const char *hl,
 cleanup_getdata:
 		/* There are no return codes that are specific to this call. */
 		rc = dsmEndGetData(session->handle);
-		TSM_TRACE(session, rc,  "dsmEndGetData");
+		TSM_DEBUG(session, rc,  "dsmEndGetData");
 		if (rc_minor)
 			break;
 
@@ -1156,7 +1153,7 @@ static dsInt16_t tsm_archive_generic(archive_info_t *archive_info, int fd, sessi
 
 	/* Start transaction. */
 	rc = dsmBeginTxn(session->handle);
-	TSM_TRACE(session, rc,  "dsmBeginTxn");
+	TSM_DEBUG(session, rc,  "dsmBeginTxn");
 	if (rc) {
 		TSM_ERROR(session, rc, "dsmBeginTxn");
 		goto cleanup;
@@ -1164,7 +1161,7 @@ static dsInt16_t tsm_archive_generic(archive_info_t *archive_info, int fd, sessi
 
 	mc_bind_key.stVersion = mcBindKeyVersion;
 	rc = dsmBindMC(session->handle, &(archive_info->obj_name), stArchive, &mc_bind_key);
-	TSM_TRACE(session, rc,  "dsmBindMC");
+	TSM_DEBUG(session, rc,  "dsmBindMC");
 	if (rc) {
 		TSM_ERROR(session, rc, "dsmBindMC");
 		goto cleanup_transaction;
@@ -1183,7 +1180,7 @@ static dsInt16_t tsm_archive_generic(archive_info_t *archive_info, int fd, sessi
 	/* Start sending object. */
 	rc = dsmSendObj(session->handle, stArchive, &arch_data,
 			&(archive_info->obj_name), &obj_attr, NULL);
-	TSM_TRACE(session, rc,  "dsmSendObj");
+	TSM_DEBUG(session, rc,  "dsmSendObj");
 	if (rc) {
 		TSM_ERROR(session, rc, "dsmSendObj");
 		goto cleanup_transaction;
@@ -1213,14 +1210,14 @@ static dsInt16_t tsm_archive_generic(archive_info_t *archive_info, int fd, sessi
 				data_blk.bufferLen = cur_read;
 
 				rc = dsmSendData(session->handle, &data_blk);
-				TSM_TRACE(session, rc,  "dsmSendData");
+				TSM_DEBUG(session, rc,  "dsmSendData");
 				if (rc) {
 					TSM_ERROR(session, rc, "dsmSendData");
 					goto cleanup_transaction;
 				}
-				CT_DEBUG("cur_read: %zu, total_read: %zu,"
-					 " total_size: %zu", cur_read,
-					 total_read, total_size);
+				CT_INFO("cur_read: %zu, total_read: %zu,"
+					" total_size: %zu", cur_read,
+					total_read, total_size);
 				data_blk.numBytes = 0;
 
 				/* Function callback on progress */
@@ -1250,7 +1247,7 @@ static dsInt16_t tsm_archive_generic(archive_info_t *archive_info, int fd, sessi
 		success = bTrue;
 
 	rc = dsmEndSendObj(session->handle);
-	TSM_TRACE(session, rc,  "dsmEndSendObj");
+	TSM_DEBUG(session, rc,  "dsmEndSendObj");
 	if (rc) {
 		TSM_ERROR(session, rc, "dsmEndSendObj");
 		success = bFalse;
@@ -1261,7 +1258,7 @@ cleanup_transaction:
 	   roll back current transaction (DSM_VOTE_ABORT). */
 	vote_txn = success == bTrue ? DSM_VOTE_COMMIT : DSM_VOTE_ABORT;
 	rc = dsmEndTxn(session->handle, vote_txn, &err_reason);
-	TSM_TRACE(session, rc,  "dsmEndTxn");
+	TSM_DEBUG(session, rc,  "dsmEndTxn");
 	if (rc || err_reason) {
 		TSM_ERROR(session, rc, "dsmEndTxn");
 		TSM_ERROR(session, err_reason, "dsmEndTxn reason");

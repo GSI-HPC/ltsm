@@ -1,4 +1,4 @@
-/* 
+/*
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 only,
  * as published by the Free Software Foundation.
@@ -9,7 +9,7 @@
  * General Public License version 2 for more details (a copy is included
  * in the LICENSE file that accompanied this code).
  * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>. 
+ * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
 /*
@@ -80,7 +80,7 @@ double ct_now(void);
 
 #define CT_MESSAGE(_format, ...)					\
 	api_error(API_MSG_NORMAL | API_MSG_NO_ERRNO, 0,			\
-		  MAG "[RESULT] " RESET "%f [%ld] %s:%d "_format,	\
+		  MAG "[MESSAGE] " RESET "%f [%ld] %s:%d "_format,	\
 		  ct_now(), syscall(SYS_gettid), __FILE__, __LINE__,	\
 		  ## __VA_ARGS__)
 
