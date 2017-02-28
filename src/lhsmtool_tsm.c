@@ -65,7 +65,7 @@ struct options {
 };
 
 struct options opt = {
-	.o_verbose = LLAPI_MSG_INFO,
+	.o_verbose = API_MSG_NORMAL,
 	.o_servername = {0},
 	.o_node = {0},
 	.o_owner = {0},
@@ -112,7 +112,8 @@ static void usage(const char *cmd_name, const int rc)
 		STABS"hostname of tsm server\n"
 		"\t-f, --fsname=<string>\n"
 		STABS"filespace name on tsm server [default: '/']\n"
-		"\t-v, --verbose={error, warn, info, debug} [default: info]\n"
+		"\t-v, --verbose={error, warn, message, debug}"
+		" [default: message]\n"
 		STABS"produce more verbose output\n"
 		"\t-r, --dry-run\n"
 		STABS"don't run, just show what would be done\n"
@@ -214,13 +215,13 @@ static int ct_parseopts(int argc, char *argv[])
 		}
 		case 'v': {
 			if (OPTNCMP("error", optarg))
-				opt.o_verbose = LLAPI_MSG_ERROR;
+				opt.o_verbose = API_MSG_ERROR;
 			else if (OPTNCMP("warn", optarg))
-				opt.o_verbose = LLAPI_MSG_WARN;
-			else if (OPTNCMP("info", optarg))
-				opt.o_verbose = LLAPI_MSG_INFO;
+				opt.o_verbose = API_MSG_WARN;
+			else if (OPTNCMP("message", optarg))
+				opt.o_verbose = API_MSG_NORMAL;
 			else if (OPTNCMP("debug", optarg))
-				opt.o_verbose = LLAPI_MSG_DEBUG;
+				opt.o_verbose = API_MSG_DEBUG;
 			else {
 				fprintf(stdout, "wrong argument for -v, "
 					"--verbose='%s'\n", optarg);
@@ -298,30 +299,34 @@ static int ct_finish(session_t *session, int ct_rc, char *fpath)
 {
 	int rc;
 
-	CT_DEBUG("action completed, notifying coordinator "
-		 "cookie=%#jx, FID="DFID", err=%d",
-		 (uintmax_t)session->hai->hai_cookie, PFID(&session->hai->hai_fid),
-		 -ct_rc);
+	CT_MESSAGE("action completed, notifying coordinator "
+		   "cookie=%#jx, FID="DFID", err=%d",
+		   (uintmax_t)session->hai->hai_cookie,
+		   PFID(&session->hai->hai_fid),
+		   -ct_rc);
 
 	if (session->hcp == NULL) {
 		rc = llapi_hsm_action_begin(&session->hcp, ctdata, session->hai,
 					    -1, 0, true);
+		CT_DEBUG("[rc=%d] llapi_hsm_action_begin() on '%s'", rc, fpath);
 		if (rc < 0) {
 			CT_ERROR(rc, "llapi_hsm_action_begin() on '%s' failed",
 				 fpath);
 			return rc;
 		}
 	}
-	rc = llapi_hsm_action_end(&session->hcp, &session->hai->hai_extent, 0, abs(ct_rc));
+	rc = llapi_hsm_action_end(&session->hcp, &session->hai->hai_extent, 0,
+				  abs(ct_rc));
 	if (rc == -ECANCELED)
 		CT_ERROR(rc, "completed action on '%s' has been canceled: "
 			 "cookie=%#jx, FID="DFID, fpath,
-			 (uintmax_t)session->hai->hai_cookie, PFID(&session->hai->hai_fid));
+			 (uintmax_t)session->hai->hai_cookie,
+			 PFID(&session->hai->hai_fid));
 	else if (rc < 0)
 		CT_ERROR(rc, "llapi_hsm_action_end() on '%s' failed", fpath);
 	else
-		CT_DEBUG("llapi_hsm_action_end() on '%s' ok (rc=%d)",
-			 fpath, rc);
+		CT_DEBUG("[rc=%d] llapi_hsm_action_end() on '%s' ok", rc,
+			 fpath);
 
 	return rc;
 }
@@ -339,12 +344,12 @@ static int ct_archive(session_t *session)
 	}
 
 	rc = llapi_hsm_action_begin(&session->hcp, ctdata, session->hai, -1, 0, false);
+	CT_DEBUG("[rc=%d] llapi_hsm_action_begin() on '%s'", rc, fpath);
 	if (rc < 0) {
 		CT_ERROR(rc, "llapi_hsm_action_begin on '%s' failed", fpath);
 		goto cleanup;
 	}
-
-	CT_DEBUG("archiving '%s' to TSM storage", fpath);
+	CT_MESSAGE("archiving '%s' to TSM storage", fpath);
 
 	if (opt.o_dry_run) {
 		rc = 0;
@@ -352,6 +357,7 @@ static int ct_archive(session_t *session)
 	}
 
 	src_fd = llapi_hsm_action_get_fd(session->hcp);
+	CT_DEBUG("[fd=%d] llapi_hsm_action_get_fd()", src_fd);
 	if (src_fd < 0) {
 		rc = src_fd;
 		CT_ERROR(rc, "cannot open '%s' for read", fpath);
@@ -364,8 +370,7 @@ static int ct_archive(session_t *session)
 		CT_ERROR(rc, "tsm_archive_fpath_fid on '%s' failed", fpath);
 		goto cleanup;
 	}
-
-	CT_DEBUG("archiving '%s' to TSM storage done", fpath);
+	CT_MESSAGE("archiving '%s' to TSM storage done", fpath);
 
 cleanup:
 	if (!(src_fd < 0))
@@ -400,8 +405,8 @@ static int ct_restore(session_t *session)
 		return rc;
 	}
 
-	rc = llapi_hsm_action_begin(&session->hcp, ctdata, session->hai, mdt_index, open_flags,
-				    false);
+	rc = llapi_hsm_action_begin(&session->hcp, ctdata, session->hai,
+				    mdt_index, open_flags, false);
 	if (rc < 0) {
 		CT_ERROR(rc, "llapi_hsm_action_begin on '%s' failed", fpath);
 		return rc;
@@ -414,8 +419,8 @@ static int ct_restore(session_t *session)
 		     PFID(&session->hai->hai_fid));
 	    goto cleanup;
 	}
+	CT_MESSAGE("restoring data from TSM storage to '%s'", fpath);
 
-	CT_DEBUG("restoring data from TSM storage to '%s'", fpath);
 	if (opt.o_dry_run) {
 	    rc = 0;
 	    goto cleanup;
@@ -433,7 +438,7 @@ static int ct_restore(session_t *session)
 		CT_ERROR(rc, "tsm_retrieve_fpath on '%s' failed", fpath);
 		goto cleanup;
 	}
-	CT_DEBUG("data restore from TSM storage to '%s' done", fpath);
+	CT_MESSAGE("data restore from TSM storage to '%s' done", fpath);
 
 cleanup:
 	rc = ct_finish(session, rc, fpath);
@@ -460,8 +465,7 @@ static int ct_remove(session_t *session)
 		CT_ERROR(rc, "llapi_hsm_action_begin() on '%s' failed", fpath);
 		goto cleanup;
 	}
-
-	CT_DEBUG("removing from TSM storage file '%s'", fpath);
+	CT_MESSAGE("removing from TSM storage file '%s'", fpath);
 
 	if (opt.o_dry_run) {
 		rc = 0;
@@ -491,16 +495,15 @@ static int ct_process_item(session_t *session)
 		int linkno = 0;
 
 		sprintf(fid, DFID, PFID(&session->hai->hai_fid));
-		CT_DEBUG("'%s' action %s reclen %d, cookie=%#jx",
-			 fid, hsm_copytool_action2name(session->hai->hai_action),
-			 session->hai->hai_len,
-			 (uintmax_t)session->hai->hai_cookie);
+		CT_MESSAGE("'%s' action %s reclen %d, cookie=%#jx",
+			   fid,
+			   hsm_copytool_action2name(session->hai->hai_action),
+			   session->hai->hai_len,
+			   (uintmax_t)session->hai->hai_cookie);
 		rc = llapi_fid2path(opt.o_mnt, fid, path,
 				    sizeof(path), &recno, &linkno);
 		if (rc < 0)
 			CT_ERROR(rc, "cannot get path of FID %s", fid);
-		else
-			CT_DEBUG("processing file '%s'", path);
 	}
 
 	switch (session->hai->hai_action) {
@@ -609,11 +612,11 @@ static int ct_run(void)
 		int msgsize;
 		int i = 0;
 
-		CT_DEBUG("waiting for message from kernel");
+		CT_MESSAGE("waiting for message from kernel");
 
 		rc = llapi_hsm_copytool_recv(ctdata, &hal, &msgsize);
 		if (rc == -ESHUTDOWN) {
-			CT_DEBUG("shutting down");
+			CT_MESSAGE("shutting down");
 			break;
 		} else if (rc < 0) {
 			CT_WARN("cannot receive action list: %s",
@@ -625,7 +628,7 @@ static int ct_run(void)
 				continue;
 		}
 
-		CT_DEBUG("copytool fs=%s archive#=%d item_count=%d",
+		CT_MESSAGE("copytool fs=%s archive#=%d item_count=%d",
 			 hal->hal_fsname, hal->hal_archive_id, hal->hal_count);
 
 		if (strcmp(hal->hal_fsname, fs_name) != 0) {
@@ -663,16 +666,20 @@ static int ct_run(void)
 
 			/* Insert hsm action into queue. */
 			rc = queue_enqueue(&queue, work_hai);
-			CT_DEBUG("enqueue action '%s' cookie=%#jx, FID="DFID"",
-				 hsm_copytool_action2name(work_hai->hai_action),
-				 (uintmax_t)work_hai->hai_cookie,
-				 PFID(&work_hai->hai_fid));
+			CT_MESSAGE("enqueue action '%s' cookie=%#jx, FID="DFID"",
+				   hsm_copytool_action2name(work_hai->hai_action),
+				   (uintmax_t)work_hai->hai_cookie,
+				   PFID(&work_hai->hai_fid));
 			if (rc) {
-				CT_ERROR(ECANCELED, "enqueue action '%s'"
+				rc = -ECANCELED;
+				CT_ERROR(rc, "enqueue action '%s'"
 					 "cookie=%#jx, FID="DFID" failed",
-				 hsm_copytool_action2name(work_hai->hai_action),
-				 (uintmax_t)work_hai->hai_cookie,
-				 PFID(&work_hai->hai_fid));
+					 hsm_copytool_action2name(work_hai->hai_action),
+					 (uintmax_t)work_hai->hai_cookie,
+					 PFID(&work_hai->hai_fid));
+				err_major++;
+				if (opt.o_abort_on_error)
+					break;
 			}
 
 			/* Free the lock of the queue. */
@@ -683,7 +690,6 @@ static int ct_run(void)
 
 			hai = hai_next(hai);
 		}
-
 		if (opt.o_abort_on_error && err_major)
 			break;
 	}
@@ -727,7 +733,7 @@ static int ct_connect_sessions(void)
 			goto cleanup;
 		}
 		session[n]->progress = progress_callback;
-		CT_DEBUG("tsm_init: session: %d", n + 1);
+		CT_MESSAGE("tsm_init: session: %d", n + 1);
 
 		rc = tsm_connect(&login, session[n]);
 		if (rc) {
@@ -897,7 +903,7 @@ int main(int argc, char *argv[])
 		goto error_cleanup;
 
 	rc = ct_run();
-	CT_DEBUG("process finished, rc=%d (%s)", rc, strerror(-rc));
+	CT_MESSAGE("process finished, rc=%d (%s)", rc, strerror(-rc));
 
 error_cleanup:
 	ct_cleanup();
