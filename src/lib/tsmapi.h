@@ -92,21 +92,23 @@ typedef struct {
 	struct hsearch_data *htab;
 } qarray_t;
 
-typedef struct {
-	dsUint32_t handle;
-	qarray_t *qarray;
-	dsmBool_t overwrite_older;
-	struct hsm_action_item *hai;
-	struct hsm_copyaction_private *hcp;
-	long hal_flags;
-	void (*progress)(void *data, void *session);
-} session_t;
 
 struct progress_size_t {
 	ssize_t cur;
 	ssize_t cur_total;
 	ssize_t total;
 };
+
+
+typedef struct session_t {
+	dsUint32_t handle;
+	qarray_t *qarray;
+	dsmBool_t overwrite_older;
+	struct hsm_action_item *hai;
+	struct hsm_copyaction_private *hcp;
+	long hal_flags;
+	int (*progress)(struct progress_size_t *data, struct session_t *session);
+} session_t;
 
 off64_t to_off64_t(const dsStruct64_t size);
 dsStruct64_t to_dsStruct64_t(const off_t size);

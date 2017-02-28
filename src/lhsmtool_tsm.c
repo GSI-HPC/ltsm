@@ -257,10 +257,10 @@ static int ct_parseopts(int argc, char *argv[])
 	return 0;
 }
 
-static void progress_callback(void *data, void *s)
+static int progress_callback(struct progress_size_t *pg_size, session_t *session)
 {
-	struct progress_size_t *pg_size = (struct progress_size_t *)data;
-	session_t *session = (session_t *)s;
+	CT_DEBUG("Progress callback cur:%i cur_total:%i total:%i",
+			 pg_size->cur, pg_size->cur_total, pg_size->total);
 	int rc;
 
 	session->hai->hai_extent.length = pg_size->cur;
@@ -269,6 +269,8 @@ static void progress_callback(void *data, void *s)
 				       pg_size->total, 0);
 	if (rc)
 		CT_ERROR(rc, "llapi_hsm_action_progress failed");
+
+	return rc;
 }
 
 static int fid_realpath(const char *mnt, const lustre_fid *fid,
