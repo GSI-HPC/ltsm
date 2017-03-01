@@ -38,16 +38,12 @@
 #include "tsmapi.h"
 #include "queue.h"
 
-#ifndef PACKAGE_VERSION
-#define PACKAGE_VERSION "NA"
-#endif
-
 struct options {
 	int o_daemonize;
 	int o_dry_run;
 	int o_nthreads;
 	int o_verbose;
-	int o_abort_on_error;
+	int o_abort_on_err;
         int o_archive_cnt;
         int o_archive_id[LL_HSM_MAX_ARCHIVE];
 	char *o_mnt;
@@ -83,38 +79,37 @@ static int err_minor;
 static char fs_name[MAX_OBD_NAME + 1] = {0};
 static struct hsm_copytool_private *ctdata = NULL;
 
-#define STABS "\t\t"
 static void usage(const char *cmd_name, const int rc)
 {
 	dsmApiVersionEx libapi_ver = get_libapi_ver();
 	dsmAppVersion appapi_ver = get_appapi_ver();
 
-	fprintf(stdout, "usage: %s [options]...<lustre_mount_point>\n"
-		"\t-a, --abort-on-error\n"
-		STABS"abort operation on major error\n"
-		"\t-i, --archive-id=<int> [default: 0]\n"
-		STABS"archive id number\n"
-		"\t-d, --daemon\n"
-		STABS"daemon mode run in background\n"
-		"\t-t, --threads=<int>\n"
-		STABS" number of working threads [default: 2]\n"
-		"\t-n, --node=<string>\n"
-		STABS"node name registered on tsm server\n"
-		"\t-p, --password=<string>\n"
-		STABS"password of tsm node/owner\n"
-		"\t-o, --owner=<string>\n"
-		STABS"owner of tsm node\n"
-		"\t-s, --servername=<string>\n"
-		STABS"hostname of tsm server\n"
-		"\t-f, --fsname=<string>\n"
-		STABS"filespace name on tsm server [default: '/']\n"
-		"\t-v, --verbose={error, warn, message, info, debug}"
+	fprintf(stdout, "usage: %s [options] <lustre_mount_point>\n"
+		"\t-a, --archive-id <int> [default: 1]\n"
+		"\t\t""archive id number\n"
+		"\t-t, --threads <int>\n"
+		"\t\t""number of processing threads [default: 2]\n"
+		"\t-n, --node <string>\n"
+		"\t\t""node name registered on tsm server\n"
+		"\t-p, --password <string>\n"
+		"\t\t""password of tsm node/owner\n"
+		"\t-o, --owner <string>\n"
+		"\t\t""owner of tsm node\n"
+		"\t-s, --servername <string>\n"
+		"\t\t""hostname of tsm server\n"
+		"\t-f, --fsname <string>\n"
+		"\t\t""filespace name on tsm server [default: '/']\n"
+		"\t-v, --verbose {error, warn, message, info, debug}"
 		" [default: message]\n"
-		STABS"produce more verbose output\n"
-		"\t-r, --dry-run\n"
-		STABS"don't run, just show what would be done\n"
+		"\t\t""produce more verbose output\n"
+		"\t--abort-on-error\n"
+		"\t\t""abort operation on major error\n"
+		"\t--daemon\n"
+		"\t\t""daemon mode run in background\n"
+		"\t--dry-run\n"
+		"\t\t""don't run, just show what would be done\n"
 		"\t-h, --help\n"
-		STABS"show this help\n"
+		"\t\t""show this help\n"
 		"\nIBM API library version: %d.%d.%d.%d, "
 		"IBM API application client version: %d.%d.%d.%d\n"
 		"version: %s © 2017 by Thomas Stibor <t.stibor@gsi.de>,"
@@ -131,13 +126,14 @@ static void usage(const char *cmd_name, const int rc)
 static void sanity_arg_check(const struct options *opts, const char *argv)
 {
 	if (!strlen(opt.o_node)) {
-		fprintf(stdout, "missing argument -n, --node=<string>\n\n");
+		fprintf(stdout, "missing argument -n, --node <string>\n\n");
 		usage(argv, 1);
 	} else if (!strlen(opt.o_password)) {
-		fprintf(stdout, "missing argument -p, --password=<string>\n\n");
+		fprintf(stdout, "missing argument -p, --password <string>\n\n");
 		usage(argv, 1);
 	} else if (!strlen(opt.o_servername)) {
-		fprintf(stdout, "missing argument -s, --servername=<string>\n\n");
+		fprintf(stdout, "missing argument -s, --servername "
+			"<string>\n\n");
 		usage(argv, 1);
 	} else if (!strlen(opt.o_fsname)) {
 		strncpy(opt.o_fsname, DEFAULT_FSNAME, strlen(DEFAULT_FSNAME));
@@ -147,29 +143,28 @@ static void sanity_arg_check(const struct options *opts, const char *argv)
 static int ct_parseopts(int argc, char *argv[])
 {
 	struct option long_opts[] = {
-		{"abort-on-error", no_argument, &opt.o_abort_on_error, 'a'},
-		{"archive-id",	   required_argument, NULL,	       'i'},
-		{"daemon",	   no_argument, &opt.o_daemonize,      'd'},
-		{"threads",        optional_argument, NULL,	       't'},
-		{"node",           required_argument, NULL,            'n'},
-		{"password",       required_argument, NULL,            'p'},
-		{"owner",          required_argument, NULL,            'o'},
-		{"servername",     required_argument, NULL,            's'},
-		{"fsname",         optional_argument, NULL,            'f'},
-		{"verbose",        optional_argument, NULL,            'v'},
-		{"dry-run",	   no_argument,	&opt.o_dry_run,        'r'},
-		{"help",           no_argument, NULL,		       'h'},
+		{"abort-on-error", no_argument,       &opt.o_abort_on_err,   1},
+		{"archive-id",	   required_argument, 0,	           'a'},
+		{"daemon",	   no_argument,       &opt.o_daemonize,      1},
+		{"threads",        required_argument, 0,	           't'},
+		{"node",           required_argument, 0,                   'n'},
+		{"password",       required_argument, 0,                   'p'},
+		{"owner",          required_argument, 0,                   'o'},
+		{"servername",     required_argument, 0,                   's'},
+		{"fsname",         required_argument, 0,                   'f'},
+		{"verbose",        required_argument, 0,                   'v'},
+		{"dry-run",	   no_argument,	      &opt.o_dry_run,        1},
+		{"help",           no_argument,       0,		   'h'},
 		{0, 0, 0, 0}
 	};
 
 	int c, rc;
 	optind = 0;
-	api_msg_set_level(opt.o_verbose);
 
-	while ((c = getopt_long(argc, argv, "ai:dt:n:p:o:s:v:rh",
+	while ((c = getopt_long(argc, argv, "a:t:n:p:o:s:f:v:h",
 				long_opts, NULL)) != -1) {
 		switch (c) {
-		case 'i': {
+		case 'a': {
                         if ((opt.o_archive_cnt >= LL_HSM_MAX_ARCHIVE) ||
                             (atoi(optarg) >= LL_HSM_MAX_ARCHIVE)) {
                                 rc = -E2BIG;
@@ -209,6 +204,12 @@ static int ct_parseopts(int argc, char *argv[])
 				strlen(optarg) : DSM_MAX_SERVERNAME_LENGTH);
 			break;
 		}
+		case 'f': {
+			strncpy(opt.o_fsname, optarg,
+				strlen(optarg) < DSM_MAX_FSNAME_LENGTH ?
+				strlen(optarg) : DSM_MAX_FSNAME_LENGTH);
+			break;
+		}
 		case 'v': {
 			if (OPTNCMP("error", optarg))
 				opt.o_verbose = API_MSG_ERROR;
@@ -233,7 +234,6 @@ static int ct_parseopts(int argc, char *argv[])
 			break;
 		}
 		case 0: {
-			usage(argv[0], 0);
 			break;
 		}
 		default:
@@ -351,6 +351,8 @@ static int ct_archive(session_t *session)
 	CT_MESSAGE("archiving '%s' to TSM storage", fpath);
 
 	if (opt.o_dry_run) {
+		CT_MESSAGE("running in dry-run mode, skipping effective"
+			   " archiving TSM operation");
 		rc = 0;
 		goto cleanup;
 	}
@@ -413,16 +415,18 @@ static int ct_restore(session_t *session)
 
 	rc = llapi_hsm_action_get_dfid(session->hcp, &dfid);
 	if (rc < 0) {
-	    CT_ERROR(rc, "restoring "DFID
-		     ", cannot get FID of created volatile file",
-		     PFID(&session->hai->hai_fid));
-	    goto cleanup;
+		CT_ERROR(rc, "restoring "DFID
+			 ", cannot get FID of created volatile file",
+			 PFID(&session->hai->hai_fid));
+		goto cleanup;
 	}
 	CT_MESSAGE("restoring data from TSM storage to '%s'", fpath);
 
 	if (opt.o_dry_run) {
-	    rc = 0;
-	    goto cleanup;
+		CT_MESSAGE("running in dry-run mode, skipping effective"
+			   " restoring TSM operation");
+		rc = 0;
+		goto cleanup;
 	}
 
 	dst_fd = llapi_hsm_action_get_fd(session->hcp);
@@ -467,6 +471,8 @@ static int ct_remove(session_t *session)
 	CT_MESSAGE("removing from TSM storage file '%s'", fpath);
 
 	if (opt.o_dry_run) {
+		CT_MESSAGE("running in dry-run mode, skipping effective"
+			   " removing TSM operation");
 		rc = 0;
 		goto cleanup;
 	}
@@ -486,8 +492,8 @@ static int ct_process_item(session_t *session)
 {
 	int rc = 0;
 
-	if (opt.o_verbose >= LLAPI_MSG_INFO || opt.o_dry_run) {
-		/* Print the original path */
+	if (opt.o_verbose >= API_MSG_NORMAL) {
+
 		char fid[128];
 		char path[PATH_MAX];
 		long long recno = -1;
@@ -621,21 +627,21 @@ static int ct_run(void)
 			CT_WARN("cannot receive action list: %s",
 				strerror(-rc));
 			err_major++;
-			if (opt.o_abort_on_error)
+			if (opt.o_abort_on_err)
 				break;
 			else
 				continue;
 		}
 
 		CT_MESSAGE("copytool fs=%s archive#=%d item_count=%d",
-			 hal->hal_fsname, hal->hal_archive_id, hal->hal_count);
+			   hal->hal_fsname, hal->hal_archive_id, hal->hal_count);
 
 		if (strcmp(hal->hal_fsname, fs_name) != 0) {
 			rc = -EINVAL;
 			CT_ERROR(rc, "'%s' invalid fs name, expecting: %s",
 				 hal->hal_fsname, fs_name);
 			err_major++;
-			if (opt.o_abort_on_error)
+			if (opt.o_abort_on_err)
 				break;
 			else
 				continue;
@@ -677,7 +683,7 @@ static int ct_run(void)
 					 (uintmax_t)work_hai->hai_cookie,
 					 PFID(&work_hai->hai_fid));
 				err_major++;
-				if (opt.o_abort_on_error)
+				if (opt.o_abort_on_err)
 					break;
 			}
 
@@ -689,7 +695,7 @@ static int ct_run(void)
 
 			hai = hai_next(hai);
 		}
-		if (opt.o_abort_on_error && err_major)
+		if (opt.o_abort_on_err && err_major)
 			break;
 	}
 
@@ -715,7 +721,7 @@ static int ct_connect_sessions(void)
 	login_fill(&login, opt.o_servername,
 		   opt.o_node, opt.o_password,
 		   opt.o_owner, LINUX_PLATFORM,
-		   DEFAULT_FSNAME, DEFAULT_FSTYPE); /* TODO: opt.o_fsname, opt.o_fstype */
+		   opt.o_fsname, DEFAULT_FSTYPE);
 
 	session = calloc(nthreads, sizeof(session_t *));
 	if (session == NULL) {

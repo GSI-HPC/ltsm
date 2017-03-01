@@ -9,7 +9,7 @@
  * General Public License version 2 for more details (a copy is included
  * in the LICENSE file that accompanied this code).
  * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
 /*
@@ -23,10 +23,6 @@
 #include <getopt.h>
 #include <sys/stat.h>
 #include "tsmapi.h"
-
-#ifndef PACKAGE_VERSION
-#define PACKAGE_VERSION "NA"
-#endif
 
 struct options {
 	int o_archive;

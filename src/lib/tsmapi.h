@@ -33,10 +33,6 @@
 #include <config.h>
 #endif
 
-#ifdef HAVE_LUSTRE
-#include <lustre/lustreapi.h>
-#endif
-
 #include <sys/types.h>
 #include "dsmapitd.h"
 #include "dsmapifp.h"
@@ -44,6 +40,10 @@
 #include "dsmrc.h"
 #include "dapint64.h"
 #include "log.h"
+
+#ifndef PACKAGE_VERSION
+#define PACKAGE_VERSION "NA"
+#endif
 
 #define DEFAULT_FSNAME "/"
 #define DEFAULT_FSTYPE "ltsm"
