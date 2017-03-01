@@ -21,71 +21,73 @@
 .\" <http://www.gnu.org/licenses/>.
 .\" %%%LICENSE_END
 
-.TH "lhsmtool_tsm" "1" "26.February 2017" "Thomas Stibor <t.stibor@gsi.de>, Jörg Behrendt <j.behrendt@gsi.de>" "version 0.2.0"
+.TH "lhsmtool_tsm" "1" "1.March 2017" "Thomas Stibor <t.stibor@gsi.de>, Jörg Behrendt <j.behrendt@gsi.de>" "version 0.2.0"
 
 .SH NAME
-lhsmtool_tsm is a Lustre TSM Copytool which hooks into the Lustre framework and provides HSM functionality for Lustre and TSM storage backend.
+lhsmtool_tsm is a Lustre copytool for TSM storage backend
 .SH SYNOPSIS
-lhsmtool_tsm OPTION... LUSTRE_MOUNT_POINT
+lhsmtool_tsm [OPTION]... LUSTRE_MOUNT_POINT
 .SH DESCRIPTION
 .SS
-.BR OPTIONS:       
+.BR OPTIONS:
 Mandatory arguments of long options are mandatory for short options
 .PP
 REQUIRED
 .TP
 .BR \-n ", " \-\-node =\fINAME\fR
-The name of the TSM node used during the authentification.
+The name of the TSM node which is registered on the TSM server.
 .TP
 .BR \-p ", " \-\-password =\fIPASSWORD\fR
-The password for the TSM node used during the authentification.
+The password of the TSM node which is registered on the TSM server.
 .TP
 .BR \-s ", " \-\-servername =\fINAME\fR
-The TSM servername to connect to. Name will be resolved to an actual ip adress within the dsm.sys file of your tsm-api-client installation.
+The TSM servername to connect to. Name will be resolved to an actual ip address within the dsm.sys file.
 .PP
 OPTIONAL
 .TP
-.BR \-i ", " \-\-archive-id =\fIID\fR
-Archive id.
+.BR \-a ", " \-\-archive-id =\fIID\fR
+Lustre HSM can manage multiple archive entities. Archive entities are identified by a unique and persistent index (called archive-id). Default is archive-id '1'.
 .TP
 .BR \-f ", " \-\-fsname =\fIPATH\fR
-TSM Filesystem path to archive to or query from. Defaults to \fI/\fR.
+TSM filespace used on the TSM server, default is '/'. Note the filespace name must start with character '/'.
 .TP
 .BR \-o ", " \-\-owner =\fINAME\fR
-If archiving a file the owner's name will be stored with the file objects onto the tsm server. By default an empty string is used.
-On all other actions the name will be used to filter the queries by owner and the wildcards '*' or '?' are allowed. By default all owners will be selected.
+If in archive mode the owner's name  will be stored with the file objects onto the TSM server. By default an empty string is used.
+Otherwise the name will be used to filter the queries by owner and the wildcards '*' or '?' are allowed. By default all owners will be selected.
 .TP
 .BR \-t ", " \-\-threads =\fICOUNT\fR
-Number of working threads. Defaults to \fI2\fR. 
+For employing multi-thread processing of HSM action items, a single producer - multiple consumer
+architecture is implemented. A single producer inserts HSM action items into a queue, the multiple
+consumers dequeue the items and execute the corresponding TSM actions such as archive, retrieve
+and delete. The number of consumer threads is specified by this option, default is 2. Note,
+it is necessary to set the same or even greater value on the TSM server with command:
+update node <NODENAME> maxnummp=\fICOUNT\fR, otherwise the TSM server will reply with
+error message: "This node has exceeded its maximum number of mount points" and will fail
+in processing the HSM action items.
+.TP
+.BR \-\-abort-on-error
+Abort operation of major error.
+.TP
+.BR \-\-daemon
+Daemon mode run in background.
 .TP
 .BR \-r ", " \-\-dry-run
-Don't run. Just show what would be done. 
+Don't run. Just show what would be done.
+.TP
+.BR \-v ", " \-\-verbose =\fIerror\fR|\fIwarn\fR|\fImessage\fR|\fIinfo\fR|\fIdebug\fR
+Causes ltsmc to be more verbose in printing messages. Default is \fImessage\fR.
 .TP
 .BR \-h ", " \-\-help
-Prints the usage message. 
-.TP
-.BR \-v ", " \-\-verbose =\fIerror\fR|\fIwarn\fR|\fIinfo\fR|\fIdebug\fR
-Sets the debug level for the application. Defaults to \fIinfo\fR .
+Display help and exit.
 .SS
 .BR LUSTRE_MOUNT_POINT:
 .PP
 Directory where a Lustre filesystem is mounted at. This filesystem needs to have hsm functionality enabled.
-.SH ENVIROMENT
-If set some options will be loaded from the enviroment before parsing the passed command arguments.
-.TP
-.BR LHSMTSM_D_SERVERNAME=\fISERVERNAME\fR
-.TP
-.BR LHSMTSM_D_NODE=\fINODE\fR
-.TP
-.BR LHSMTSM_D_PASSWORD=\fIPASSWORD\fR
-.TP
-.BR LHSMTSM_D_OWNER=\fIOWNER\fR
-.TP
-.BR LHSMTSM_D_MOUNT=\fILUSTRE_MOUNT_POINT\fR
 
 .SH FILES
-tsm-api-client 'dsm.sys' file containts the information to look up the ip address of your tsm-server. By default it is located at '/opt/tivoli/tsm/client/api/bin64/dsm.sys'.
-It should containt at least one set of options consisting of SERVERNAME, NODENAME and TCPSERVERADDRESS.
+File 'dsm.sys' contains information to look up the tsm server. By default it is located at '/opt/tivoli/tsm/client/api/bin64/dsm.sys'.
+It should contain at least the required options SERVERNAME, NODENAME and TCPSERVERADDRESS.
+
 .SH BUGS
 Please report bugs to <http://github.com/tstibor/ltsm/issues>
 
