@@ -59,7 +59,7 @@ Otherwise the name will be used to filter the queries by owner and the wildcards
 For employing multi-thread processing of HSM action items, a single producer - multiple consumer
 architecture is implemented. A single producer inserts HSM action items into a queue, the multiple
 consumers dequeue the items and execute the corresponding TSM actions such as archive, retrieve
-and delete. The number of consumer threads is specified by this option, default is 2. Note,
+and delete. The number of consumer threads is specified by this option, default is 1. Note,
 it is necessary to set the same or even greater value on the TSM server with command:
 update node <NODENAME> maxnummp=\fICOUNT\fR, otherwise the TSM server will reply with
 error message: "This node has exceeded its maximum number of mount points" and will fail

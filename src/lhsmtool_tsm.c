@@ -66,7 +66,7 @@ struct options opt = {
 	.o_fstype = {0},
 };
 
-static uint16_t nthreads = 2;
+static uint16_t nthreads = 1;
 static pthread_t **thread = NULL;
 static pthread_mutex_t queue_mutex;
 static pthread_cond_t queue_cond;
