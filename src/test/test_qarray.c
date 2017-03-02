@@ -27,7 +27,7 @@
 void test_qarray(CuTest *tc)
 {
 	dsInt16_t rc;
-	qarray_t *qarray = NULL;
+	struct qarray_t *qarray = NULL;
 	rc = init_qarray(&qarray);
 	CuAssertTrue(tc, rc == DSM_RC_SUCCESSFUL);
 
@@ -64,7 +64,7 @@ void test_qarray(CuTest *tc)
 void test_qarray_replace_oldest(CuTest *tc)
 {
 	dsInt16_t rc;
-	qarray_t *qarray = NULL;
+	struct qarray_t *qarray = NULL;
 	rc = init_qarray(&qarray);
 	CuAssertTrue(tc, rc == DSM_RC_SUCCESSFUL);
 
@@ -124,7 +124,7 @@ void test_qarray_replace_oldest(CuTest *tc)
 void test_qarray_replace_oldest_scale(CuTest *tc)
 {
 	dsInt16_t rc;
-	qarray_t *qarray = NULL;
+	struct qarray_t *qarray = NULL;
 	rc = init_qarray(&qarray);
 	CuAssertTrue(tc, rc == DSM_RC_SUCCESSFUL);
 
@@ -161,7 +161,7 @@ void test_qarray_replace_oldest_scale(CuTest *tc)
 void test_qarray_sort_top(CuTest *tc)
 {
 	dsInt16_t rc;
-	qarray_t *qarray = NULL;
+	struct qarray_t *qarray = NULL;
 	rc = init_qarray(&qarray);
 	CuAssertTrue(tc, rc == DSM_RC_SUCCESSFUL);
 
@@ -203,7 +203,7 @@ void test_qarray_sort_top(CuTest *tc)
 void test_qarray_sort_all(CuTest *tc)
 {
 	dsInt16_t rc;
-	qarray_t *qarray = NULL;
+	struct qarray_t *qarray = NULL;
 	rc = init_qarray(&qarray);
 	CuAssertTrue(tc, rc == DSM_RC_SUCCESSFUL);
 
@@ -250,7 +250,7 @@ void test_qarray_sort_all(CuTest *tc)
 void test_qarray_init_destroy(CuTest *tc)
 {
 	dsInt16_t rc;
-	qarray_t *qarray = NULL;
+	struct qarray_t *qarray = NULL;
 
 	for (unsigned char i = 0; i < 128; i++) {
 		rc = init_qarray(&qarray);

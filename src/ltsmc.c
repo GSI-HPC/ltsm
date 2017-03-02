@@ -249,13 +249,13 @@ int main(int argc, char *argv[])
 		}
 	}
 
-	login_t login;
+	struct login_t login;
 	login_fill(&login, opt.o_servername,
 		   opt.o_node, opt.o_password,
 		   opt.o_owner, LINUX_PLATFORM,
 		   opt.o_fsname, DEFAULT_FSTYPE);
 
-	session_t session;
+	struct session_t session;
 	bzero(&session, sizeof(session));
 	session.overwrite_older = opt.o_latest == 1 ? bTrue : bFalse;
 

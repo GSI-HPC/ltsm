@@ -69,7 +69,7 @@ do {									\
 	CT_DEBUG("%s: handle: %d %s", func, session->handle, rcmsg);	\
 } while (0)
 
-void login_fill(login_t *login, const char *servername,
+void login_fill(struct login_t *login, const char *servername,
 		const char *node, const char *password,
 		const char *owner, const char *platform,
 		const char *fsname, const char *fstype)
@@ -257,8 +257,8 @@ static dsInt16_t extract_fpath(const qryRespArchiveData *query_data, char *fpath
  * @return DSM_RC_SUCCESSFUL on success otherwise DSM_RC_UNSUCCESSFUL.
  */
 static dsInt16_t retrieve_obj(qryRespArchiveData *query_data,
-			      const obj_info_t *obj_info, int fd,
-			      session_t* session)
+			      const struct obj_info_t *obj_info, int fd,
+			      struct session_t* session)
 {
 	char *buf = NULL;
 	DataBlk dataBlk;
@@ -396,7 +396,7 @@ void tsm_print_query_node(const qryRespArchiveData *qry_resp_arv_data,
 	date_to_str(ins_str_date, &(qry_resp_arv_data->insDate));
 	date_to_str(exp_str_date, &(qry_resp_arv_data->expDate));
 
-	obj_info_t obj_info;
+	struct obj_info_t obj_info;
 	memcpy(&obj_info, (char *)qry_resp_arv_data->objInfo,
 	       qry_resp_arv_data->objInfolen);
 
@@ -450,8 +450,8 @@ void tsm_print_query_node(const qryRespArchiveData *qry_resp_arv_data,
 dsInt16_t tsm_init(const dsBool_t mt_flag)
 {
 	dsInt16_t rc;
-	session_t *empty_session = NULL;
-	empty_session = calloc(1, sizeof(session_t));
+	struct session_t *empty_session = NULL;
+	empty_session = calloc(1, sizeof(struct session_t));
 	if (empty_session == NULL)
 		return DSM_RC_UNSUCCESSFUL;
 
@@ -481,7 +481,7 @@ void tsm_cleanup(const dsBool_t mt_flag)
 	dsmCleanUp(mt_flag);
 }
 
-dsInt16_t tsm_connect(login_t *login, session_t *session)
+dsInt16_t tsm_connect(struct login_t *login, struct session_t *session)
 {
 	dsmInitExIn_t init_in;
 	dsmInitExOut_t init_out;
@@ -535,7 +535,7 @@ dsInt16_t tsm_connect(login_t *login, session_t *session)
 	return rc;
 }
 
-void tsm_disconnect(session_t *session)
+void tsm_disconnect(struct session_t *session)
 {
 	dsmTerminate(session->handle);
 }
@@ -577,7 +577,7 @@ dsmApiVersionEx get_libapi_ver()
 	return libapi_ver;
 }
 
-dsInt16_t tsm_query_session(session_t *session)
+dsInt16_t tsm_query_session(struct session_t *session)
 {
 	optStruct dsmOpt;
 	dsInt16_t rc;
@@ -655,7 +655,7 @@ dsInt16_t tsm_query_session(session_t *session)
 
 dsInt16_t tsm_query_hl_ll(const char *fs, const char *hl, const char *ll,
 			  const char *desc, dsBool_t display,
-			  session_t *session)
+			  struct session_t *session)
 {
 	qryArchiveData qry_ar_data;
 	dsmObjName obj_name;
@@ -773,7 +773,7 @@ static dsInt16_t extract_hl_ll(const char *fpath, char *hl, char *ll)
 }
 
 static dsInt16_t obj_attr_prepare(ObjAttr *obj_attr,
-				  const archive_info_t *archive_info)
+				  const struct archive_info_t *archive_info)
 {
 	dsInt16_t rc;
 	obj_attr->owner[0] = '\0';
@@ -789,7 +789,7 @@ static dsInt16_t obj_attr_prepare(ObjAttr *obj_attr,
 	obj_attr->stVersion = ObjAttrVersion;
 	obj_attr->mcNameP = NULL;
 	obj_attr->objCompressed = bFalse; /* Note: Currently no compression is supported. */
-	obj_attr->objInfoLength = sizeof(obj_info_t);
+	obj_attr->objInfoLength = sizeof(struct obj_info_t);
 	obj_attr->objInfo = (char *)malloc(obj_attr->objInfoLength);
 	if (!obj_attr->objInfo) {
 		rc = errno;
@@ -803,7 +803,7 @@ static dsInt16_t obj_attr_prepare(ObjAttr *obj_attr,
 }
 
 static dsInt16_t tsm_del_obj(const qryRespArchiveData *qry_resp_ar_data,
-			     session_t *session)
+			     struct session_t *session)
 {
 	dsmDelInfo del_info;
 	dsInt16_t rc;
@@ -838,7 +838,7 @@ static dsInt16_t tsm_del_obj(const qryRespArchiveData *qry_resp_ar_data,
 }
 
 static dsInt16_t tsm_delete_hl_ll(const char *fs, const char *hl,
-				  const char *ll, session_t *session)
+				  const char *ll, struct session_t *session)
 {
 	dsInt16_t rc;
 
@@ -888,7 +888,7 @@ cleanup:
 }
 
 dsInt16_t tsm_delete_fpath(const char *fs, const char *fpath,
-			   session_t *session)
+			   struct session_t *session)
 {
 	dsInt16_t rc;
 	char hl[DSM_MAX_HL_LENGTH + 1] = {0};
@@ -909,7 +909,7 @@ dsInt16_t tsm_delete_fpath(const char *fs, const char *fpath,
 }
 
 dsInt16_t tsm_query_fpath(const char *fs, const char *fpath, const char *desc,
-			  dsBool_t display, session_t *session)
+			  dsBool_t display, struct session_t *session)
 {
 	dsInt16_t rc;
 	char hl[DSM_MAX_HL_LENGTH + 1] = {0};
@@ -931,7 +931,8 @@ dsInt16_t tsm_query_fpath(const char *fs, const char *fpath, const char *desc,
 
 static dsInt16_t tsm_retrieve_generic(const char *fs, const char *hl,
 				      const char *ll, int fd,
-				      const char *desc, session_t *session)
+				      const char *desc,
+				      struct session_t *session)
 {
 	dsInt16_t rc;
 	dsInt16_t rc_minor = 0;
@@ -1001,7 +1002,7 @@ static dsInt16_t tsm_retrieve_generic(const char *fs, const char *hl,
 			goto cleanup;
 		}
 
-		obj_info_t obj_info;
+		struct obj_info_t obj_info;
 		for (unsigned long c_iter = c_begin; c_iter <= c_end; c_iter++) {
 
 			rc = get_query(&query_data, session->qarray, c_iter);
@@ -1084,7 +1085,8 @@ cleanup:
 }
 
 dsInt16_t tsm_retrieve_fpath(const char *fs, const char *fpath,
-			     const char *desc, int fd, session_t *session)
+			     const char *desc, int fd,
+			     struct session_t *session)
 {
 	dsInt16_t rc;
 	char hl[DSM_MAX_HL_LENGTH + 1] = {0};
@@ -1100,7 +1102,8 @@ dsInt16_t tsm_retrieve_fpath(const char *fs, const char *fpath,
 	return rc;
 }
 
-static dsInt16_t tsm_archive_generic(archive_info_t *archive_info, int fd, session_t *session)
+static dsInt16_t tsm_archive_generic(struct archive_info_t *archive_info,
+				     int fd, struct session_t *session)
 {
 	dsInt16_t rc;
 	dsInt16_t rc_minor = 0;
@@ -1291,7 +1294,7 @@ cleanup:
  */
 static dsInt16_t tsm_archive_prepare(const char *fs, const char *fpath,
 				     const char *desc,
-				     archive_info_t *archive_info)
+				     struct archive_info_t *archive_info)
 {
 	dsInt16_t rc;
 	char *resolved_fpath = NULL;
@@ -1353,7 +1356,8 @@ cleanup:
 	return rc;
 }
 
-static dsInt16_t tsm_archive_recursive(archive_info_t *archive_info, session_t *session)
+static dsInt16_t tsm_archive_recursive(struct archive_info_t *archive_info,
+				       struct session_t *session)
 {
 	int rc;
         DIR *dir;
@@ -1492,20 +1496,20 @@ static dsInt16_t tsm_archive_recursive(archive_info_t *archive_info, session_t *
  *
  * @return DSM_RC_SUCCESSFUL on success otherwise DSM_RC_UNSUCCESSFUL.
  */
-dsInt16_t tsm_archive_fpath(const char *fs, const char *fpath,
-			    const char *desc, int fd, const lu_fid_t *lu_fid,
-			    session_t *session)
+dsInt16_t tsm_archive_fpath(const char *fs, const char *fpath, const char *desc,
+                            int fd, const struct lu_fid_t *lu_fid,
+			    struct session_t *session)
 {
 	int rc;
-	archive_info_t archive_info;
+	struct archive_info_t archive_info;
 
 	CT_INFO("tsm_archive_fpath:\n"
 		"fs: %s, fpath: %s, desc: %s, fd: %d, *lu_fid: %p",
 		fs, fpath, desc, fd, lu_fid);
 
-	memset(&archive_info, 0, sizeof(archive_info_t));
+	memset(&archive_info, 0, sizeof(struct archive_info_t));
 	if (lu_fid)
-		memcpy(&(archive_info.obj_info.lu_fid), lu_fid, sizeof(lu_fid_t));
+		memcpy(&(archive_info.obj_info.lu_fid), lu_fid, sizeof(struct lu_fid_t));
 	rc = tsm_archive_prepare(fs, fpath, desc, &archive_info);
 	if (rc) {
 		CT_WARN("tsm_archive_prepare failed: \n"

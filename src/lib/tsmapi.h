@@ -57,7 +57,7 @@
 	((strlen(str1) == strlen(str2)) &&	\
 	 (strncmp(str1, str2, strlen(str1)) == 0))
 
-typedef struct {
+struct login_t{
 	char node[DSM_MAX_NODE_LENGTH + 1];
 	char password[DSM_MAX_VERIFIER_LENGTH + 1];
 	char owner[DSM_MAX_OWNER_LENGTH + 1];
@@ -65,35 +65,35 @@ typedef struct {
 	char options[MAX_OPTIONS_LENGTH + 1];
 	char fsname[DSM_MAX_FSNAME_LENGTH + 1];
 	char fstype[DSM_MAX_FSTYPE_LENGTH + 1];
-} login_t;
+};
 
-typedef struct {
+struct lu_fid_t{
 	dsUint64_t f_seq;
 	dsUint32_t f_oid;
 	dsUint32_t f_ver;
-} lu_fid_t;
+};
 
 /* ltsm object description. */
-typedef struct {
+struct obj_info_t{
 	unsigned int magic;
 	dsStruct64_t size;
 	mode_t st_mode;
-	lu_fid_t lu_fid;
-} obj_info_t;
+	struct lu_fid_t lu_fid;
+};
 
-typedef struct {
+struct archive_info_t{
 	char fpath[PATH_MAX + 1];
 	char desc[DSM_MAX_DESCR_LENGTH + 1];
-	obj_info_t obj_info;
+	struct obj_info_t obj_info;
 	dsmObjName obj_name;
-} archive_info_t;
+};
 
-typedef struct {
+struct qarray_t {
 	unsigned long capacity;
 	unsigned long N;
 	qryRespArchiveData *data;
 	struct hsearch_data *htab;
-} qarray_t;
+};
 
 struct progress_size_t {
 	ssize_t cur;
@@ -101,23 +101,23 @@ struct progress_size_t {
 	ssize_t total;
 };
 
-typedef struct session_t {
+struct session_t {
 	dsUint32_t handle;
-	qarray_t *qarray;
+	struct qarray_t *qarray;
 	dsmBool_t overwrite_older;
 	struct hsm_action_item *hai;
 	struct hsm_copyaction_private *hcp;
 	long hal_flags;
 	int (*progress)(struct progress_size_t *data,
 			struct session_t *session);
-} session_t;
+};
 
 off64_t to_off64_t(const dsStruct64_t size);
 dsStruct64_t to_dsStruct64_t(const off_t size);
 void set_recursive(const dsBool_t recursive);
 void select_latest(const dsBool_t latest);
 
-void login_fill(login_t *login, const char *servername,
+void login_fill(struct login_t *login, const char *servername,
 		const char *node, const char *password,
 		const char *owner, const char *platform,
 		const char *fsname, const char *fstype);
@@ -125,21 +125,24 @@ void login_fill(login_t *login, const char *servername,
 dsInt16_t tsm_init(const dsBool_t mt_flag);
 void tsm_cleanup(const dsBool_t mt_flag);
 
-dsInt16_t tsm_connect(login_t *login, session_t *session);
-void tsm_disconnect(session_t *session);
+dsInt16_t tsm_connect(struct login_t *login, struct session_t *session);
+void tsm_disconnect(struct session_t *session);
 
 dsmAppVersion get_appapi_ver();
 dsmApiVersionEx get_libapi_ver();
 
-dsInt16_t tsm_query_session(session_t *session);
-dsInt16_t tsm_archive_fpath(const char *fs, const char *fpath, const char *desc,
-			    int fd, const lu_fid_t *lu_fid, session_t *session);
+dsInt16_t tsm_query_session(struct session_t *session);
+dsInt16_t tsm_archive_fpath(const char *fs, const char *fpath,
+			    const char *desc, int fd,
+			    const struct lu_fid_t *lu_fid,
+			    struct session_t *session);
 dsInt16_t tsm_query_fpath(const char *fs, const char *fpath,
 			  const char *desc, dsBool_t display,
-			  session_t *session);
+			  struct  session_t *session);
 dsInt16_t tsm_delete_fpath(const char *fs, const char *fpath,
-			   session_t *session);
+			   struct  session_t *session);
 dsInt16_t tsm_retrieve_fpath(const char *fs, const char *fpath,
-			     const char *desc, int fd, session_t *session);
+			     const char *desc, int fd,
+			     struct session_t *session);
 
 #endif /* TSMAPI_H */

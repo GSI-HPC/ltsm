@@ -70,7 +70,7 @@ static uint16_t nthreads = 1;
 static pthread_t **thread = NULL;
 static pthread_mutex_t queue_mutex;
 static pthread_cond_t queue_cond;
-static session_t **session = NULL;
+static struct session_t **session = NULL;
 static queue_t queue;
 
 static int err_major;
@@ -256,7 +256,7 @@ static int ct_parseopts(int argc, char *argv[])
 }
 
 static int progress_callback(struct progress_size_t *pg_size,
-			     session_t *session)
+			     struct session_t *session)
 {
 	int rc;
 
@@ -294,7 +294,7 @@ static int fid_realpath(const char *mnt, const lustre_fid *fid,
 	return rc;
 }
 
-static int ct_finish(session_t *session, int ct_rc, char *fpath)
+static int ct_finish(struct session_t *session, int ct_rc, char *fpath)
 {
 	int rc;
 
@@ -330,7 +330,7 @@ static int ct_finish(session_t *session, int ct_rc, char *fpath)
 	return rc;
 }
 
-static int ct_archive(session_t *session)
+static int ct_archive(struct session_t *session)
 {
 	char fpath[PATH_MAX + 1] = {0};
 	int rc;
@@ -382,7 +382,7 @@ cleanup:
 	return rc;
 }
 
-static int ct_restore(session_t *session)
+static int ct_restore(struct session_t *session)
 {
 	int rc;
 	int dst_fd = -1;
@@ -452,7 +452,7 @@ cleanup:
 	return rc;
 }
 
-static int ct_remove(session_t *session)
+static int ct_remove(struct session_t *session)
 {
 	char fpath[PATH_MAX + 1] = {0};
 	int rc;
@@ -488,7 +488,7 @@ cleanup:
 	return rc;
 }
 
-static int ct_process_item(session_t *session)
+static int ct_process_item(struct session_t *session)
 {
 	int rc = 0;
 
@@ -536,7 +536,7 @@ static int ct_process_item(session_t *session)
 
 static void *ct_thread(void *data)
 {
-	session_t *session = data;
+	struct session_t *session = data;
 	int rc;
 
 	for (;;) {
@@ -707,7 +707,7 @@ static int ct_run(void)
 static int ct_connect_sessions(void)
 {
 	int rc;
-	login_t login;
+	struct login_t login;
 	uint16_t n;
 
 	rc = tsm_init(DSM_MULTITHREAD);
@@ -723,7 +723,7 @@ static int ct_connect_sessions(void)
 		   opt.o_owner, LINUX_PLATFORM,
 		   opt.o_fsname, DEFAULT_FSTYPE);
 
-	session = calloc(nthreads, sizeof(session_t *));
+	session = calloc(nthreads, sizeof(struct session_t *));
 	if (session == NULL) {
 		rc = -errno;
 		CT_ERROR(rc, "malloc failed");
@@ -731,7 +731,7 @@ static int ct_connect_sessions(void)
 	}
 
 	for (n = 0; n < nthreads; n++) {
-		session[n] = calloc(1, sizeof(session_t));
+		session[n] = calloc(1, sizeof(struct session_t));
 		if (session[n] == NULL) {
 			rc = -errno;
 			CT_ERROR(rc, "malloc failed");

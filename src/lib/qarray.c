@@ -37,14 +37,14 @@ static unsigned long long date_in_sec(const dsmDate *date)
 		(unsigned long long)date->year * 977616000;
 }
 
-dsInt16_t init_qarray(qarray_t **qarray)
+dsInt16_t init_qarray(struct qarray_t **qarray)
 {
 	int rc;
 
 	if (*qarray)
 		return DSM_RC_UNSUCCESSFUL;
 
-	*qarray = calloc(1, sizeof(qarray_t));
+	*qarray = calloc(1, sizeof(struct qarray_t));
 	if (!qarray) {
 		CT_ERROR(errno, "malloc");
 		return DSM_RC_UNSUCCESSFUL;
@@ -96,7 +96,8 @@ cleanup:
 }
 
 static dsInt16_t replace_oldest_obj(const qryRespArchiveData *query_data,
-				    qarray_t **qarray, const dsmBool_t overwrite_oldest)
+				    struct qarray_t **qarray,
+				    const dsmBool_t overwrite_oldest)
 {
 	int rc;
 	ENTRY entry_ht;
@@ -158,7 +159,7 @@ static dsInt16_t replace_oldest_obj(const qryRespArchiveData *query_data,
 	return DSM_RC_SUCCESSFUL;
 }
 
-dsInt16_t insert_query(qryRespArchiveData *query_data, qarray_t **qarray,
+dsInt16_t insert_query(qryRespArchiveData *query_data, struct qarray_t **qarray,
 		       const dsmBool_t overwrite_oldest)
 {
 	dsInt16_t rc;
@@ -189,7 +190,8 @@ dsInt16_t insert_query(qryRespArchiveData *query_data, qarray_t **qarray,
 	return DSM_RC_SUCCESSFUL;
 }
 
-dsInt16_t get_query(qryRespArchiveData *query_data, const qarray_t *qarray,
+dsInt16_t get_query(qryRespArchiveData *query_data,
+		    const struct qarray_t *qarray,
 		    const unsigned long n)
 {
 	if (!qarray || !qarray->data)
@@ -203,7 +205,7 @@ dsInt16_t get_query(qryRespArchiveData *query_data, const qarray_t *qarray,
 	return DSM_RC_SUCCESSFUL;
 }
 
-unsigned long qarray_size(const qarray_t *qarray)
+unsigned long qarray_size(const struct qarray_t *qarray)
 {
 	if (!qarray || !qarray->data)
 		return 0;
@@ -211,7 +213,7 @@ unsigned long qarray_size(const qarray_t *qarray)
 	return qarray->N;
 }
 
-void destroy_qarray(qarray_t **qarray)
+void destroy_qarray(struct qarray_t **qarray)
 {
 	if ((*qarray) == NULL)
 		return;
@@ -272,7 +274,7 @@ int cmp_restore_order(const void *a, const void *b)
  *
  * @param[in] qarray Query array containing query objects.
  */
-void sort_qarray(qarray_t **qarray)
+void sort_qarray(struct qarray_t **qarray)
 {
 	qsort((*qarray)->data, (*qarray)->N, sizeof(qryRespArchiveData), cmp_restore_order);
 }
