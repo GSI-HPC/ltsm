@@ -226,6 +226,7 @@ static int parseopts(int argc, char *argv[])
 int main(int argc, char *argv[])
 {
 	int rc;
+	api_msg_set_level(opt.o_verbose);
 	rc = parseopts(argc, argv);
 	if (rc) {
 		CT_WARN("try '%s --help' for more information", argv[0]);
