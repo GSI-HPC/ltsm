@@ -2,3 +2,31 @@ GPATH
 GRTAGS
 GSYMS
 GTAGS
+
+# Autoconf
+Makefile.in
+
+/autom4te.cache
+/autoscan.log
+/autoscan-*.log
+/aclocal.m4
+
+# Object files
+*.o
+
+
+# Libraries
+*.lib
+*.a
+*.la
+*.lo
+
+# Shared objects (inc. Windows DLLs)
+*.dll
+*.so
+*.so.*
+*.dylib
+
+# Prerequisites
+*.d
+
