@@ -764,6 +764,7 @@ cleanup:
 		}
 	}
 	free(session);
+	session = NULL;
 	tsm_cleanup(DSM_MULTITHREAD);
 
 	return rc;
@@ -814,6 +815,7 @@ cleanup:
 			free(thread[i]);
 	}
 	free(thread);
+	thread = NULL;
 
 	return rc;
 }
