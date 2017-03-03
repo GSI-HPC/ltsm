@@ -29,6 +29,7 @@
 #include <libgen.h>
 #include <dirent.h>
 #include <math.h>
+#include <stdint.h>
 #include <fcntl.h>
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -36,6 +37,8 @@
 #include "tsmapi.h"
 #include "log.h"
 #include "qarray.h"
+
+#include "tsmapi_impl.h"
 
 #define OBJ_TYPE(type)							\
 	(DSM_OBJ_FILE == type ? "DSM_OBJ_FILE" :			\
@@ -114,7 +117,7 @@ void set_recursive(const dsBool_t recursive)
  */
 off64_t to_off64_t(const dsStruct64_t size)
 {
-	return (off64_t)size.hi << 32 | size.lo;
+	return (uint64_t)size.hi << 32 | (uint64_t)size.lo;
 }
 
 /**
@@ -131,7 +134,7 @@ dsStruct64_t to_dsStruct64_t(const off64_t size)
 {
 	dsStruct64_t res;
 	res.lo = (dsUint32_t)size;
-	res.hi = (dsUint32_t)((off64_t)size >> 32);
+	res.hi = (dsUint32_t)((uint64_t)size >> 32);
 
 	return res;
 }
@@ -620,7 +623,7 @@ dsInt16_t tsm_query_session(struct session_t *session)
 		 dsmSessInfo.archiveRetentionProtection ? "Yes" : "No");
 	CT_INFO("\n"
 		 "Max number of multiple objects per transaction: %d\n"
-		 "Max number of Bytes per transaction: %d\n"
+		 "Max number of Bytes per transaction: %u\n"
 		 "dsmSessInfo.fsdelim: %c\ndsmSessInfo.hldelim: %c\n",
 		 dsmSessInfo.maxObjPerTxn,
 		 dsmSessInfo.maxBytesPerTxn,
@@ -1114,167 +1117,257 @@ static dsInt16_t tsm_archive_generic(struct archive_info_t *archive_info,
 	dsBool_t success = bFalse;
 	ssize_t total_read = 0;
 	ssize_t cur_read = 0;
-	dsBool_t done = bFalse;
+	size_t cur_sent = 0;
 	dsUint8_t vote_txn;
-	dsBool_t is_local_fd = bFalse;
+	off64_t total_size = 0;
 
-	data_blk.bufferPtr = NULL;
-	obj_attr.objInfo = NULL;
+	struct archive_fsm_state_t fsm = ARCHIVE_FSM_INITIALIZER();
 
-	if (fd < 0) {
-		fd = open(archive_info->fpath, O_RDONLY,
-			  archive_info->obj_info.st_mode);
-		if (fd < 0) {
-			CT_ERROR(errno, "open '%s'", archive_info->fpath);
-			return DSM_RC_UNSUCCESSFUL;
+	while(fsm.state != TSMAPI_FINISHED) switch(fsm.state) {
+
+	case TSMAPI_BEGIN_TX:
+		/* Start transaction. */
+		rc = dsmBeginTxn(session->handle);
+		TSM_DEBUG(session, rc,  "dsmBeginTxn");
+		if (rc) {
+			TSM_ERROR(session, rc, "dsmBeginTxn");
+			success = bFalse;
+			fsm.state = TSMAPI_FINISHED;
+			break;
 		}
-		is_local_fd = bTrue;
-	}
 
-	/* Start transaction. */
-	rc = dsmBeginTxn(session->handle);
-	TSM_DEBUG(session, rc,  "dsmBeginTxn");
-	if (rc) {
-		TSM_ERROR(session, rc, "dsmBeginTxn");
-		goto cleanup;
-	}
+		mc_bind_key.stVersion = mcBindKeyVersion;
+		rc = dsmBindMC(session->handle, &(archive_info->obj_name), stArchive, &mc_bind_key);
+		TSM_DEBUG(session, rc,  "dsmBindMC");
+		if (rc) {
+			TSM_ERROR(session, rc, "dsmBindMC");
+			success = bFalse;
+			fsm.state = TSMAPI_END_TX;
+			break;
+		}
 
-	mc_bind_key.stVersion = mcBindKeyVersion;
-	rc = dsmBindMC(session->handle, &(archive_info->obj_name), stArchive, &mc_bind_key);
-	TSM_DEBUG(session, rc,  "dsmBindMC");
-	if (rc) {
-		TSM_ERROR(session, rc, "dsmBindMC");
-		goto cleanup_transaction;
-	}
-
-	arch_data.stVersion = sndArchiveDataVersion;
-	if (strlen(archive_info->desc) <= DSM_MAX_DESCR_LENGTH)
-		arch_data.descr = (char *)archive_info->desc;
-	else
-		arch_data.descr[0] = '\0';
-
-	rc = obj_attr_prepare(&obj_attr, archive_info);
-	if (rc)
-		goto cleanup_transaction;
-
-	/* Start sending object. */
-	rc = dsmSendObj(session->handle, stArchive, &arch_data,
-			&(archive_info->obj_name), &obj_attr, NULL);
-	TSM_DEBUG(session, rc,  "dsmSendObj");
-	if (rc) {
-		TSM_ERROR(session, rc, "dsmSendObj");
-		goto cleanup_transaction;
-	}
-
-	if (archive_info->obj_name.objType == DSM_OBJ_FILE) {
-		data_blk.bufferPtr = (char *)malloc(sizeof(char) * TSM_BUF_LENGTH);
-		if (!data_blk.bufferPtr) {
+		fsm.data_buf = malloc(sizeof(char) * TSM_BUF_LENGTH);
+		if (!fsm.data_buf) {
 			rc = errno;
 			CT_ERROR(rc, "malloc");
-			goto cleanup_transaction;
+			success = bFalse;
+			fsm.state = TSMAPI_END_TX;
+			break;
 		}
-		data_blk.stVersion = DataBlkVersion;
-		data_blk.numBytes = 0;
-		off64_t total_size = to_off64_t(archive_info->obj_info.size);
 
-		while (!done) {
-			cur_read = read(fd, data_blk.bufferPtr, TSM_BUF_LENGTH);
-			if (cur_read < 0) {
-				CT_ERROR(errno, "read");
-				rc_minor = DSM_RC_UNSUCCESSFUL;
-				goto cleanup_transaction;
-			} else if (cur_read == 0) /* Zero indicates end of file. */
-				done = bTrue;
-			else {
-				total_read += cur_read;
-				data_blk.bufferLen = cur_read;
+		fsm.state = TSMAPI_GET_FILE;
+		break;
 
-				rc = dsmSendData(session->handle, &data_blk);
-				TSM_DEBUG(session, rc,  "dsmSendData");
-				if (rc) {
-					TSM_ERROR(session, rc, "dsmSendData");
-					goto cleanup_transaction;
-				}
-				CT_INFO("cur_read: %zu, total_read: %zu,"
-					" total_size: %zu", cur_read,
-					total_read, total_size);
-				data_blk.numBytes = 0;
+	case TSMAPI_GET_FILE:
+		/* TODO: tx batching*/
+		fsm.archive_info = archive_info;
 
-				/* Function callback on progress */
-				if (session->progress != NULL) {
-					struct progress_size_t progress_size = {
-						.cur = cur_read,
-						.cur_total = total_read,
-						.total = total_size
-					};
-					rc_minor = session->progress(
-						&progress_size, session);
-					if (rc_minor) {
-						CT_ERROR(rc_minor,
-							 "progress function"
-							 " callback failed");
-	 					goto cleanup_transaction;
-	 				}
-				}
+		fsm.file.local = bFalse;
+		if (fd < 0) {
+			fd = open(fsm.archive_info->fpath, O_RDONLY,
+		  		fsm.archive_info->obj_info.st_mode);
+			if (fd < 0) {
+				CT_ERROR(errno, "open '%s'",
+					fsm.archive_info->fpath);
+					success = bFalse;
+					fsm.state = TSMAPI_END_TX;
+					break;
 			}
+
+			fsm.file.local = bTrue;
 		}
+		fsm.file.fd = fd;
+		fsm.file.pos = 0;
+		fsm.file.len = 0;
+
+		total_size = to_off64_t(fsm.archive_info->obj_info.size);
+
+		fsm.state = TSMAPI_SEND_OBJ;
+		break;
+
+	case TSMAPI_END_TX:
+		/* Commit transaction (DSM_VOTE_COMMIT) on success, otherwise
+		   roll back current transaction (DSM_VOTE_ABORT). */
+		vote_txn = success ? DSM_VOTE_COMMIT : DSM_VOTE_ABORT;
+		rc = dsmEndTxn(session->handle, vote_txn, &err_reason);
+		TSM_DEBUG(session, rc,  "dsmEndTxn");
+		if (rc || err_reason) {
+			TSM_ERROR(session, rc, "dsmEndTxn");
+			TSM_ERROR(session, err_reason, "dsmEndTxn reason");
+			success = bFalse;
+		}
+
+		if (success) {
+			CT_INFO("\n*** successfully archived: %s %s of size: %lu bytes "
+				"with settings ***\n"
+				"fs: %s\n"
+				"hl: %s\n"
+				"ll: %s\n"
+				"desc: %s\n",
+				OBJ_TYPE(fsm.archive_info->obj_name.objType),
+				fsm.archive_info->fpath, total_read,
+				fsm.archive_info->obj_name.fs, fsm.archive_info->obj_name.hl,
+				fsm.archive_info->obj_name.ll, fsm.archive_info->desc);
+		}
+
+		free(fsm.data_buf);
+
+		/* TODO: tx batch */
+		fsm.state = TSMAPI_FINISHED;
+		break;
+
+	case TSMAPI_SEND_OBJ:
+		arch_data.stVersion = sndArchiveDataVersion;
+		if (strlen(fsm.archive_info->desc) <= DSM_MAX_DESCR_LENGTH)
+			arch_data.descr = (char *)fsm.archive_info->desc;
+		else
+			arch_data.descr[0] = '\0';
+
+		rc = obj_attr_prepare(&obj_attr, fsm.archive_info);
+		if (rc) {
+			rc_minor = DSM_RC_UNSUCCESSFUL;
+			success = bFalse;
+			fsm.state = TSMAPI_END_TX;
+			break;
+		}
+
+		/* Start sending object. */
+		rc = dsmSendObj(session->handle, stArchive, &arch_data,
+				&(fsm.archive_info->obj_name), &obj_attr, NULL);
+		TSM_DEBUG(session, rc,  "dsmSendObj");
+		if (rc) {
+			/* TODO: check rc */
+			TSM_ERROR(session, rc, "dsmSendObj");
+			success = bFalse;
+			fsm.state = TSMAPI_END_TX;
+			break;
+		}
+
+		CT_INFO("Sending [%s]: %s", OBJ_TYPE(fsm.archive_info->obj_name.objType),
+			fsm.archive_info->fpath);
+
+
+		if (fsm.archive_info->obj_name.objType == DSM_OBJ_FILE) {
+			fsm.state = TSMAPI_SEND_DATA;
+		} else {
+			/* dsmSendObj was successful and we archived a directory obj. */
+			success = bTrue;
+			fsm.state = TSMAPI_END_SEND_OBJ;
+		}
+		break;
+
+	case TSMAPI_END_SEND_OBJ:
+
 		/* File obj. was archived, verify that the number of bytes read
 		   from file descriptor matches the number of bytes we
 		   transfered with dsmSendData. */
-		success = total_read == to_off64_t(archive_info->obj_info.size) ?
-			bTrue : bFalse;
-	} else /* dsmSendObj was successful and we archived a directory obj. */
-		success = bTrue;
 
-	rc = dsmEndSendObj(session->handle);
-	TSM_DEBUG(session, rc,  "dsmEndSendObj");
-	if (rc) {
-		TSM_ERROR(session, rc, "dsmEndSendObj");
-		success = bFalse;
-	}
-
-cleanup_transaction:
-	/* Commit transaction (DSM_VOTE_COMMIT) on success, otherwise
-	   roll back current transaction (DSM_VOTE_ABORT). */
-	vote_txn = success == bTrue ? DSM_VOTE_COMMIT : DSM_VOTE_ABORT;
-	rc = dsmEndTxn(session->handle, vote_txn, &err_reason);
-	TSM_DEBUG(session, rc,  "dsmEndTxn");
-	if (rc || err_reason) {
-		TSM_ERROR(session, rc, "dsmEndTxn");
-		TSM_ERROR(session, err_reason, "dsmEndTxn reason");
-		success = bFalse;
-	}
-
-	if (success) {
-		CT_INFO("\n*** successfully archived: %s %s of size: %lu bytes "
-			"with settings ***\n"
-			"fs: %s\n"
-			"hl: %s\n"
-			"ll: %s\n"
-			"desc: %s\n",
-			OBJ_TYPE(archive_info->obj_name.objType),
-			archive_info->fpath, total_read,
-			archive_info->obj_name.fs, archive_info->obj_name.hl,
-			archive_info->obj_name.ll, archive_info->desc);
-	}
-
-cleanup:
-	if (obj_attr.objInfo)
-		free(obj_attr.objInfo);
-	if (data_blk.bufferPtr)
-		free(data_blk.bufferPtr);
-
-	if (is_local_fd && !(fd < 0)) {
-		rc = close(fd);
-		if (rc < 0) {
-			CT_ERROR(errno, "close failed: %d", fd);
-			rc = DSM_RC_UNSUCCESSFUL;
+		rc = dsmEndSendObj(session->handle);
+		TSM_DEBUG(session, rc,  "dsmEndSendObj");
+		if (rc) {
+			TSM_ERROR(session, rc, "dsmEndSendObj");
+			success = bFalse;
 		}
 
+		free(obj_attr.objInfo);
+
+		/* TODO: tx batch */
+		fsm.state = TSMAPI_END_TX;
+		break;
+
+	case TSMAPI_SEND_DATA:
+		data_blk.bufferPtr = fsm.data_buf;
+		data_blk.stVersion = DataBlkVersion;
+		data_blk.numBytes = 0;
+
+		cur_read = pread(fsm.file.fd, data_blk.bufferPtr, TSM_BUF_LENGTH, fsm.file.pos);
+		if (cur_read < 0) {
+			CT_ERROR(errno, "pread");
+			rc_minor = DSM_RC_UNSUCCESSFUL;
+			success = bFalse;
+			fsm.state = TSMAPI_END_SEND_OBJ;
+			break;
+		} else if (cur_read == 0) {/* Zero indicates end of file. */
+			if (fsm.file.local) {
+				rc = close(fd);
+				if (rc < 0) {
+					CT_ERROR(errno, "close failed: %d", fd);
+					rc = DSM_RC_UNSUCCESSFUL;
+				}
+			}
+			fd = 0;
+
+			success = total_read == to_off64_t(fsm.archive_info->obj_info.size);
+			fsm.state = TSMAPI_END_SEND_OBJ;
+			break;
+		}
+
+		/* Send the chunk */
+		total_read += cur_read;
+
+		fsm.file.pos += cur_read;
+		data_blk.bufferLen = cur_read;
+		cur_sent = 0;
+
+		do {
+			data_blk.bufferPtr += cur_sent;
+			data_blk.bufferLen -= cur_sent;
+
+			rc = dsmSendData(session->handle, &data_blk);
+			TSM_DEBUG(session, rc,  "dsmSendData");
+			/* if (rc == DSM_RC_WILL_ABORT)
+			 * Doc say we should end tx with COMMIT, but that would leave
+			 * a partial file in the archive */
+
+			if (rc) {
+				TSM_ERROR(session, rc, "dsmSendData");
+				break;
+			}
+
+			if(data_blk.numBytes != data_blk.bufferLen)
+				CT_DEBUG("dsmSendData transmitted %u out of %d",
+					data_blk.numBytes, data_blk.bufferLen);
+
+			cur_sent += data_blk.numBytes;
+		} while (cur_sent < cur_read);
+
+		if (rc) {
+			success = bFalse;
+			fsm.state = TSMAPI_END_SEND_OBJ;
+			break;
+		}
+
+		CT_INFO("cur_read: %zu, total_read: %zu,"
+			" total_size: %zu", cur_read,
+			fsm.file.pos, total_size);
+
+		/* Function callback on progress */
+		if (session->progress != NULL) {
+			struct progress_size_t progress_size = {
+				.cur = cur_read,
+				.cur_total = total_read,
+				.total = total_size
+			};
+			rc_minor = session->progress(&progress_size, session);
+			if (rc_minor) {
+				CT_ERROR(rc_minor, "progress function callback failed");
+				success = bFalse;
+				fsm.state = TSMAPI_END_TX;
+				break;
+			}
+		}
+
+		fsm.state = TSMAPI_SEND_DATA;
+		break;
+
+	default:
+		CT_ERROR(-1, "tsm_archive_generic: invalid state");
+		break;
 	}
 
 	return (rc_minor ? DSM_RC_UNSUCCESSFUL : rc);
 }
+
 
 /**
  * @brief Initialize and setup archive_info_t struct fields.

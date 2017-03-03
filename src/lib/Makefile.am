@@ -5,5 +5,5 @@ if HAVE_LUSTRE
 endif
 
 noinst_LIBRARIES = libtsmapi.a
-noinst_HEADERS = tsmapi.h qarray.h log.h
+noinst_HEADERS = tsmapi.h tsmapi_impl.h qarray.h log.h
 libtsmapi_a_SOURCES = tsmapi.c qarray.c log.c list.c queue.c
