@@ -262,13 +262,12 @@ static dsInt16_t retrieve_obj(qryRespArchiveData *query_data,
 {
 	char *buf = NULL;
 	DataBlk dataBlk;
-	dsBool_t done = bFalse;
-	off64_t remain_to_write = to_off64_t(obj_info->size);
 	ssize_t total_written = 0;
 	ssize_t cur_written = 0;
 	dsInt16_t rc;
 	dsInt16_t rc_minor = 0;
 	dsBool_t is_local_fd = bFalse;
+	dsBool_t more_data = bTrue;
 
 	if (fd < 0) {
 		/* If a regular file was archived, e.g. /dir1/dir2/data.txt,
@@ -319,52 +318,58 @@ static dsInt16_t retrieve_obj(qryRespArchiveData *query_data,
 	TSM_DEBUG(session, rc,  "dsmGetObj");
 	off64_t total_size = to_off64_t(obj_info->size);
 
-	while (!done) {
-		/* Note: dataBlk.numBytes always returns TSM_BUF_LENGTH (65536). */
+	while(more_data){
 		if (!(rc == DSM_RC_MORE_DATA || rc == DSM_RC_FINISHED)) {
 			TSM_ERROR(session, rc, "dsmGetObj or dsmGetData");
 			rc_minor = rc;
-			done = bTrue;
-		} else {
-			cur_written = write(fd, buf, remain_to_write <
-					    TSM_BUF_LENGTH ?
-					    remain_to_write : TSM_BUF_LENGTH);
-			if (cur_written < 0) {
-				CT_ERROR(errno, "write");
-				rc_minor = DSM_RC_UNSUCCESSFUL;
+			goto cleanup;
+		}
+
+		cur_written = write(fd, buf, dataBlk.numBytes);
+		if (cur_written < 0) {
+			CT_ERROR(errno, "write");
+			rc_minor = DSM_RC_UNSUCCESSFUL;
+			goto cleanup;
+		}
+		total_written += cur_written;
+
+		CT_INFO("cur_written: %zu, total_written: %zu,"
+			" obj_size: %zu", cur_written,
+			total_written, total_size);
+
+		/* Function callback on progress */
+		if (session->progress != NULL) {
+			struct progress_size_t progress_size = {
+				.cur = cur_written,
+				.cur_total = total_written,
+				.total = total_size
+			};
+			rc_minor = session->progress(&progress_size,
+						     session);
+			if (rc_minor) {
+				CT_ERROR(rc_minor, "progress function"
+				 " callback failed");
 				goto cleanup;
 			}
-
-			if (remain_to_write < TSM_BUF_LENGTH)
-				done = bTrue;
-			else {
-				total_written += cur_written;
-				remain_to_write -= TSM_BUF_LENGTH;
-				dataBlk.numBytes = 0;
-				rc = dsmGetData(session->handle, &dataBlk);
-				TSM_DEBUG(session, rc,  "dsmGetData");
-			}
-			CT_INFO("cur_written: %zu, total_written: %zu,"
-				" obj_size: %zu", cur_written, total_written,
-				total_size);
-
-			/* Function callback on progress */
-			if (session->progress != NULL) {
-				struct progress_size_t progress_size = {
-					.cur = cur_written,
-					.cur_total = total_written,
-					.total = total_size
-				};
-				rc_minor = session->progress(&progress_size,
-							     session);
-				if (rc_minor) {
- 					CT_ERROR(rc_minor, "progress function"
-						 " callback failed");
- 					goto cleanup;
- 				}
-			}
 		}
-	} /* End while (!done) */
+
+		/* Fetch additional data */
+		if (rc == DSM_RC_MORE_DATA) {
+			dataBlk.numBytes = 0;
+			rc = dsmGetData(session->handle, &dataBlk);
+			TSM_DEBUG(session, rc,  "dsmGetData");
+		} else {
+			more_data = bFalse;
+		}
+	}
+
+	/* No more data and no error  */
+	ssize_t diff = (total_size - total_written);
+	if (diff != 0) {
+		CT_WARN("getObject finished by tsm but expected more bytes:"
+			" written: %zu, expected: %zu, remaining: %zu",
+			total_written, total_size, diff);
+	}
 
 cleanup:
 	rc = dsmEndGetObj(session->handle);
@@ -381,7 +386,6 @@ cleanup:
 			CT_ERROR(errno, "close failed: %d", rc, fd);
 			rc = DSM_RC_UNSUCCESSFUL;
 		}
-
 	}
 
 	return (rc_minor ? DSM_RC_UNSUCCESSFUL : rc);
