@@ -66,6 +66,7 @@ struct options opt = {
 	.o_fstype = {0},
 };
 
+static volatile enum {RUNNING, EXITING, FINISHED} proc_state = RUNNING;
 static uint16_t nthreads = 1;
 static pthread_t **thread = NULL;
 static pthread_mutex_t queue_mutex;
@@ -542,8 +543,15 @@ static void *ct_thread(void *data)
 	for (;;) {
 		/* Crticial region, lock. */
 		pthread_mutex_lock(&queue_mutex);
-		while (queue_size(&queue) == 0)
+		while (queue_size(&queue) == 0) {
+			if (proc_state != RUNNING) {
+				rc = 0;
+				pthread_mutex_unlock(&queue_mutex);
+				goto thread_exit;
+			}
+
 			pthread_cond_wait(&queue_cond, &queue_mutex);
+		}
 
 		rc = queue_dequeue(&queue, (void **)&session->hai);
 		CT_DEBUG("dequeue action '%s' cookie=%#jx, FID="DFID"",
@@ -562,29 +570,15 @@ static void *ct_thread(void *data)
 		rc = ct_process_item(session);
 	}
 
+thread_exit:
 	pthread_exit((void *)(intptr_t)rc);
 }
 
-static void handler(int signal)
-{
-	psignal(signal, "exiting");
-
-	/* TODO: Cleanup TSM sessions */
-
-	/* If we don't clean up upon interrupt, umount thinks there's a ref
-	 * and doesn't remove us from mtab (EINPROGRESS). The lustre client
-	 * does successfully unmount and the mount is actually gone, but the
-	 * mtab entry remains. So this just makes mtab happier. */
-	llapi_hsm_copytool_unregister(&ctdata);
-
-	_exit(1);
-}
 
 /* Daemon waits for messages from the kernel; run it in the background. */
 static int ct_run(void)
 {
-	struct sigaction cleanup_sigaction;
-	int rc;
+	int n, rc;
 
 	if (opt.o_daemonize) {
 		rc = daemon(1, 1);
@@ -595,8 +589,6 @@ static int ct_run(void)
 		}
 	}
 
-	setbuf(stdout, NULL);
-
 	rc = llapi_hsm_copytool_register(&ctdata, opt.o_mnt,
 					 opt.o_archive_cnt,
 					 opt.o_archive_id, 0);
@@ -605,27 +597,23 @@ static int ct_run(void)
 		return rc;
 	}
 
-	memset(&cleanup_sigaction, 0, sizeof(cleanup_sigaction));
-	cleanup_sigaction.sa_handler = handler;
-	sigemptyset(&cleanup_sigaction.sa_mask);
-	sigaction(SIGINT, &cleanup_sigaction, NULL);
-	sigaction(SIGTERM, &cleanup_sigaction, NULL);
-
 	while (1) {
 		struct hsm_action_list *hal;
 		struct hsm_action_item *hai;
 		int msgsize;
 		int i = 0;
 
-		CT_MESSAGE("waiting for message from kernel");
+		CT_DEBUG("waiting for message from kernel");
 
 		rc = llapi_hsm_copytool_recv(ctdata, &hal, &msgsize);
 		if (rc == -ESHUTDOWN) {
-			CT_MESSAGE("shutting down");
+			CT_MESSAGE("ct_run() stopping, Lustre is shutting down");
+			break;
+		} else if (rc == -EINTR && proc_state != RUNNING) {
+			CT_DEBUG("ct_run() stopping, interrupted %d", errno);
 			break;
 		} else if (rc < 0) {
-			CT_WARN("cannot receive action list: %s",
-				strerror(-rc));
+			CT_WARN("cannot receive action list: %s", strerror(-rc));
 			err_major++;
 			if (opt.o_abort_on_err)
 				break;
@@ -699,7 +687,49 @@ static int ct_run(void)
 			break;
 	}
 
-	llapi_hsm_copytool_unregister(&ctdata);
+	/* Handle shutdown */
+	/* cancel pending work items */
+	pthread_mutex_lock(&queue_mutex);
+	CT_MESSAGE("Exiting: cleaning pending queue");
+
+	while (queue_size(&queue) > 0) {
+		struct hsm_action_item *hai;
+		struct hsm_copyaction_private *hcp;
+		char fid[128];
+
+		queue_dequeue(&queue, (void **)&hai);
+
+		sprintf(fid, DFID, PFID(&hai->hai_fid));
+		CT_DEBUG("canceling fid '%s' action %s reclen %d, cookie=%#jx",
+			fid, hsm_copytool_action2name(hai->hai_action),
+			hai->hai_len, (uintmax_t)hai->hai_cookie);
+
+		rc = llapi_hsm_action_begin(&hcp, ctdata, hai, -1, 0, true);
+		if (rc < 0)
+			CT_ERROR(rc, "cancel with llapi_hsm_action_begin() failed");
+
+		rc = llapi_hsm_action_end(&hcp, &hai->hai_extent, 0, abs(rc));
+		if (rc < 0)
+			CT_ERROR(rc, "cancel with llapi_hsm_action_end() failed");
+
+		free(hai);
+	}
+	pthread_mutex_unlock(&queue_mutex);
+
+	/* Signal all threads to continue */
+	proc_state = EXITING;
+	pthread_cond_broadcast(&queue_cond);
+	/* Wait for threads to terminate */
+	for (n = 0; n < nthreads; n++) {
+		rc = pthread_join(*thread[n], NULL);
+		CT_MESSAGE("Exiting: stopped thread worker %d with %d", n, rc);
+	}
+
+	/* We're done with hsm now */
+	rc = llapi_hsm_copytool_unregister(&ctdata);
+	ctdata = NULL;
+	CT_MESSAGE("Exiting: copytool unregistered with rc %d", rc);
+
 
 	return rc;
 }
@@ -775,6 +805,7 @@ static int ct_start_threads(void)
 	int rc;
 	uint16_t n;
 	pthread_attr_t attr;
+	char thread_name[32];
 
 	thread = calloc(nthreads, sizeof(pthread_t *));
 	if (thread == NULL) {
@@ -797,13 +828,16 @@ static int ct_start_threads(void)
 		return rc;
 	}
 
-	pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
+	pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
 
 	for (n = 0; n < nthreads; n++) {
 		rc = pthread_create(thread[n], &attr, ct_thread, session[n]);
 		if (rc != 0)
 			CT_ERROR(rc, "cannot create worker thread '%d' for"
 				 "'%s'", n, opt.o_mnt);
+
+		sprintf(thread_name, "lhsmtool_tsm/%d", n);
+		pthread_setname_np(*thread[n], thread_name);
 	}
 	pthread_attr_destroy(&attr);
 
@@ -895,9 +929,60 @@ static int ct_cleanup(void)
 	return rc;
 }
 
+static void atexit_unregister(void)
+{
+	/* If we don't clean up upon interrupt, umount thinks there's a ref
+	 * and doesn't remove us from mtab (EINPROGRESS). The lustre client
+	 * does successfully unmount and the mount is actually gone, but the
+	 * mtab entry remains. So this just makes mtab happier. */
+	if (ctdata)
+		llapi_hsm_copytool_unregister(&ctdata);
+}
+
+
+/*
+ * Signal handling:
+ * We intercept SIGINT and SIGTERM in order to implement graceful shutdown of the
+ * copytool. In case the signal is delivered to one of the worker threads, we
+ * signal the main thread in order to interrupt blocking calls inside of ct_run()
+ */
+static pthread_t main_thread;
+
+static void handler_int_term(int signal)
+{
+	if((signal == SIGINT || signal == SIGTERM) && proc_state == RUNNING) {
+		proc_state = EXITING;
+		psignal(signal, "Exiting: changing process status to EXITING on signal");
+	}
+
+	/* Forward the signal to the main thread if needed */
+	if (pthread_self() != main_thread) {
+		psignal(signal, "Exiting: forwarding signal to the main thread");
+		pthread_kill(main_thread, signal);
+	}
+
+	CT_DEBUG("Interrupt handler: process state: %d", proc_state);
+}
+
+
 int main(int argc, char *argv[])
 {
+	struct sigaction cleanup_sigaction;
 	int rc;
+
+	/* Line buffered stdout */
+	(void) setvbuf(stdout, NULL, _IOLBF, 0);
+
+	/* Register the at-exit method for lustre hsm cleanup */
+	atexit(atexit_unregister);
+
+	/* Set the signal handler */
+	main_thread = pthread_self();
+	cleanup_sigaction.sa_handler = handler_int_term;
+	cleanup_sigaction.sa_flags = 0;
+	sigemptyset(&cleanup_sigaction.sa_mask);
+	sigaction(SIGINT, &cleanup_sigaction, NULL);
+	sigaction(SIGTERM, &cleanup_sigaction, NULL);
 
 	rc = ct_parseopts(argc, argv);
 	if (rc < 0) {
@@ -914,6 +999,9 @@ int main(int argc, char *argv[])
 
 error_cleanup:
 	ct_cleanup();
+
+	/* All done*/
+	proc_state = FINISHED;
 
 	return -rc;
 }
