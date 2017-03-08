@@ -29,6 +29,8 @@
 #include <signal.h>
 #include <stdarg.h>
 #include <pthread.h>
+#include <semaphore.h>
+#include <time.h>
 #include <stdint.h>
 #include <linux/limits.h>
 #include <sys/syscall.h>
@@ -38,6 +40,7 @@
 #include "tsmapi.h"
 #include "queue.h"
 
+/* Program options */
 struct options {
 	int o_daemonize;
 	int o_dry_run;
@@ -56,7 +59,7 @@ struct options {
 	char o_fstype[DSM_MAX_FSTYPE_LENGTH + 1];
 };
 
-struct options opt = {
+static struct options opt = {
 	.o_verbose = API_MSG_NORMAL,
 	.o_servername = {0},
 	.o_node = {0},
@@ -66,19 +69,31 @@ struct options opt = {
 	.o_fstype = {0},
 };
 
-static volatile enum {RUNNING, EXITING, FINISHED} proc_state = RUNNING;
-static uint16_t nthreads = 1;
-static pthread_t **thread = NULL;
-static pthread_mutex_t queue_mutex;
-static pthread_cond_t queue_cond;
-static struct session_t **session = NULL;
-static queue_t queue;
+/* Threads */
+static volatile
+enum {
+	RUNNING,
+	EXITING,
+	FINISHED
+} 			proc_state = RUNNING;
+static uint16_t		nthreads = 1;
+static pthread_t	*threads;
 
-static int err_major;
-static int err_minor;
+/* Work queue */
+#define QUEUE_MAX_ITEMS	(2 * nthreads) /* TODO: raise for txn file batching */
+static sem_t		queue_sem;
+static pthread_mutex_t	queue_mutex;
+static pthread_cond_t	queue_cond;
+static queue_t		queue;
 
-static char fs_name[MAX_OBD_NAME + 1] = {0};
-static struct hsm_copytool_private *ctdata = NULL;
+/* Session */
+static struct session_t			*sessions;
+static char 				fs_name[MAX_OBD_NAME + 1] = {0};
+static struct hsm_copytool_private	*ctdata;
+
+/* Error handling */
+static int 	err_major;
+static int	err_minor;
 
 static void usage(const char *cmd_name, const int rc)
 {
@@ -537,11 +552,11 @@ static int ct_process_item(struct session_t *session)
 
 static void *ct_thread(void *data)
 {
-	struct session_t *session = data;
+	struct session_t *session = (struct session_t *) data;
 	int rc;
 
 	for (;;) {
-		/* Crticial region, lock. */
+		/* Critical region, lock. */
 		pthread_mutex_lock(&queue_mutex);
 		while (queue_size(&queue) == 0) {
 			if (proc_state != RUNNING) {
@@ -554,6 +569,13 @@ static void *ct_thread(void *data)
 		}
 
 		rc = queue_dequeue(&queue, (void **)&session->hai);
+
+		/* Unlock. */
+		pthread_mutex_unlock(&queue_mutex);
+
+		/* Signal work queue empty slot */
+		sem_post(&queue_sem);
+
 		CT_DEBUG("dequeue action '%s' cookie=%#jx, FID="DFID"",
 			 hsm_copytool_action2name(session->hai->hai_action),
 			 (uintmax_t)session->hai->hai_cookie,
@@ -564,14 +586,12 @@ static void *ct_thread(void *data)
 				 hsm_copytool_action2name(session->hai->hai_action),
 				 (uintmax_t)session->hai->hai_cookie,
 				 PFID(&session->hai->hai_fid));
-		pthread_mutex_unlock(&queue_mutex);
-		/* Unlock. */
 
-		rc = ct_process_item(session);
+		ct_process_item(session);
 	}
 
 thread_exit:
-	pthread_exit((void *)(intptr_t)rc);
+	return NULL;
 }
 
 
@@ -601,10 +621,20 @@ static int ct_run(void)
 		struct hsm_action_list *hal;
 		struct hsm_action_item *hai;
 		int msgsize;
+		const struct timespec sem_wait_time = { .tv_sec = 1, .tv_nsec = 0 };
+
 		int i = 0;
 
 		CT_DEBUG("waiting for message from kernel");
 
+		/* Check if work queue is already full */
+		while (-1 == sem_timedwait(&queue_sem, &sem_wait_time)) {
+			if (proc_state != RUNNING)
+				break;
+			CT_MESSAGE("Waiting for free spots in work queue");
+		}
+
+		/* Wait for new items from Lustre HSM */
 		rc = llapi_hsm_copytool_recv(ctdata, &hal, &msgsize);
 		if (rc == -ESHUTDOWN) {
 			CT_MESSAGE("ct_run() stopping, Lustre is shutting down");
@@ -623,6 +653,21 @@ static int ct_run(void)
 
 		CT_MESSAGE("copytool fs=%s archive#=%d item_count=%d",
 			   hal->hal_fsname, hal->hal_archive_id, hal->hal_count);
+
+		/*
+		 * Update work queue available slot count depending on length
+		 * of hsm action list. Note that this can allow more items into
+		 * the work queue, but no new hsm actions will be received until
+		 * queue length drops below QUEUE_MAX_ITEMS.
+		 */
+		if (hal->hal_count == 0) {
+			CT_DEBUG("Received an empty HSM action list");
+			sem_post(&queue_sem);
+			continue;
+		} else {
+			for(n = (int)hal->hal_count - 1; n > 0; n--)
+				sem_trywait(&queue_sem);
+		}
 
 		if (strcmp(hal->hal_fsname, fs_name) != 0) {
 			rc = -EINVAL;
@@ -721,7 +766,7 @@ static int ct_run(void)
 	pthread_cond_broadcast(&queue_cond);
 	/* Wait for threads to terminate */
 	for (n = 0; n < nthreads; n++) {
-		rc = pthread_join(*thread[n], NULL);
+		rc = pthread_join(threads[n], NULL);
 		CT_MESSAGE("Exiting: stopped thread worker %d with %d", n, rc);
 	}
 
@@ -738,7 +783,14 @@ static int ct_connect_sessions(void)
 {
 	int rc;
 	struct login_t login;
-	uint16_t n;
+	int n;
+
+	sessions = calloc(nthreads, sizeof(struct session_t));
+	if (sessions == NULL) {
+		rc = -errno;
+		CT_ERROR(rc, "malloc failed");
+		return rc;
+	}
 
 	rc = tsm_init(DSM_MULTITHREAD);
 	if (rc) {
@@ -753,48 +805,35 @@ static int ct_connect_sessions(void)
 		   opt.o_owner, LINUX_PLATFORM,
 		   opt.o_fsname, DEFAULT_FSTYPE);
 
-	session = calloc(nthreads, sizeof(struct session_t *));
-	if (session == NULL) {
-		rc = -errno;
-		CT_ERROR(rc, "malloc failed");
-		return rc;
-	}
-
 	for (n = 0; n < nthreads; n++) {
-		session[n] = calloc(1, sizeof(struct session_t));
-		if (session[n] == NULL) {
-			rc = -errno;
-			CT_ERROR(rc, "malloc failed");
-			goto cleanup;
-		}
-		session[n]->progress = progress_callback;
+		sessions[n].progress = progress_callback;
 		CT_MESSAGE("tsm_init: session: %d", n + 1);
 
-		rc = tsm_connect(&login, session[n]);
+		rc = tsm_connect(&login, &sessions[n]);
 		if (rc) {
 			rc = -ECANCELED;
 			CT_ERROR(rc, "tsm_init failed");
 			goto cleanup;
 		}
 		/* Querying session is optional. */
-		rc = tsm_query_session(session[n]);
+		rc = tsm_query_session(&sessions[n]);
 		if (rc) {
 			rc = -ECANCELED;
 			CT_ERROR(rc, "tsm_query_session failed");
+			n += 1; /* Disconnect this session also */
 			goto cleanup;
 		}
 	}
 	return rc;
 
 cleanup:
-	for (uint16_t i = 0; i < n; i++) {
-		if (session[i]) {
-			tsm_disconnect(session[i]);
-			free(session[i]);
-		}
-	}
-	free(session);
-	session = NULL;
+	for (int i = 0; i < n; i++)
+		tsm_disconnect(&sessions[i]);
+
+	if (sessions)
+		free(sessions);
+	sessions = NULL;
+
 	tsm_cleanup(DSM_MULTITHREAD);
 
 	return rc;
@@ -807,49 +846,37 @@ static int ct_start_threads(void)
 	pthread_attr_t attr;
 	char thread_name[32];
 
-	thread = calloc(nthreads, sizeof(pthread_t *));
-	if (thread == NULL) {
+	threads = calloc(nthreads, sizeof(pthread_t));
+	if (threads == NULL) {
 		rc = -errno;
 		CT_ERROR(rc, "malloc failed");
 		return rc;
-	}
-	for (n = 0; n < nthreads; n++) {
-		thread[n] = calloc(1, sizeof(pthread_t));
-		if (thread[n] == NULL) {
-			rc = -errno;
-			CT_ERROR(rc, "malloc failed");
-			goto cleanup;
-		}
 	}
 
 	rc = pthread_attr_init(&attr);
 	if (rc != 0) {
 		CT_ERROR(rc, "pthread_attr_init failed");
-		return rc;
+		goto cleanup;
 	}
 
 	pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
 
 	for (n = 0; n < nthreads; n++) {
-		rc = pthread_create(thread[n], &attr, ct_thread, session[n]);
+		rc = pthread_create(&threads[n], &attr, ct_thread, &sessions[n]);
 		if (rc != 0)
 			CT_ERROR(rc, "cannot create worker thread '%d' for"
 				 "'%s'", n, opt.o_mnt);
 
 		sprintf(thread_name, "lhsmtool_tsm/%d", n);
-		pthread_setname_np(*thread[n], thread_name);
+		pthread_setname_np(threads[n], thread_name);
 	}
 	pthread_attr_destroy(&attr);
 
 	return rc;
 
 cleanup:
-	for (uint16_t i = 0; i < n; i++) {
-		if (thread[i])
-			free(thread[i]);
-	}
-	free(thread);
-	thread = NULL;
+	free(threads);
+	threads = NULL;
 
 	return rc;
 }
@@ -873,6 +900,7 @@ static int ct_setup(void)
 		return rc;
 	}
 
+	sem_init(&queue_sem, 0, QUEUE_MAX_ITEMS);
 	pthread_mutex_init(&queue_mutex, NULL);
 	pthread_cond_init(&queue_cond, NULL);
 	queue_init(&queue, free);
@@ -896,7 +924,6 @@ static int ct_setup(void)
 static int ct_cleanup(void)
 {
 	int rc;
-	int rc_minor;
 
 	if (opt.o_mnt_fd >= 0) {
 		rc = close(opt.o_mnt_fd);
@@ -905,25 +932,18 @@ static int ct_cleanup(void)
 			CT_ERROR(rc, "cannot close mount point");
 		}
 	}
-	rc_minor = pthread_mutex_destroy(&queue_mutex);
-	if (rc_minor)
-		CT_ERROR(rc_minor, "pthread_mutex_destroy failed");
-	rc_minor = pthread_cond_destroy(&queue_cond);
-	if (rc_minor)
-		CT_ERROR(rc_minor, "pthread_cond_destroy failed");
+	sem_destroy(&queue_sem);
+	pthread_mutex_destroy(&queue_mutex);
+	pthread_cond_destroy(&queue_cond);
 
-	for (uint16_t n = 0; n < nthreads && session && thread; n++) {
-		if (session[n]) {
-			tsm_disconnect(session[n]);
-			free(session[n]);
-		}
-		if (thread[n])
-			free(thread[n]);
-	}
-	if (session)
-		free(session);
-	if (thread)
-		free(thread);
+	for (int n = 0; n < nthreads && sessions && threads; n++)
+		tsm_disconnect(&sessions[n]);
+
+	if (sessions)
+		free(sessions);
+	if (threads)
+		free(threads);
+
 	tsm_cleanup(DSM_MULTITHREAD);
 
 	return rc;
