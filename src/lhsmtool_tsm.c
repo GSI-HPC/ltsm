@@ -20,6 +20,8 @@
 #define _GNU_SOURCE
 #endif
 
+#include <stdio.h>
+#include <ctype.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
@@ -56,7 +58,7 @@ struct options {
 	char o_fstype[DSM_MAX_FSTYPE_LENGTH + 1];
 };
 
-struct options opt = {
+static const struct options default_opt = {
 	.o_verbose = API_MSG_NORMAL,
 	.o_servername = {0},
 	.o_node = {0},
@@ -65,6 +67,8 @@ struct options opt = {
 	.o_fsname = {0},
 	.o_fstype = {0},
 };
+
+static struct options opt;
 
 static volatile enum {RUNNING, EXITING, FINISHED} proc_state = RUNNING;
 static uint16_t nthreads = 1;
@@ -86,6 +90,8 @@ static void usage(const char *cmd_name, const int rc)
 	dsmAppVersion appapi_ver = get_appapi_ver();
 
 	fprintf(stdout, "usage: %s [options] <lustre_mount_point>\n"
+		"\t-c, --conf <string>\n"
+		"\t\t""configuration file\n"
 		"\t-a, --archive-id <int> [default: 1]\n"
 		"\t\t""archive id number\n"
 		"\t-t, --threads <int>\n"
@@ -141,7 +147,9 @@ static void sanity_arg_check(const struct options *opts, const char *argv)
 	}
 }
 
-static int ct_parseopts(int argc, char *argv[])
+static int ct_load_conf_file(char *conf_path);
+
+static int ct_parseopts(int argc, char *argv[], int parse_conf)
 {
 	struct option long_opts[] = {
 		{"abort-on-error", no_argument,       &opt.o_abort_on_err,   1},
@@ -155,6 +163,7 @@ static int ct_parseopts(int argc, char *argv[])
 		{"fsname",         required_argument, 0,                   'f'},
 		{"verbose",        required_argument, 0,                   'v'},
 		{"dry-run",	   no_argument,	      &opt.o_dry_run,        1},
+		{"conf",           required_argument, 0,                   'c'},
 		{"help",           no_argument,       0,		   'h'},
 		{0, 0, 0, 0}
 	};
@@ -162,7 +171,7 @@ static int ct_parseopts(int argc, char *argv[])
 	int c, rc;
 	optind = 0;
 
-	while ((c = getopt_long(argc, argv, "a:t:n:p:o:s:f:v:h",
+	while ((c = getopt_long(argc, argv, "a:t:n:p:o:s:f:v:c:h",
 				long_opts, NULL)) != -1) {
 		switch (c) {
 		case 'a': {
@@ -211,6 +220,19 @@ static int ct_parseopts(int argc, char *argv[])
 				strlen(optarg) : DSM_MAX_FSNAME_LENGTH);
 			break;
 		}
+		case 'c': {
+			if (!parse_conf) {
+				int optind_save = optind;
+				CT_INFO("Loading conf file: %s", optarg);
+				if ((rc = ct_load_conf_file(optarg)) != 0) {
+					CT_ERROR(rc, "Invalid conf file");
+					return -EINVAL;
+				}
+
+				optind = optind_save;
+			}
+			break;
+		}
 		case 'v': {
 			if (OPTNCMP("error", optarg))
 				opt.o_verbose = API_MSG_ERROR;
@@ -238,11 +260,15 @@ static int ct_parseopts(int argc, char *argv[])
 			break;
 		}
 		default:
+			CT_ERROR(c, "parameter parsing error");
 			return -EINVAL;
 		}
 	}
 
 	sanity_arg_check(&opt, argv[0]);
+
+	if(parse_conf)
+		return 0;
 
 	if (argc != optind + 1) {
 		rc = -EINVAL;
@@ -254,6 +280,81 @@ static int ct_parseopts(int argc, char *argv[])
 	opt.o_mnt_fd = -1;
 
 	return 0;
+}
+
+static int ct_load_conf_file(char *conf_path)
+{
+	int rc = 0;
+	char *buf = NULL;
+	size_t buf_len = 0;
+	ssize_t line_len;
+	FILE *fp;
+
+	char *conf_opts[128] = { "lhsmtool_tsm", 0 };
+	int conf_opts_cnt = 1;
+
+	if((fp = fopen(conf_path, "r")) == NULL)
+		return -1;
+
+
+	while((line_len = getline(&buf, &buf_len, fp)) != -1) {
+		char *comment = NULL;
+		char *line = buf;
+
+		/* remove comments */
+		if ((comment = strstr(line, "#")) != NULL)
+			*comment = '\0';
+
+		/* Trim leading whitespace */
+		while(*line != '\0' && isspace((unsigned char)*line)) line++;
+
+		line_len = strlen(line);
+
+		/* Trim trailing whitespace */
+		while (line_len > 0 && isspace(line[line_len-1]))
+			line[--line_len] = '\0';
+
+		/* create opt */
+		if (line_len > 0)
+		{
+			char *delim = strstr(line, " ");
+			if (delim == 0)
+				delim = strstr(line, "\t");
+
+			if (delim) {
+				line[delim++ - line] = '\0';
+				line_len = strlen(line);
+				/* Trim trailing whitespace */
+				while (line_len > 0 && isspace(line[line_len-1]))
+					line[--line_len] = '\0';
+
+				conf_opts[conf_opts_cnt] = calloc(strlen(line)+3, sizeof(char));
+				sprintf(conf_opts[conf_opts_cnt++], "--%s", line);
+
+				/* Trim leading whitespace */
+				while(*delim != '\0' && isspace((unsigned char)*delim)) delim++;
+				conf_opts[conf_opts_cnt++] = strdup(delim);
+			} else {
+				conf_opts[conf_opts_cnt] = calloc(strlen(line)+3, sizeof(char));
+				sprintf(conf_opts[conf_opts_cnt++], "--%s", line);
+			}
+		}
+	}
+
+	for(int i = 0; i < conf_opts_cnt; i++)
+		CT_DEBUG("Conf file parameters: %s", conf_opts[i]);
+
+	rc = ct_parseopts(conf_opts_cnt, conf_opts, 1);
+
+	if (buf)
+		free(buf);
+
+	for(conf_opts_cnt -= 1; conf_opts_cnt > 0; conf_opts_cnt--)
+		free(conf_opts[conf_opts_cnt]);
+
+	fclose(fp);
+
+	return rc;
 }
 
 static int progress_callback(struct progress_size_t *pg_size,
@@ -984,9 +1085,10 @@ int main(int argc, char *argv[])
 	sigaction(SIGINT, &cleanup_sigaction, NULL);
 	sigaction(SIGTERM, &cleanup_sigaction, NULL);
 
-	rc = ct_parseopts(argc, argv);
+	memcpy(&opt, &default_opt, sizeof (struct options));
+	rc = ct_parseopts(argc, argv, 0);
 	if (rc < 0) {
-		CT_WARN("try '%s --help' for more information", argv[0]);
+		CT_WARN("try '%s --help' for more information (%d)", argv[0], rc);
 		return -rc;
 	}
 
