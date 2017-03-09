@@ -330,8 +330,8 @@ static int ct_finish(struct session_t *session, int ct_rc, char *fpath)
 			return rc;
 		}
 	}
-	rc = llapi_hsm_action_end(&session->hcp, &session->hai->hai_extent, 0,
-				  abs(ct_rc));
+	rc = llapi_hsm_action_end(&session->hcp, &session->hai->hai_extent, HP_FLAG_RETRY,
+				  ct_rc ? EIO : 0);
 	if (rc == -ECANCELED)
 		CT_ERROR(rc, "completed action on '%s' has been canceled: "
 			 "cookie=%#jx, FID="DFID, fpath,
@@ -383,7 +383,7 @@ static int ct_archive(struct session_t *session)
 
 	rc = tsm_archive_fpath(DEFAULT_FSNAME, fpath, NULL, -1,
 			       (const void *)&session->hai->hai_fid, session);
-	if (rc != DSM_RC_SUCCESSFUL) {
+	if (rc) {
 		CT_ERROR(rc, "tsm_archive_fpath_fid on '%s' failed", fpath);
 		goto cleanup;
 	}
