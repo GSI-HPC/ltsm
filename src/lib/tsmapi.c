@@ -1108,30 +1108,28 @@ static dsInt16_t tsm_archive_generic(struct archive_info_t *archive_info,
 				     int fd, struct session_t *session)
 {
 	dsInt16_t rc;
-	dsInt16_t rc_minor = 0;
-	mcBindKey mc_bind_key;
-	sndArchiveData arch_data;
 	ObjAttr obj_attr;
-	DataBlk data_blk;
-	dsUint16_t err_reason;
+	dsBool_t success_data = bFalse;
 	dsBool_t success = bFalse;
 	ssize_t total_read = 0;
 	ssize_t cur_read = 0;
 	size_t cur_sent = 0;
-	dsUint8_t vote_txn;
 	off64_t total_size = 0;
 
 	struct archive_fsm_state_t fsm = ARCHIVE_FSM_INITIALIZER();
 
 	while(fsm.state != TSMAPI_FINISHED) switch(fsm.state) {
 
-	case TSMAPI_BEGIN_TX:
+	case TSMAPI_BEGIN_TX: {
+		success = success_data = bFalse;
+		mcBindKey mc_bind_key = { 0 };
+		rc = 0;
+
 		/* Start transaction. */
 		rc = dsmBeginTxn(session->handle);
 		TSM_DEBUG(session, rc,  "dsmBeginTxn");
 		if (rc) {
 			TSM_ERROR(session, rc, "dsmBeginTxn");
-			success = bFalse;
 			fsm.state = TSMAPI_FINISHED;
 			break;
 		}
@@ -1141,37 +1139,65 @@ static dsInt16_t tsm_archive_generic(struct archive_info_t *archive_info,
 		TSM_DEBUG(session, rc,  "dsmBindMC");
 		if (rc) {
 			TSM_ERROR(session, rc, "dsmBindMC");
-			success = bFalse;
 			fsm.state = TSMAPI_END_TX;
 			break;
 		}
 
-		fsm.data_buf = malloc(sizeof(char) * TSM_BUF_LENGTH);
+		fsm.data_buf = calloc(TSM_BUF_LENGTH, sizeof(char));
 		if (!fsm.data_buf) {
 			rc = errno;
 			CT_ERROR(rc, "malloc");
-			success = bFalse;
 			fsm.state = TSMAPI_END_TX;
 			break;
 		}
 
 		fsm.state = TSMAPI_GET_FILE;
 		break;
+	}
+	case TSMAPI_END_TX: {
+		dsUint8_t vote_txn = DSM_VOTE_ABORT;
+		dsUint16_t err_reason = 0;
 
-	case TSMAPI_GET_FILE:
+		/* Commit transaction (DSM_VOTE_COMMIT) on success, otherwise
+		   roll back current transaction (DSM_VOTE_ABORT). */
+		vote_txn = ((success == bTrue) && (success_data == bTrue)) ?
+			DSM_VOTE_COMMIT : DSM_VOTE_ABORT;
+		rc = dsmEndTxn(session->handle, vote_txn, &err_reason);
+		TSM_DEBUG(session, rc,  "dsmEndTxn");
+		if (rc || err_reason) {
+			TSM_ERROR(session, rc, "dsmEndTxn");
+			TSM_ERROR(session, err_reason, "dsmEndTxn reason");
+			success = bFalse;
+		}
+
+		if (success) {
+			CT_INFO("\n*** successfully archived: %s %s of size: %lu bytes "
+				"with settings ***\nfs: %s\nhl: %s\nll: %s\ndesc: %s\n",
+				OBJ_TYPE(fsm.archive_info->obj_name.objType),
+				fsm.archive_info->fpath, total_read,
+				fsm.archive_info->obj_name.fs, fsm.archive_info->obj_name.hl,
+				fsm.archive_info->obj_name.ll, fsm.archive_info->desc);
+		}
+
+		free(fsm.data_buf);
+		fsm.data_buf = NULL;
+
+		/* TODO: tx batch */
+		fsm.state = TSMAPI_FINISHED;
+		break;
+	}
+	case TSMAPI_GET_FILE: {
 		/* TODO: tx batching*/
 		fsm.archive_info = archive_info;
 
 		fsm.file.local = bFalse;
 		if (fd < 0) {
 			fd = open(fsm.archive_info->fpath, O_RDONLY,
-		  		fsm.archive_info->obj_info.st_mode);
+				fsm.archive_info->obj_info.st_mode);
 			if (fd < 0) {
-				CT_ERROR(errno, "open '%s'",
-					fsm.archive_info->fpath);
-					success = bFalse;
-					fsm.state = TSMAPI_END_TX;
-					break;
+				CT_ERROR(errno, "open '%s'", fsm.archive_info->fpath);
+				fsm.state = TSMAPI_END_TX;
+				break;
 			}
 
 			fsm.file.local = bTrue;
@@ -1184,39 +1210,11 @@ static dsInt16_t tsm_archive_generic(struct archive_info_t *archive_info,
 
 		fsm.state = TSMAPI_SEND_OBJ;
 		break;
+	}
 
-	case TSMAPI_END_TX:
-		/* Commit transaction (DSM_VOTE_COMMIT) on success, otherwise
-		   roll back current transaction (DSM_VOTE_ABORT). */
-		vote_txn = success ? DSM_VOTE_COMMIT : DSM_VOTE_ABORT;
-		rc = dsmEndTxn(session->handle, vote_txn, &err_reason);
-		TSM_DEBUG(session, rc,  "dsmEndTxn");
-		if (rc || err_reason) {
-			TSM_ERROR(session, rc, "dsmEndTxn");
-			TSM_ERROR(session, err_reason, "dsmEndTxn reason");
-			success = bFalse;
-		}
+	case TSMAPI_SEND_OBJ: {
+		sndArchiveData arch_data = { 0 };
 
-		if (success) {
-			CT_INFO("\n*** successfully archived: %s %s of size: %lu bytes "
-				"with settings ***\n"
-				"fs: %s\n"
-				"hl: %s\n"
-				"ll: %s\n"
-				"desc: %s\n",
-				OBJ_TYPE(fsm.archive_info->obj_name.objType),
-				fsm.archive_info->fpath, total_read,
-				fsm.archive_info->obj_name.fs, fsm.archive_info->obj_name.hl,
-				fsm.archive_info->obj_name.ll, fsm.archive_info->desc);
-		}
-
-		free(fsm.data_buf);
-
-		/* TODO: tx batch */
-		fsm.state = TSMAPI_FINISHED;
-		break;
-
-	case TSMAPI_SEND_OBJ:
 		arch_data.stVersion = sndArchiveDataVersion;
 		if (strlen(fsm.archive_info->desc) <= DSM_MAX_DESCR_LENGTH)
 			arch_data.descr = (char *)fsm.archive_info->desc;
@@ -1225,8 +1223,6 @@ static dsInt16_t tsm_archive_generic(struct archive_info_t *archive_info,
 
 		rc = obj_attr_prepare(&obj_attr, fsm.archive_info);
 		if (rc) {
-			rc_minor = DSM_RC_UNSUCCESSFUL;
-			success = bFalse;
 			fsm.state = TSMAPI_END_TX;
 			break;
 		}
@@ -1236,9 +1232,8 @@ static dsInt16_t tsm_archive_generic(struct archive_info_t *archive_info,
 				&(fsm.archive_info->obj_name), &obj_attr, NULL);
 		TSM_DEBUG(session, rc,  "dsmSendObj");
 		if (rc) {
-			/* TODO: check rc */
+			/* TODO: check rc values */
 			TSM_ERROR(session, rc, "dsmSendObj");
-			success = bFalse;
 			fsm.state = TSMAPI_END_TX;
 			break;
 		}
@@ -1250,14 +1245,13 @@ static dsInt16_t tsm_archive_generic(struct archive_info_t *archive_info,
 		if (fsm.archive_info->obj_name.objType == DSM_OBJ_FILE) {
 			fsm.state = TSMAPI_SEND_DATA;
 		} else {
-			/* dsmSendObj was successful and we archived a directory obj. */
-			success = bTrue;
+			success_data = bTrue; /* no data to send for OBJ_DIR */
 			fsm.state = TSMAPI_END_SEND_OBJ;
 		}
+
 		break;
-
-	case TSMAPI_END_SEND_OBJ:
-
+	}
+	case TSMAPI_END_SEND_OBJ: {
 		/* File obj. was archived, verify that the number of bytes read
 		   from file descriptor matches the number of bytes we
 		   transfered with dsmSendData. */
@@ -1266,28 +1260,31 @@ static dsInt16_t tsm_archive_generic(struct archive_info_t *archive_info,
 		TSM_DEBUG(session, rc,  "dsmEndSendObj");
 		if (rc) {
 			TSM_ERROR(session, rc, "dsmEndSendObj");
-			success = bFalse;
 		}
 
 		free(obj_attr.objInfo);
+		obj_attr.objInfo = NULL;
+
 
 		/* TODO: tx batch */
+		success = (rc == 0) ? bTrue : bFalse;
 		fsm.state = TSMAPI_END_TX;
 		break;
+	}
+	case TSMAPI_SEND_DATA: {
+		DataBlk data_blk = { 0 };
 
-	case TSMAPI_SEND_DATA:
 		data_blk.bufferPtr = fsm.data_buf;
 		data_blk.stVersion = DataBlkVersion;
 		data_blk.numBytes = 0;
 
+		bzero(data_blk.bufferPtr, TSM_BUF_LENGTH);
 		cur_read = pread(fsm.file.fd, data_blk.bufferPtr, TSM_BUF_LENGTH, fsm.file.pos);
 		if (cur_read < 0) {
 			CT_ERROR(errno, "pread");
-			rc_minor = DSM_RC_UNSUCCESSFUL;
-			success = bFalse;
 			fsm.state = TSMAPI_END_SEND_OBJ;
 			break;
-		} else if (cur_read == 0) {/* Zero indicates end of file. */
+		} else if (cur_read == 0) { /* Zero indicates end of file. */
 			if (fsm.file.local) {
 				rc = close(fd);
 				if (rc < 0) {
@@ -1297,7 +1294,7 @@ static dsInt16_t tsm_archive_generic(struct archive_info_t *archive_info,
 			}
 			fd = 0;
 
-			success = total_read == to_off64_t(fsm.archive_info->obj_info.size);
+			success_data = (total_read == total_size) ? bTrue : bFalse;
 			fsm.state = TSMAPI_END_SEND_OBJ;
 			break;
 		}
@@ -1348,24 +1345,20 @@ static dsInt16_t tsm_archive_generic(struct archive_info_t *archive_info,
 				.cur_total = total_read,
 				.total = total_size
 			};
-			rc_minor = session->progress(&progress_size, session);
-			if (rc_minor) {
-				CT_ERROR(rc_minor, "progress function callback failed");
-				success = bFalse;
-				fsm.state = TSMAPI_END_TX;
-				break;
-			}
+
+			session->progress(&progress_size, session);
 		}
 
 		fsm.state = TSMAPI_SEND_DATA;
 		break;
-
-	default:
+	}
+	default: {
 		CT_ERROR(-1, "tsm_archive_generic: invalid state");
 		break;
 	}
+	}
 
-	return (rc_minor ? DSM_RC_UNSUCCESSFUL : rc);
+	return (success ? 0 : DSM_RC_UNSUCCESSFUL);
 }
 
 
