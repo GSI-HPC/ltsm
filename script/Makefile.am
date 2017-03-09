@@ -1,2 +1,2 @@
-bin_SCRIPTS = sanity0.sh sanity1.sh
+bin_SCRIPTS = sanity0.sh sanity1.sh maxnummp.sh
 
