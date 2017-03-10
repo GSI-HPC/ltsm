@@ -579,7 +579,7 @@ dsmApiVersionEx get_libapi_ver()
 	return libapi_ver;
 }
 
-dsInt16_t tsm_query_session(struct session_t *session)
+dsInt16_t tsm_query_session(struct session_t *session, const char *fsname)
 {
 	optStruct dsmOpt;
 	dsInt16_t rc;
@@ -651,6 +651,65 @@ dsInt16_t tsm_query_session(struct session_t *session)
 		libapi_ver_t.release,
 		libapi_ver_t.level,
 		libapi_ver_t.subLevel);
+
+	/* Check if we have free mountpoints left for the node */
+	dsUint8_t vote_txn = DSM_VOTE_COMMIT;
+	dsUint16_t err_reason = 0;
+	mcBindKey mc_bind_key = { .stVersion =  mcBindKeyVersion };
+	dsmObjName obj_name = {
+		.ll = "/.mount",
+		.hl = "/.test",
+		.objType = DSM_OBJ_DIRECTORY
+	};
+	strcpy(obj_name.fs, fsname);
+
+	rc = dsmBeginTxn(session->handle);
+	if (rc) {
+		TSM_ERROR(session, rc, "dsmBeginTxn");
+		return ECONNABORTED;
+	}
+
+	rc = dsmBindMC(session->handle, &obj_name, stArchive, &mc_bind_key);
+	if (rc) {
+		TSM_ERROR(session, rc, "dsmBindMC");
+		return ECONNABORTED;
+	}
+
+	sndArchiveData arch_data = { 0 };
+	ObjAttr obj_attr = { 0 };
+	arch_data.stVersion = sndArchiveDataVersion;
+	arch_data.descr = "Node mountpoint check";
+
+	obj_attr.stVersion = ObjAttrVersion;
+	obj_attr.objCompressed = bFalse;
+	obj_attr.sizeEstimate.lo = 1;
+	obj_attr.sizeEstimate.hi = 1;
+
+	rc = dsmSendObj(session->handle, stArchive, &arch_data,
+			&obj_name, &obj_attr, NULL);
+	if (rc) {
+		TSM_ERROR(session, rc, "dsmSendObj");
+		return ECONNABORTED;
+
+	}
+
+	rc = dsmEndSendObj(session->handle);
+	if (rc) {
+		TSM_ERROR(session, rc, "dsmEndSendObj");
+		return ECONNABORTED;
+	}
+
+	rc = dsmEndTxn(session->handle, vote_txn, &err_reason);
+	if (rc && err_reason == DSM_RS_ABORT_EXCEED_MAX_MP) {
+		TSM_ERROR(session, err_reason, "dsmEndTxn reason");
+		return ECONNREFUSED;
+	} else if (rc) {
+		TSM_ERROR(session, err_reason, "dsmEndTxn reason");
+		TSM_ERROR(session, rc, "dsmEndTxn");
+		return ECONNABORTED;
+	}
+
+	CT_INFO("\n*** passed mount point check");
 
 	return rc;
 }

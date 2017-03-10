@@ -784,6 +784,7 @@ static int ct_connect_sessions(void)
 	int rc;
 	struct login_t login;
 	int n;
+	int threads_asked = nthreads;
 
 	sessions = calloc(nthreads, sizeof(struct session_t));
 	if (sessions == NULL) {
@@ -811,30 +812,32 @@ static int ct_connect_sessions(void)
 
 		rc = tsm_connect(&login, &sessions[n]);
 		if (rc) {
-			rc = -ECANCELED;
 			CT_ERROR(rc, "tsm_init failed");
-			goto cleanup;
+			nthreads = n; // don't attempt to create more threads
+			rc = 0;
+			break;
 		}
 		/* Querying session is optional. */
-		rc = tsm_query_session(&sessions[n]);
+		rc = tsm_query_session(&sessions[n], opt.o_fsname);
 		if (rc) {
-			rc = -ECANCELED;
 			CT_ERROR(rc, "tsm_query_session failed");
-			n += 1; /* Disconnect this session also */
-			goto cleanup;
+			tsm_disconnect(&sessions[n]);
+			nthreads = n; // don't attempt to create more threads
+			if (rc == ECONNREFUSED)
+				CT_WARN("Check TSM `MAXNUMMP` setting for the node"
+					" (Maximum Mount Points Allowed)");
+			rc = 0;
+			break;
 		}
 	}
-	return rc;
 
-cleanup:
-	for (int i = 0; i < n; i++)
-		tsm_disconnect(&sessions[i]);
+	if (nthreads == 0) {
+		CT_WARN("tsm_query_session failed");
+		return -EACCES;
+	}
 
-	if (sessions)
-		free(sessions);
-	sessions = NULL;
-
-	tsm_cleanup(DSM_MULTITHREAD);
+	if (threads_asked != nthreads)
+		CT_WARN("Created %d out of %d threads!", nthreads, threads_asked);
 
 	return rc;
 }
