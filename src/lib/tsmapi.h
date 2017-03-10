@@ -102,14 +102,14 @@ struct progress_size_t {
 };
 
 struct session_t {
-	dsUint32_t handle;
-	struct qarray_t *qarray;
-	dsmBool_t overwrite_older;
-	struct hsm_action_item *hai;
-	struct hsm_copyaction_private *hcp;
-	long hal_flags;
-	int (*progress)(struct progress_size_t *data,
-			struct session_t *session);
+	dsUint32_t 			handle;
+	struct qarray_t 		*qarray;
+	dsmBool_t			overwrite_older;
+	struct hsm_action_item		*hai;
+	struct hsm_copyaction_private	*hcp;
+	long 				hal_flags;
+	int 				(*progress)(struct progress_size_t *data,
+						struct session_t *session);
 };
 
 off64_t to_off64_t(const dsStruct64_t size);
@@ -131,7 +131,7 @@ void tsm_disconnect(struct session_t *session);
 dsmAppVersion get_appapi_ver();
 dsmApiVersionEx get_libapi_ver();
 
-dsInt16_t tsm_query_session(struct session_t *session);
+dsInt16_t tsm_query_session(struct session_t *session, const char *fsname);
 dsInt16_t tsm_archive_fpath(const char *fs, const char *fpath,
 			    const char *desc, int fd,
 			    const struct lu_fid_t *lu_fid,
