@@ -330,8 +330,8 @@ static int ct_finish(struct session_t *session, int ct_rc, char *fpath)
 			return rc;
 		}
 	}
-	rc = llapi_hsm_action_end(&session->hcp, &session->hai->hai_extent, HP_FLAG_RETRY,
-				  ct_rc ? EIO : 0);
+	rc = llapi_hsm_action_end(&session->hcp, &session->hai->hai_extent,
+				0 /* HP_FLAG_RETRY */, ct_rc ? EIO : 0);
 	if (rc == -ECANCELED)
 		CT_ERROR(rc, "completed action on '%s' has been canceled: "
 			 "cookie=%#jx, FID="DFID, fpath,
@@ -820,16 +820,25 @@ static int ct_connect_sessions(void)
 		/* Querying session is optional. */
 		rc = tsm_query_session(&sessions[n], opt.o_fsname);
 		if (rc) {
-			CT_ERROR(rc, "tsm_query_session failed");
 			tsm_disconnect(&sessions[n]);
 			nthreads = n; // don't attempt to create more threads
-			if (rc == ECONNREFUSED)
-				CT_WARN("Check TSM `MAXNUMMP` setting for the node"
+			if (rc == ECONNREFUSED) {
+				if (opt.o_abort_on_err) {
+					/* exit and clean sessions */
+					CT_ERROR(rc, "Check TSM `MAXNUMMP` setting for the node"
+					" (Maximum Mount Points Allowed). Aborting...");
+					goto fail;
+				} else {
+					CT_WARN("Check TSM `MAXNUMMP` setting for the node"
 					" (Maximum Mount Points Allowed)");
+				}
+			}
 			rc = 0;
 			break;
 		}
 	}
+
+	CT_DEBUG("Abort on error %d", opt.o_abort_on_err);
 
 	if (nthreads == 0) {
 		CT_WARN("tsm_query_session failed");
@@ -838,7 +847,7 @@ static int ct_connect_sessions(void)
 
 	if (threads_asked != nthreads)
 		CT_WARN("Created %d out of %d threads!", nthreads, threads_asked);
-
+fail:
 	return rc;
 }
 
@@ -1014,7 +1023,7 @@ int main(int argc, char *argv[])
 	}
 
 	rc = ct_setup();
-	if (rc < 0)
+	if (rc)
 		goto error_cleanup;
 
 	rc = ct_run();

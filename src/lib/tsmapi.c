@@ -690,7 +690,6 @@ dsInt16_t tsm_query_session(struct session_t *session, const char *fsname)
 	if (rc) {
 		TSM_ERROR(session, rc, "dsmSendObj");
 		return ECONNABORTED;
-
 	}
 
 	rc = dsmEndSendObj(session->handle);
@@ -700,16 +699,15 @@ dsInt16_t tsm_query_session(struct session_t *session, const char *fsname)
 	}
 
 	rc = dsmEndTxn(session->handle, vote_txn, &err_reason);
-	if (rc && err_reason == DSM_RS_ABORT_EXCEED_MAX_MP) {
-		TSM_ERROR(session, err_reason, "dsmEndTxn reason");
-		return ECONNREFUSED;
-	} else if (rc) {
-		TSM_ERROR(session, err_reason, "dsmEndTxn reason");
-		TSM_ERROR(session, rc, "dsmEndTxn");
-		return ECONNABORTED;
+	if (rc) {
+		TSM_DEBUG(session, err_reason, "dsmEndTxn reason");
+		if (err_reason == DSM_RS_ABORT_EXCEED_MAX_MP)
+			return ECONNREFUSED;
+		else
+			return ECONNABORTED;
 	}
 
-	CT_INFO("\n*** passed mount point check");
+	TSM_DEBUG(session, rc, "Passed mount point check");
 
 	return rc;
 }
