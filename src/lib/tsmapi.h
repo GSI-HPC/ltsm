@@ -40,6 +40,7 @@
 #include "dsmrc.h"
 #include "dapint64.h"
 #include "log.h"
+#include "chashtable.h"
 
 #ifndef PACKAGE_VERSION
 #define PACKAGE_VERSION "NA"
@@ -52,6 +53,7 @@
 #define TSM_BUF_LENGTH 65536
 #define MAX_OPTIONS_LENGTH 256
 #define MAGIC_ID_V1 71147
+#define DEFAULT_NUM_BUCKETS 64
 
 #define OPTNCMP(str1, str2)			\
 	((strlen(str1) == strlen(str2)) &&	\
@@ -88,11 +90,25 @@ struct archive_info_t{
 	dsmObjName obj_name;
 };
 
+/* TODO: To be removed. */
 struct qarray_t {
 	unsigned long capacity;
 	unsigned long N;
 	qryRespArchiveData *data;
 	struct hsearch_data *htab;
+};
+/* TODO: End */
+
+struct qrarray_t {
+	qryRespArchiveData *data;
+	uint32_t size;
+};
+
+struct qtable_t {
+	chashtable_t *chashtable;
+	uint32_t nbuckets;
+	dsmBool_t multiple;
+	struct qrarray_t qrarray;
 };
 
 struct progress_size_t {
@@ -103,6 +119,7 @@ struct progress_size_t {
 
 struct session_t {
 	dsUint32_t handle;
+	struct qtable_t *qtable;
 	struct qarray_t *qarray;
 	dsmBool_t overwrite_older;
 	struct hsm_action_item *hai;

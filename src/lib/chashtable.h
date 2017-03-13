@@ -25,22 +25,22 @@
 #define CHASHTABLE_H
 
 #include <stdlib.h>
+#include <stdint.h>
 #include "list.h"
 
 typedef struct {
-	unsigned int buckets;
-	unsigned int (*h)(const void *key);
+	uint32_t buckets;
+	uint32_t (*h)(const void *key);
 	int (*match)(const void *key1, const void *key2);
 	void (*destroy)(void *data);
-	unsigned int size;
+	size_t size;
 	list_t *table;
-
 } chashtable_t;
 
 #define chashtable_size(chashtable) ((chashtable)->size)
 
-int chashtable_init(chashtable_t *chashtable, unsigned int buckets,
-		    unsigned int (*h) (const void *key),
+int chashtable_init(chashtable_t *chashtable, uint32_t buckets,
+		    uint32_t (*h) (const void *key),
 		    int (*match) (const void *key1, const void *key2),
 		    void (*destroy) (void *data));
 
@@ -53,8 +53,8 @@ int chashtable_lookup(const chashtable_t *chashtable, const void *lookup_data,
 void for_each_key(const chashtable_t *chashtable, void (*callback)(void *data));
 
 /* Some known string hash functions */
-unsigned int hash_sdbm_str(const void *key);
-unsigned int hash_dek_str(const void *key);
-unsigned int hash_djb_str(const void *key);
+uint32_t hash_sdbm_str(const void *key);
+uint32_t hash_dek_str(const void *key);
+uint32_t hash_djb_str(const void *key);
 
 #endif

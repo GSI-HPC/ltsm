@@ -23,59 +23,57 @@
 
 #include <stdlib.h>
 #include <string.h>
+#include <stdint.h>
 #include "list.h"
 #include "chashtable.h"
 
 /* Some known string hash functions */
-unsigned int hash_sdbm_str(const void *key)
+uint32_t hash_sdbm_str(const void *key)
 {
 	const char *str = key;
-	unsigned int hash = 0;
+	uint32_t hash = 0;
 
 	while (*str++)
 		hash = *str + (hash << 6) + (hash << 16) - hash;
 
-	return (hash & 0x7FFFFFFF);
+	return hash;
 }
 
-unsigned int hash_dek_str(const void *key)
+uint32_t hash_dek_str(const void *key)
 {
 	const char *str = key;
-	unsigned int hash = strlen(str);
+	uint32_t hash = strlen(str);
 
 	while (*str++)
 		hash = ((hash << 5) ^ (hash >> 27)) ^ *str;
 
-	return (hash & 0x7FFFFFFF);
+	return hash;
 }
 
-unsigned int hash_djb_str(const void *key)
+uint32_t hash_djb_str(const void *key)
 {
 	const char *str = key;
-        unsigned int hash = 5381;
+        uint32_t hash = 5381;
 
         while (*str++)
 		hash = ((hash << 5) + hash) + *str;
 
-        return (hash & 0x7FFFFFFF);
+        return hash;
 }
 
-
-int chashtable_init(chashtable_t *chashtable, unsigned int buckets,
-		    unsigned int (*h) (const void *key),
+int chashtable_init(chashtable_t *chashtable, uint32_t buckets,
+		    uint32_t (*h) (const void *key),
 		    int (*match) (const void *key1, const void *key2),
 		    void (*destroy) (void *data))
 {
-	unsigned int i;
-
 	chashtable->table = malloc(buckets * sizeof(list_t));
 	if (chashtable->table == NULL)
 		return RC_ERROR;
 
 	chashtable->buckets = buckets;
 
-	for (i = 0; i < chashtable->buckets; i++)
-		list_init(&chashtable->table[i], destroy);
+	for (uint32_t b = 0; b < chashtable->buckets; b++)
+		list_init(&chashtable->table[b], destroy);
 
 	chashtable->h = h;
 	chashtable->match = match;
@@ -87,10 +85,8 @@ int chashtable_init(chashtable_t *chashtable, unsigned int buckets,
 
 void chashtable_destroy(chashtable_t *chashtable)
 {
-	unsigned int i;
-
-	for (i = 0; i < chashtable->buckets; i++)
-		list_destroy(&chashtable->table[i]);
+	for (uint32_t b = 0; b < chashtable->buckets; b++)
+		list_destroy(&chashtable->table[b]);
 
 	free(chashtable->table);
 	memset(chashtable, 0, sizeof(chashtable_t));
@@ -100,7 +96,6 @@ int chashtable_insert(chashtable_t *chashtable, const void *data)
 {
 	int rc;
 	void *temp = NULL;
-	unsigned int bucket;
 
 	/* If data is already in hashtable, do nothing. */
 	rc = chashtable_lookup(chashtable, data, &temp);
@@ -108,7 +103,8 @@ int chashtable_insert(chashtable_t *chashtable, const void *data)
 		return RC_DATA_ALREADY_INSERTED;
 
 	/* Hash the key. */
-	bucket = chashtable->h(data) % chashtable->buckets;
+	const uint32_t bucket = chashtable->h(data) %
+		chashtable->buckets;
 
 	/* Insert data into the corresponding bucket. */
 	rc = list_ins_next(&chashtable->table[bucket], NULL, data);
@@ -122,10 +118,9 @@ int chashtable_remove(chashtable_t *chashtable, const void *lookup_data,
 		      void **data)
 {
 	int rc;
-	unsigned int bucket;
 	list_node_t *prev = NULL;
-
-	bucket = chashtable->h(lookup_data) % chashtable->buckets;
+	const uint32_t bucket = chashtable->h(lookup_data) %
+		chashtable->buckets;
 
 	/* Iterate over linked-list in bucket. */
 	for (list_node_t *node = list_head(&chashtable->table[bucket]);
@@ -151,9 +146,8 @@ int chashtable_lookup(const chashtable_t *chashtable, const void *lookup_data,
 		      void **data)
 {
 	int rc;
-	unsigned int bucket;
-
-	bucket = chashtable->h(lookup_data) % chashtable->buckets;
+	const uint32_t bucket = chashtable->h(lookup_data) %
+		chashtable->buckets;
 
 	for (list_node_t *node = list_head(&chashtable->table[bucket]);
 			node != NULL;
@@ -170,7 +164,7 @@ int chashtable_lookup(const chashtable_t *chashtable, const void *lookup_data,
 
 void for_each_key(const chashtable_t *chashtable, void (*callback)(void *data))
 {
-	for (unsigned int b = 0; b < chashtable->buckets; b++)
+	for (uint32_t b = 0; b < chashtable->buckets; b++)
 		for (list_node_t *node = list_head(&chashtable->table[b]);
 		     node != NULL;
 		     node = list_next(node))
