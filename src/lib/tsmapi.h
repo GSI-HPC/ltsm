@@ -33,6 +33,7 @@
 #include <config.h>
 #endif
 
+#include <stdint.h>
 #include <sys/types.h>
 #include "dsmapitd.h"
 #include "dsmapifp.h"
@@ -75,7 +76,6 @@ struct lu_fid_t{
 	dsUint32_t f_ver;
 };
 
-/* ltsm object description. */
 struct obj_info_t{
 	unsigned int magic;
 	dsStruct64_t size;
@@ -90,16 +90,7 @@ struct archive_info_t{
 	dsmObjName obj_name;
 };
 
-/* TODO: To be removed. */
 struct qarray_t {
-	unsigned long capacity;
-	unsigned long N;
-	qryRespArchiveData *data;
-	struct hsearch_data *htab;
-};
-/* TODO: End */
-
-struct qrarray_t {
 	qryRespArchiveData *data;
 	uint32_t size;
 };
@@ -108,7 +99,7 @@ struct qtable_t {
 	chashtable_t *chashtable;
 	uint32_t nbuckets;
 	dsmBool_t multiple;
-	struct qrarray_t qrarray;
+	struct qarray_t qarray;
 };
 
 struct progress_size_t {
@@ -119,8 +110,7 @@ struct progress_size_t {
 
 struct session_t {
 	dsUint32_t handle;
-	struct qtable_t *qtable;
-	struct qarray_t *qarray;
+	struct qtable_t qtable;
 	dsmBool_t overwrite_older;
 	struct hsm_action_item *hai;
 	struct hsm_copyaction_private *hcp;

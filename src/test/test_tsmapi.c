@@ -20,7 +20,6 @@
 #include <stdlib.h>
 #include "CuTest.h"
 
-CuSuite* qarray_get_suite();
 CuSuite* dsstruct64_off64_t_get_suite();
 CuSuite* list_get_suite();
 CuSuite* chashtable_get_suite();
@@ -29,17 +28,11 @@ CuSuite* qtable_get_suite();
 void run_all_tests(void) {
     CuString *output = CuStringNew();
     CuSuite* suite = CuSuiteNew();
-#if 0
-    CuSuite* qarray_suite = qarray_get_suite();
-#endif
     CuSuite* dsstruct64_off64_t_suite = dsstruct64_off64_t_get_suite();
     CuSuite* list_suite = list_get_suite();
     CuSuite* chashtable_suite = chashtable_get_suite();
     CuSuite* qtable_suite = qtable_get_suite();
 
-#if 0
-    CuSuiteAddSuite(suite, qarray_suite);
-#endif
     CuSuiteAddSuite(suite, dsstruct64_off64_t_suite);
     CuSuiteAddSuite(suite, list_suite);
     CuSuiteAddSuite(suite, chashtable_suite);
@@ -54,9 +47,6 @@ void run_all_tests(void) {
     CuSuiteDelete(chashtable_suite);
     CuSuiteDelete(list_suite);
     CuSuiteDelete(dsstruct64_off64_t_suite);
-#if 0
-    CuSuiteDelete(qarray_suite);
-#endif
 
     free(suite);
     CuStringDelete(output);

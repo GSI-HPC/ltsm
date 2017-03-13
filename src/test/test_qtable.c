@@ -48,8 +48,8 @@ void test_qtable(CuTest *tc)
 	CuAssertTrue(tc, rc == DSM_RC_SUCCESSFUL);
 
 	free_sarray(&qtable);
-	CuAssertIntEquals(tc, 0, qtable.qrarray.size);
-	CuAssertPtrEquals(tc, NULL, qtable.qrarray.data);
+	CuAssertIntEquals(tc, 0, qtable.qarray.size);
+	CuAssertPtrEquals(tc, NULL, qtable.qarray.data);
 	destroy_qtable(&qtable);
 	CuAssertPtrEquals(tc, NULL, qtable.chashtable);
 }
@@ -75,7 +75,7 @@ void test_qtable_sort_top(CuTest *tc)
 
 	rc = create_sarray(&qtable);
 	CuAssertTrue(tc, rc == DSM_RC_SUCCESSFUL);
-	CuAssertIntEquals(tc, qtable.qrarray.size,
+	CuAssertIntEquals(tc, qtable.qarray.size,
 			  chashtable_size(qtable.chashtable));
 
 	dsBool_t order_correct = bTrue;
@@ -98,8 +98,8 @@ void test_qtable_sort_top(CuTest *tc)
 			      order_correct, bTrue);
 
 	free_sarray(&qtable);
-	CuAssertIntEquals(tc, 0, qtable.qrarray.size);
-	CuAssertPtrEquals(tc, NULL, qtable.qrarray.data);
+	CuAssertIntEquals(tc, 0, qtable.qarray.size);
+	CuAssertPtrEquals(tc, NULL, qtable.qarray.data);
 	destroy_qtable(&qtable);
 	CuAssertPtrEquals(tc, NULL, qtable.chashtable);
 }
@@ -130,7 +130,7 @@ void test_qtable_sort_all(CuTest *tc)
 
 	rc = create_sarray(&qtable);
 	CuAssertTrue(tc, rc == DSM_RC_SUCCESSFUL);
-	CuAssertIntEquals(tc, qtable.qrarray.size,
+	CuAssertIntEquals(tc, qtable.qarray.size,
 			  chashtable_size(qtable.chashtable));
 
 	dsBool_t order_correct = bTrue;
@@ -156,8 +156,8 @@ void test_qtable_sort_all(CuTest *tc)
 			      order_correct, bTrue);
 
 	free_sarray(&qtable);
-	CuAssertIntEquals(tc, 0, qtable.qrarray.size);
-	CuAssertPtrEquals(tc, NULL, qtable.qrarray.data);
+	CuAssertIntEquals(tc, 0, qtable.qarray.size);
+	CuAssertPtrEquals(tc, NULL, qtable.qarray.data);
 	destroy_qtable(&qtable);
 	CuAssertPtrEquals(tc, NULL, qtable.chashtable);
 }
@@ -218,8 +218,8 @@ void test_qtable_replace_older1(CuTest *tc)
 	CuAssertIntEquals(tc, N + 3, chashtable_size(qtable.chashtable));
 
 	/* We did not created a sorted array, thus 0 and NULL. */
-	CuAssertIntEquals(tc, 0, qtable.qrarray.size);
-	CuAssertPtrEquals(tc, NULL, qtable.qrarray.data);
+	CuAssertIntEquals(tc, 0, qtable.qarray.size);
+	CuAssertPtrEquals(tc, NULL, qtable.qarray.data);
 
 	free(qra_arrdata);
 	destroy_qtable(&qtable);
