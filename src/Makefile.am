@@ -1,7 +1,6 @@
 SUBDIRS = lib test
 AUTOMAKE_OPTIONS = subdir-objects
 
-# lhsmtool_tsm_LDFLAGS = -L@LUSTRE_SRC_DIR@/lustre/utils
 ltsmc_CFLAGS = -m64 -DLINUX_CLIENT -D_FILE_OFFSET_BITS=64 -D_LARGEFILE64_SOURCE -I$(top_srcdir)/src/lib -I@TSM_SRC_DIR@/
 bin_PROGRAMS = ltsmc
 ltsmc_SOURCES = ltsmc.c

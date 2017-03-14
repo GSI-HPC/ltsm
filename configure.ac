@@ -64,7 +64,7 @@ AC_CHECK_LIB([m],[ceil])
 AC_CHECK_LIB([ApiTSM64], [dsmInitEx], [], [AC_MSG_ERROR([cannot find proprietary IBM library ApiTSM64, provide library path e.g. ./configure LDFLAGS='-L/<PATH_TO_LIB>'])])
 
 # Checks for header files.
-AC_CHECK_HEADERS([fcntl.h stdint.h stdlib.h string.h strings.h sys/param.h sys/time.h unistd.h pthread.h])
+AC_CHECK_HEADERS([fcntl.h stdint.h stdlib.h string.h strings.h sys/param.h sys/time.h unistd.h pthread.h float.h])
 
 AX_PTHREAD([AC_DEFINE(HAVE_PTHREAD, 1, [Define if you have POSIX threads libraries and header files.])
             CLIBS="$PTHREAD_LIBS $LIBS"
@@ -85,12 +85,15 @@ AC_TYPE_OFF_T
 AC_TYPE_SIZE_T
 AC_TYPE_SSIZE_T
 AC_TYPE_UINT16_T
+AC_TYPE_UINT32_T
+AC_TYPE_UINT64_T
+AC_TYPE_UINT8_T
 
 # Checks for library functions.
 AC_FUNC_LSTAT_FOLLOWS_SLASHED_SYMLINK
 AC_FUNC_MALLOC
 AC_FUNC_REALLOC
-AC_CHECK_FUNCS([bzero gettimeofday memmove memset mkdir realpath strerror])
+AC_CHECK_FUNCS([bzero gettimeofday memmove memset mkdir realpath strerror atexit sqrt])
 
 AC_CONFIG_FILES([Makefile
                  src/Makefile
