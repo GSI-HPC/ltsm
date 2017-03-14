@@ -263,6 +263,27 @@ void test_qtable_replace_older2(CuTest *tc)
 	CuAssertPtrEquals(tc, NULL, qtable.chashtable);
 }
 
+void test_qtable_multiple_init_destroy(CuTest *tc)
+{
+	dsInt16_t rc;
+	struct qtable_t qtable;
+	bzero(&qtable, sizeof(struct qtable_t));
+	rc = init_qtable(&qtable);
+	CuAssertTrue(tc, rc == DSM_RC_SUCCESSFUL);
+	CuAssertIntEquals(tc, 0, chashtable_size(qtable.chashtable));
+
+	for (uint16_t i = 0; i < 8; i++) {
+		rc = init_qtable(&qtable);
+		CuAssertTrue(tc, rc == DSM_RC_UNSUCCESSFUL);
+	}
+	destroy_qtable(&qtable);
+	CuAssertPtrEquals(tc, NULL, qtable.chashtable);
+
+	for (uint16_t i = 0; i < 8; i++) {
+		destroy_qtable(&qtable);
+		CuAssertTrue(tc, rc == DSM_RC_UNSUCCESSFUL);
+	}
+}
 
 CuSuite* qtable_get_suite()
 {
@@ -272,6 +293,7 @@ CuSuite* qtable_get_suite()
     SUITE_ADD_TEST(suite, test_qtable_sort_all);
     SUITE_ADD_TEST(suite, test_qtable_replace_older1);
     SUITE_ADD_TEST(suite, test_qtable_replace_older2);
+    SUITE_ADD_TEST(suite, test_qtable_multiple_init_destroy);
 
     return suite;
 }

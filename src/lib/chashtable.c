@@ -66,6 +66,9 @@ int chashtable_init(chashtable_t *chashtable, uint32_t buckets,
 		    int (*match) (const void *key1, const void *key2),
 		    void (*destroy) (void *data))
 {
+	if (chashtable->table)
+		return RC_ERROR;
+
 	chashtable->table = malloc(buckets * sizeof(list_t));
 	if (chashtable->table == NULL)
 		return RC_ERROR;

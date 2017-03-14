@@ -91,6 +91,9 @@ dsInt16_t init_qtable(struct qtable_t *qtable)
 {
 	dsInt16_t rc;
 
+	if (qtable->chashtable)
+		return DSM_RC_UNSUCCESSFUL;
+
 	qtable->chashtable = calloc(1, sizeof(chashtable_t));
 	if (qtable->chashtable == NULL)
 		return DSM_RC_UNSUCCESSFUL;
@@ -99,8 +102,13 @@ dsInt16_t init_qtable(struct qtable_t *qtable)
 		qtable->nbuckets = DEFAULT_NUM_BUCKETS;
 	rc = chashtable_init(qtable->chashtable, qtable->nbuckets, hash_djb_str,
 			     match, free);
-	if (rc != RC_SUCCESS)
-		return DSM_RC_UNSUCCESSFUL;
+	if (rc == RC_SUCCESS)
+		return DSM_RC_SUCCESSFUL;
+
+	if (qtable->chashtable) {
+		free(qtable->chashtable);
+		qtable->chashtable = NULL;
+	}
 
 	return DSM_RC_SUCCESSFUL;
 }
@@ -141,9 +149,8 @@ dsInt16_t insert_qtable(struct qtable_t *qtable,
 
 void destroy_qtable(struct qtable_t *qtable)
 {
-	chashtable_destroy(qtable->chashtable);
-
 	if (qtable->chashtable) {
+		chashtable_destroy(qtable->chashtable);
 		free(qtable->chashtable);
 		qtable->chashtable = NULL;
 	}
