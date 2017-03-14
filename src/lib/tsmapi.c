@@ -711,7 +711,7 @@ dsInt16_t tsm_query_hl_ll(const char *fs, const char *hl, const char *ll,
 
 			qry_resp_ar_data.objInfo[qry_resp_ar_data.objInfolen] = '\0';
 
-			if (display)	/* If query is only for printing, we are not filling the query array. */
+			if (display) /* If query is only for printing, we are not filling the query array. */
 				tsm_print_query_node(&qry_resp_ar_data, ++n);
 			else {
 				rc = insert_qtable(&session->qtable, &qry_resp_ar_data);
@@ -721,7 +721,8 @@ dsInt16_t tsm_query_hl_ll(const char *fs, const char *hl, const char *ll,
 				}
 			}
 		} else if (rc == DSM_RC_UNKNOWN_FORMAT) {
-			/* head over to next object if format error occurs when trying to access non api archived files */
+			/* Head over to next object if format error occurs
+			   when trying to access non api archived files. */
                         CT_WARN("DSM_OBJECT not archived by API, skipping object");
                 } else {
 			done = bTrue;
@@ -847,14 +848,14 @@ static dsInt16_t tsm_delete_hl_ll(const char *fs, const char *hl,
 	if (rc)
 		goto cleanup;
 
-	rc = create_sarray(&session->qtable);
+	rc = create_array(&session->qtable, bFalse);
 	if (rc)
 		goto cleanup;
 
 	qryRespArchiveData query_data;
 
 	for (uint32_t n = 0; n < session->qtable.qarray.size; n++) {
-		rc = get_sarray(&session->qtable, &query_data, n);
+		rc = get_qra(&session->qtable, &query_data, n);
 		CT_INFO("get_query: %lu, rc: %d", n, rc);
 		if (rc != DSM_RC_SUCCESSFUL) {
 			errno = ENODATA; /* No data available */
@@ -884,7 +885,6 @@ static dsInt16_t tsm_delete_hl_ll(const char *fs, const char *hl,
 	}
 
 cleanup:
-	free_sarray(&session->qtable);
 	destroy_qtable(&session->qtable);
 	return rc;
 }
@@ -952,7 +952,7 @@ static dsInt16_t tsm_retrieve_generic(const char *fs, const char *hl,
 
 	/* Sort query replies to ensure that the data are read from the server in the most efficient order.
 	   At least this is written on page Chapter 3. API design recommendations and considerations 57. */
-	rc = create_sarray(&session->qtable);
+	rc = create_array(&session->qtable, bTrue);
 	if (rc)
 		goto cleanup;
 
@@ -988,7 +988,7 @@ static dsInt16_t tsm_retrieve_generic(const char *fs, const char *hl,
 		}
 		for (unsigned long c_iter = c_begin; c_iter <= c_end; c_iter++) {
 
-			rc = get_sarray(&session->qtable, &query_data, c_iter);
+			rc = get_qra(&session->qtable, &query_data, c_iter);
 			CT_INFO("get_query: %lu, rc: %d", c_iter, rc);
 			if (rc != DSM_RC_SUCCESSFUL) {
 				errno = ENODATA; /* No data available */
@@ -1011,7 +1011,7 @@ static dsInt16_t tsm_retrieve_generic(const char *fs, const char *hl,
 		struct obj_info_t obj_info;
 		for (unsigned long c_iter = c_begin; c_iter <= c_end; c_iter++) {
 
-			rc = get_sarray(&session->qtable, &query_data, c_iter);
+			rc = get_qra(&session->qtable, &query_data, c_iter);
 			CT_INFO("get_query: %lu, rc: %d", c_iter, rc);
 			if (rc != DSM_RC_SUCCESSFUL) {
 				rc_minor = ENODATA; /* No data available */
@@ -1085,7 +1085,6 @@ cleanup:
 	if (get_list.objId)
 		free(get_list.objId);
 
-	free_sarray(&session->qtable);
 	destroy_qtable(&session->qtable);
 
 	return (rc_minor == 0 ? rc : rc_minor);

@@ -44,14 +44,15 @@ void test_qtable(CuTest *tc)
 	}
 	CuAssertIntEquals(tc, N, chashtable_size(qtable.chashtable));
 
-	rc = create_sarray(&qtable);
+	rc = create_array(&qtable, bFalse);
 	CuAssertTrue(tc, rc == DSM_RC_SUCCESSFUL);
+	CuAssertIntEquals(tc, N, qtable.qarray.size);
+	CuAssertPtrNotNull(tc, qtable.qarray.data);
 
-	free_sarray(&qtable);
-	CuAssertIntEquals(tc, 0, qtable.qarray.size);
-	CuAssertPtrEquals(tc, NULL, qtable.qarray.data);
 	destroy_qtable(&qtable);
+	CuAssertIntEquals(tc, 0, qtable.qarray.size);
 	CuAssertPtrEquals(tc, NULL, qtable.chashtable);
+	CuAssertPtrEquals(tc, NULL, qtable.qarray.data);
 }
 
 void test_qtable_sort_top(CuTest *tc)
@@ -73,7 +74,7 @@ void test_qtable_sort_top(CuTest *tc)
 		CuAssertTrue(tc, rc == DSM_RC_SUCCESSFUL);
 	}
 
-	rc = create_sarray(&qtable);
+	rc = create_array(&qtable, bTrue);
 	CuAssertTrue(tc, rc == DSM_RC_SUCCESSFUL);
 	CuAssertIntEquals(tc, qtable.qarray.size,
 			  chashtable_size(qtable.chashtable));
@@ -81,11 +82,11 @@ void test_qtable_sort_top(CuTest *tc)
 	dsBool_t order_correct = bTrue;
 	for (uint32_t n = 0; n < N-1 && order_correct; n++) {
 		qryRespArchiveData qra_data_a;
-		rc = get_sarray(&qtable, &qra_data_a, n);
+		rc = get_qra(&qtable, &qra_data_a, n);
 		CuAssertTrue(tc, rc == DSM_RC_SUCCESSFUL);
 
 		qryRespArchiveData qra_data_b;
-		rc = get_sarray(&qtable, &qra_data_b, n + 1);
+		rc = get_qra(&qtable, &qra_data_b, n + 1);
 		CuAssertTrue(tc, rc == DSM_RC_SUCCESSFUL);
 
 		/* Verify objects are sorting in ascending order
@@ -97,11 +98,10 @@ void test_qtable_sort_top(CuTest *tc)
 	CuAssertIntEquals_Msg(tc, "sorting queries in ascending order",
 			      order_correct, bTrue);
 
-	free_sarray(&qtable);
-	CuAssertIntEquals(tc, 0, qtable.qarray.size);
-	CuAssertPtrEquals(tc, NULL, qtable.qarray.data);
 	destroy_qtable(&qtable);
+	CuAssertIntEquals(tc, 0, qtable.qarray.size);
 	CuAssertPtrEquals(tc, NULL, qtable.chashtable);
+	CuAssertPtrEquals(tc, NULL, qtable.qarray.data);
 }
 
 void test_qtable_sort_all(CuTest *tc)
@@ -128,7 +128,7 @@ void test_qtable_sort_all(CuTest *tc)
 		CuAssertTrue(tc, rc == DSM_RC_SUCCESSFUL);
 	}
 
-	rc = create_sarray(&qtable);
+	rc = create_array(&qtable, bTrue);
 	CuAssertTrue(tc, rc == DSM_RC_SUCCESSFUL);
 	CuAssertIntEquals(tc, qtable.qarray.size,
 			  chashtable_size(qtable.chashtable));
@@ -136,18 +136,18 @@ void test_qtable_sort_all(CuTest *tc)
 	dsBool_t order_correct = bTrue;
 	for (uint32_t n = 0; n < N-1 && order_correct; n++) {
 		qryRespArchiveData qra_data_a;
-		rc = get_sarray(&qtable, &qra_data_a, n);
+		rc = get_qra(&qtable, &qra_data_a, n);
 		CuAssertTrue(tc, rc == DSM_RC_SUCCESSFUL);
 
 		qryRespArchiveData qra_data_b;
-		rc = get_sarray(&qtable, &qra_data_b, n + 1);
+		rc = get_qra(&qtable, &qra_data_b, n + 1);
 		CuAssertTrue(tc, rc == DSM_RC_SUCCESSFUL);
 
 		/* Verify objects are sorting in ascending order
 		   (low to high). */
-		order_correct = (cmp_restore_order_new(&qra_data_a, &qra_data_b) ==
+		order_correct = (cmp_restore_order(&qra_data_a, &qra_data_b) ==
 				 DS_LESSTHAN ||
-				 (cmp_restore_order_new(&qra_data_a, &qra_data_b) ==
+				 (cmp_restore_order(&qra_data_a, &qra_data_b) ==
 				  DS_EQUAL)) ?
 			bTrue : bFalse;
 	}
@@ -155,11 +155,10 @@ void test_qtable_sort_all(CuTest *tc)
 	CuAssertIntEquals_Msg(tc, "sorting queries in ascending order",
 			      order_correct, bTrue);
 
-	free_sarray(&qtable);
-	CuAssertIntEquals(tc, 0, qtable.qarray.size);
-	CuAssertPtrEquals(tc, NULL, qtable.qarray.data);
 	destroy_qtable(&qtable);
+	CuAssertIntEquals(tc, 0, qtable.qarray.size);
 	CuAssertPtrEquals(tc, NULL, qtable.chashtable);
+	CuAssertPtrEquals(tc, NULL, qtable.qarray.data);
 }
 
 void test_qtable_replace_older1(CuTest *tc)

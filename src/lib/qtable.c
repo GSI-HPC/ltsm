@@ -154,9 +154,15 @@ void destroy_qtable(struct qtable_t *qtable)
 		free(qtable->chashtable);
 		qtable->chashtable = NULL;
 	}
+
+	if (qtable->qarray.size > 0 && qtable->qarray.data) {
+		free(qtable->qarray.data);
+		qtable->qarray.size = 0;
+		qtable->qarray.data = NULL;
+	}
 }
 
-int cmp_restore_order_new(const void *a, const void *b)
+int cmp_restore_order(const void *a, const void *b)
 {
 	const qryRespArchiveData *query_data_a = (qryRespArchiveData *)a;
 	const qryRespArchiveData *query_data_b = (qryRespArchiveData *)b;
@@ -195,7 +201,7 @@ int cmp_restore_order_new(const void *a, const void *b)
 		return(DS_EQUAL);
 }
 
-dsInt16_t create_sarray(struct qtable_t *qtable)
+dsInt16_t create_array(struct qtable_t *qtable, const dsmBool_t sorted)
 {
 	if (qtable->qarray.size > 0 || qtable->qarray.data)
 		return DSM_RC_UNSUCCESSFUL;
@@ -219,24 +225,15 @@ dsInt16_t create_sarray(struct qtable_t *qtable)
 	}
 	qtable->qarray.size = c;
 
-	if (c)
+	if (c && sorted)
 		qsort(qtable->qarray.data, c, sizeof(qryRespArchiveData),
-		      cmp_restore_order_new);
+		      cmp_restore_order);
 
 	return DSM_RC_SUCCESSFUL;
 }
 
-void free_sarray(struct qtable_t *qtable)
-{
-	if (qtable->qarray.size > 0 && qtable->qarray.data) {
-		free(qtable->qarray.data);
-		qtable->qarray.size = 0;
-		qtable->qarray.data = NULL;
-	}
-}
-
-dsInt16_t get_sarray(const struct qtable_t *qtable,
-		     qryRespArchiveData *qra_data, const uint32_t n)
+dsInt16_t get_qra(const struct qtable_t *qtable,
+		  qryRespArchiveData *qra_data, const uint32_t n)
 {
 	if (qtable->qarray.size == 0 || qtable->qarray.data == NULL)
 		return DSM_RC_UNSUCCESSFUL;
