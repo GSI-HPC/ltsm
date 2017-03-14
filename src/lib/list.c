@@ -25,9 +25,6 @@
 #include <string.h>
 #include "list.h"
 
-#define RC_SUCCESS 0
-#define RC_ERROR -1
-
 void list_init(list_t *list, void (*destroy)(void *data))
 {
 	list->size = 0;

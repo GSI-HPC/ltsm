@@ -16,59 +16,95 @@
  * Copyright (c) 2017 Thomas Stibor <t.stibor@gsi.de>
  */
 
-#include <stdlib.h>
-#include <strings.h>
-#include <time.h>
+#include <stdint.h>
 #include "list.h"
 #include "CuTest.h"
 
-void test_list(CuTest *tc)
+void test_list_1(CuTest *tc)
 {
 	list_t list;
-	int rc;
-	int *data;
-	const unsigned int I = 20;
 
 	list_init(&list, free);
-	for (unsigned int i = 1; i <= I; i++) {
+	CuAssertPtrEquals(tc, NULL, list.head);
+	CuAssertPtrEquals(tc, NULL, list_head(&list));
+	CuAssertPtrEquals(tc, NULL, list.tail);
+	CuAssertPtrEquals(tc, NULL, list_tail(&list));
+	CuAssertIntEquals(tc, 0, list_size(&list));
+
+	list_destroy(&list);
+	CuAssertPtrEquals(tc, NULL, list.head);
+	CuAssertPtrEquals(tc, NULL, list_head(&list));
+	CuAssertPtrEquals(tc, NULL, list.tail);
+	CuAssertPtrEquals(tc, NULL, list_tail(&list));
+	CuAssertIntEquals(tc, 0, list_size(&list));
+}
+
+void test_list_2(CuTest *tc)
+{
+	list_t list;
+	list_init(&list, free);
+
+	const uint16_t I = 4;
+	int *data = NULL;
+	int rc;
+
+	/* We expect: head->4->3->2->1<-tail */
+	for (uint16_t i = 1; i <= I; i++) {
 		data = malloc(sizeof(int));
 		CuAssertPtrNotNull(tc, data);
 		*data = i;
 		rc = list_ins_next(&list, NULL, data);
 		CuAssertIntEquals(tc, 0, rc);
 	}
-	list_node_t *node_head = list_head(&list);
-	CuAssertPtrNotNull(tc, node_head);
-	int *val_head = list_data(node_head);
-	CuAssertIntEquals(tc, I, *val_head);
 
-	list_node_t *node_tail = list_tail(&list);
-	CuAssertPtrNotNull(tc, node_tail);
-	int *val_tail = list_data(node_tail);
-	CuAssertIntEquals(tc, 1, *val_tail);
-
+	/* Insert node with data: 10 between ..->3->[10]->2->.. */
+	list_node_t *mid_node = list_head(&list)->next;
 	data = malloc(sizeof(int));
 	CuAssertPtrNotNull(tc, data);
-	*data = 0;
-	rc = list_ins_next(&list, list_tail(&list), data);
+	*data = 10;
+	rc = list_ins_next(&list, mid_node, data);
 	CuAssertIntEquals(tc, 0, rc);
+	CuAssertIntEquals(tc, 1, *(int *)list_data(list_tail(&list)));
+	CuAssertIntEquals(tc, 4, *(int *)list_data(list_head(&list)));
 
-	CuAssertIntEquals(tc, I + 1, list_size(&list));
+	/* We expect: head->4->3->10->2->1<-tail */
+	list_node_t *n = list_head(&list);
+	CuAssertIntEquals(tc, 4, *(int *)list_data(n));
+	CuAssertIntEquals(tc, 3, *(int *)list_data(list_next(n)));
+	CuAssertIntEquals(tc, 10, *(int *)list_data(list_next(list_next(n))));
+	CuAssertIntEquals(tc, 2, *(int *)list_data(list_next(list_next(list_next(n)))));
+	CuAssertIntEquals(tc, 1, *(int *)list_data(list_next(list_next(list_next(list_next(n))))));
 
-	list_node_t *node = list_head(&list);
-	rc = list_rem_next(&list, node, (void **)&data);
+	/* Remove node with data 2. */
+	list_node_t *rm_node = list_head(&list)->next->next;
+	int *rd = NULL;
+	rc = list_rem_next(&list, rm_node, (void **)&rd);
 	CuAssertIntEquals(tc, 0, rc);
-	free(data);
+	CuAssertIntEquals(tc, 2, *rd);
+	free(rd);
 
-	CuAssertIntEquals(tc, I, list_size(&list));
+	/* We expect: head->4->3->10->1<-tail */
+	n = list_head(&list);
+	CuAssertIntEquals(tc, 4, *(int *)list_head(&list)->data);
+	CuAssertIntEquals(tc, 4, *(int *)list_data(n));
+	CuAssertIntEquals(tc, 3, *(int *)list_data(list_next(n)));
+	CuAssertIntEquals(tc, 10, *(int *)list_data(list_next(list_next(n))));
+	CuAssertIntEquals(tc, 1, *(int *)list_data(list_next(list_next(list_next(n)))));
+	CuAssertIntEquals(tc, 1, *(int *)list_tail(&list)->data);
 
 	list_destroy(&list);
+	CuAssertPtrEquals(tc, NULL, list.head);
+	CuAssertPtrEquals(tc, NULL, list_head(&list));
+	CuAssertPtrEquals(tc, NULL, list.tail);
+	CuAssertPtrEquals(tc, NULL, list_tail(&list));
+	CuAssertIntEquals(tc, 0, list_size(&list));
 }
 
 CuSuite* list_get_suite()
 {
     CuSuite* suite = CuSuiteNew();
-    SUITE_ADD_TEST(suite, test_list);
+    SUITE_ADD_TEST(suite, test_list_1);
+    SUITE_ADD_TEST(suite, test_list_2);
 
     return suite;
 }

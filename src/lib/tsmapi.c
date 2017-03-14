@@ -35,9 +35,7 @@
 #include <sys/types.h>
 #include <sys/param.h>
 #include "tsmapi.h"
-#include "log.h"
-#include "qarray.h"
-
+#include "qtable.h"
 #include "tsmapi_impl.h"
 
 #define OBJ_TYPE(type)							\
@@ -775,8 +773,7 @@ dsInt16_t tsm_query_hl_ll(const char *fs, const char *hl, const char *ll,
 			if (display)	/* If query is only for printing, we are not filling the query array. */
 				tsm_print_query_node(&qry_resp_ar_data, ++n);
 			else {
-				rc = insert_query(&qry_resp_ar_data, &session->qarray,
-						  session->overwrite_older);
+				rc = insert_qtable(&session->qtable, &qry_resp_ar_data);
 				if (rc) {
 					CT_ERROR(0, "add_query");
 					goto cleanup;
@@ -901,7 +898,7 @@ static dsInt16_t tsm_delete_hl_ll(const char *fs, const char *hl,
 {
 	dsInt16_t rc;
 
-	rc = init_qarray(&(session->qarray));
+	rc = init_qtable(&session->qtable);
 	if (rc)
 		return rc;
 
@@ -911,8 +908,8 @@ static dsInt16_t tsm_delete_hl_ll(const char *fs, const char *hl,
 
 	qryRespArchiveData query_data;
 
-	for (unsigned long n = 0; n < qarray_size(session->qarray); n++) {
-		rc = get_query(&query_data, session->qarray, n);
+	for (uint32_t n = 0; n < session->qtable.qarray.size; n++) {
+		rc = get_qra(&session->qtable, &query_data, n);
 		CT_INFO("get_query: %lu, rc: %d", n, rc);
 		if (rc != DSM_RC_SUCCESSFUL) {
 			errno = ENODATA; /* No data available */
@@ -942,7 +939,7 @@ static dsInt16_t tsm_delete_hl_ll(const char *fs, const char *hl,
 	}
 
 cleanup:
-	destroy_qarray(&(session->qarray));
+	destroy_qtable(&session->qtable);
 	return rc;
 }
 
@@ -999,7 +996,7 @@ static dsInt16_t tsm_retrieve_generic(const char *fs, const char *hl,
 
 	get_list.objId = NULL;
 
-	rc = init_qarray(&session->qarray);
+	rc = init_qtable(&session->qtable);
 	if (rc)
 		return rc;
 
@@ -1009,7 +1006,9 @@ static dsInt16_t tsm_retrieve_generic(const char *fs, const char *hl,
 
 	/* Sort query replies to ensure that the data are read from the server in the most efficient order.
 	   At least this is written on page Chapter 3. API design recommendations and considerations 57. */
-	sort_qarray(&session->qarray);
+	rc = create_array(&session->qtable, bTrue);
+	if (rc)
+		goto cleanup;
 
 	/* TODO: Implement later also partialObjData handling. See page 56.*/
 	get_list.stVersion = dsmGetListVersion; /* dsmGetListVersion: Not using Partial Obj data,
@@ -1021,8 +1020,10 @@ static dsInt16_t tsm_retrieve_generic(const char *fs, const char *hl,
 	   the query replies in chunks of maximum size DSM_MAX_GET_OBJ and call
 	   dsmBeginGetData on each chunk. */
 	unsigned long c_begin = 0;
-	unsigned long c_end = MIN(qarray_size(session->qarray), DSM_MAX_GET_OBJ) - 1;
-	unsigned int c_total = ceil((double)qarray_size(session->qarray) / (double)DSM_MAX_GET_OBJ);
+	unsigned long c_end = MIN(session->qtable.qarray.size,
+				  DSM_MAX_GET_OBJ) - 1;
+	unsigned int c_total = ceil((double)session->qtable.qarray.size /
+				    (double)DSM_MAX_GET_OBJ);
 	unsigned int c_cur = 0;
 	unsigned long num_objs;
 	qryRespArchiveData query_data;
@@ -1041,13 +1042,13 @@ static dsInt16_t tsm_retrieve_generic(const char *fs, const char *hl,
 		}
 		for (unsigned long c_iter = c_begin; c_iter <= c_end; c_iter++) {
 
-			rc = get_query(&query_data, session->qarray, c_iter);
+			rc = get_qra(&session->qtable, &query_data, c_iter);
 			CT_INFO("get_query: %lu, rc: %d", c_iter, rc);
 			if (rc != DSM_RC_SUCCESSFUL) {
 				errno = ENODATA; /* No data available */
 				CT_ERROR(errno, "get_query");
 				goto cleanup;
-			} else if (qarray_size(session->qarray) == 0) {
+			} else if (session->qtable.qarray.size == 0) {
 				CT_INFO("get_query has no match");
 				goto cleanup;
 			}
@@ -1064,7 +1065,7 @@ static dsInt16_t tsm_retrieve_generic(const char *fs, const char *hl,
 		struct obj_info_t obj_info;
 		for (unsigned long c_iter = c_begin; c_iter <= c_end; c_iter++) {
 
-			rc = get_query(&query_data, session->qarray, c_iter);
+			rc = get_qra(&session->qtable, &query_data, c_iter);
 			CT_INFO("get_query: %lu, rc: %d", c_iter, rc);
 			if (rc != DSM_RC_SUCCESSFUL) {
 				rc_minor = ENODATA; /* No data available */
@@ -1129,8 +1130,8 @@ cleanup_getdata:
 		c_cur++;
 		c_begin = c_end + 1;
 		/* Process last chunk and size not a multiple of DSM_MAX_GET_OBJ.*/
-		c_end = (c_cur == c_total - 1 && qarray_size(session->qarray) % DSM_MAX_GET_OBJ != 0) ?
-			c_begin + (qarray_size(session->qarray) % DSM_MAX_GET_OBJ) - 1 :
+		c_end = (c_cur == c_total - 1 && session->qtable.qarray.size % DSM_MAX_GET_OBJ != 0) ?
+			c_begin + (session->qtable.qarray.size % DSM_MAX_GET_OBJ) - 1 :
 			c_begin + DSM_MAX_GET_OBJ - 1; /* Process not last chunk. */
 	} while (c_cur < c_total);
 
@@ -1138,7 +1139,7 @@ cleanup:
 	if (get_list.objId)
 		free(get_list.objId);
 
-	destroy_qarray(&session->qarray);
+	destroy_qtable(&session->qtable);
 
 	return (rc_minor == 0 ? rc : rc_minor);
 }

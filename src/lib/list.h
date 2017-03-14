@@ -26,12 +26,18 @@
 
 #include <stdlib.h>
 
+#define RC_ERROR                 -1
+#define RC_SUCCESS                0
+#define RC_DATA_FOUND             1
+#define RC_DATA_NOT_FOUND         2
+#define RC_DATA_ALREADY_INSERTED  3
+
 typedef struct list_node_ {
 	void              *data;
 	struct list_node_ *next;
 } list_node_t;
 
-typedef struct list_ {
+typedef struct {
 	size_t size;
 	void (*destroy)(void *data);
 	list_node_t *head;

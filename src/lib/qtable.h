@@ -13,24 +13,21 @@
  */
 
 /*
- * Copyright (c) 2016, Thomas Stibor <t.stibor@gsi.de>
+ * Copyright (c) 2017, Thomas Stibor <t.stibor@gsi.de>
  */
 
-#ifndef QARRAY_H
-#define QARRAY_H
+#ifndef QTABLE_H
+#define QTABLE_H
 
 #include "tsmapi.h"
 
-#define INITIAL_CAPACITY 32
+dsInt16_t init_qtable(struct qtable_t *qtable);
+void destroy_qtable(struct qtable_t *qtable);
+dsInt16_t insert_qtable(struct qtable_t *qtable,
+		  const qryRespArchiveData *qra_data);
+dsInt16_t create_array(struct qtable_t *qtable, const dsmBool_t sorted);
+dsInt16_t get_qra(const struct qtable_t *qtable,
+		  qryRespArchiveData *qra_data, const uint32_t n);
 
-dsInt16_t init_qarray(struct qarray_t **qarray);
-dsInt16_t insert_query(qryRespArchiveData *query_data, struct qarray_t **qarray,
-		       const dsmBool_t overwrite_oldest);
-dsInt16_t get_query(qryRespArchiveData *query_data,
-		    const struct qarray_t *qarray, const unsigned long n);
-unsigned long qarray_size(const struct qarray_t *qarray);
-void sort_qarray(struct qarray_t **qarray);
 int cmp_restore_order(const void *a, const void *b);
-void destroy_qarray(struct qarray_t **qarray);
-
-#endif /* QARRAY_H */
+#endif /* QTABLE_H */

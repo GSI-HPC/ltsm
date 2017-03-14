@@ -33,6 +33,7 @@
 #include <config.h>
 #endif
 
+#include <stdint.h>
 #include <sys/types.h>
 #include "dsmapitd.h"
 #include "dsmapifp.h"
@@ -40,6 +41,7 @@
 #include "dsmrc.h"
 #include "dapint64.h"
 #include "log.h"
+#include "chashtable.h"
 
 #ifndef PACKAGE_VERSION
 #define PACKAGE_VERSION "NA"
@@ -52,6 +54,7 @@
 #define TSM_BUF_LENGTH 65536
 #define MAX_OPTIONS_LENGTH 256
 #define MAGIC_ID_V1 71147
+#define DEFAULT_NUM_BUCKETS 64
 
 #define OPTNCMP(str1, str2)			\
 	((strlen(str1) == strlen(str2)) &&	\
@@ -73,7 +76,6 @@ struct lu_fid_t{
 	dsUint32_t f_ver;
 };
 
-/* ltsm object description. */
 struct obj_info_t{
 	unsigned int magic;
 	dsStruct64_t size;
@@ -89,10 +91,15 @@ struct archive_info_t{
 };
 
 struct qarray_t {
-	unsigned long capacity;
-	unsigned long N;
 	qryRespArchiveData *data;
-	struct hsearch_data *htab;
+	uint32_t size;
+};
+
+struct qtable_t {
+	chashtable_t *chashtable;
+	uint32_t nbuckets;
+	dsmBool_t multiple;
+	struct qarray_t qarray;
 };
 
 struct progress_size_t {
@@ -102,14 +109,14 @@ struct progress_size_t {
 };
 
 struct session_t {
-	dsUint32_t 			handle;
-	struct qarray_t 		*qarray;
-	dsmBool_t			overwrite_older;
-	struct hsm_action_item		*hai;
-	struct hsm_copyaction_private	*hcp;
-	long 				hal_flags;
-	int 				(*progress)(struct progress_size_t *data,
-						struct session_t *session);
+	dsUint32_t handle;
+	struct qtable_t qtable;
+	dsmBool_t overwrite_older;
+	struct hsm_action_item *hai;
+	struct hsm_copyaction_private *hcp;
+	long hal_flags;
+	int (*progress)(struct progress_size_t *data,
+			struct session_t *session);
 };
 
 off64_t to_off64_t(const dsStruct64_t size);
