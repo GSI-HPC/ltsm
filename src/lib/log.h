@@ -34,6 +34,7 @@
 #include <sys/time.h>
 #include <linux/limits.h>
 
+#define EFAILED 0
 #define UNUSED(x) (void)(x)
 
 /* Bottom three bits reserved for api_message_level. */

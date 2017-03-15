@@ -257,26 +257,26 @@ int main(int argc, char *argv[])
 
 	struct session_t session;
 	bzero(&session, sizeof(session));
-	session.overwrite_older = opt.o_latest == 1 ? bTrue : bFalse;
+	session.qtable.multiple = opt.o_latest == 1 ? bFalse : bTrue;
 
 	rc = tsm_init(DSM_SINGLETHREAD);
 	if (rc)
-		goto clean_up;
+		goto cleanup;
 
 	rc = tsm_connect(&login, &session);
 	if (rc)
-		goto clean_up;
+		goto cleanup;
 
 	rc = tsm_query_session(&session, opt.o_fsname);
 	if (rc)
-		goto clean_up;
+		goto cleanup;
 
 	/* Handle operations on files and directories resp. */
 	for (size_t i = 0; i < num_files_dirs &&
 		     files_dirs_arg[i]; i++) {
 		if (opt.o_query)
 			rc = tsm_query_fpath(opt.o_fsname, files_dirs_arg[i],
-					     opt.o_desc, bTrue, &session);
+					     opt.o_desc, &session);
 		else if (opt.o_retrieve)
 			rc = tsm_retrieve_fpath(opt.o_fsname, files_dirs_arg[i],
 						opt.o_desc, -1, &session);
@@ -288,10 +288,10 @@ int main(int argc, char *argv[])
 					       files_dirs_arg[i],
 					       opt.o_desc, -1, NULL, &session);
 		if (rc)
-			goto clean_up;
+			goto cleanup;
 	}
 
-clean_up:
+cleanup:
 	if (files_dirs_arg) {
 		for (size_t i = 0; i < num_files_dirs; i++) {
 			if (files_dirs_arg[i])

@@ -387,18 +387,14 @@ cleanup:
 	return (rc_minor ? DSM_RC_UNSUCCESSFUL : rc);
 }
 
-void tsm_print_query_node(const qryRespArchiveData *qry_resp_arv_data,
-			  const unsigned long n)
+static void display_qra(const qryRespArchiveData *qra_data, const uint32_t n)
 {
 	char ins_str_date[128] = {0};
 	char exp_str_date[128] = {0};
-
-	date_to_str(ins_str_date, &(qry_resp_arv_data->insDate));
-	date_to_str(exp_str_date, &(qry_resp_arv_data->expDate));
-
 	struct obj_info_t obj_info;
-	memcpy(&obj_info, (char *)qry_resp_arv_data->objInfo,
-	       qry_resp_arv_data->objInfolen);
+	memcpy(&obj_info, (char *)qra_data->objInfo, qra_data->objInfolen);
+	date_to_str(ins_str_date, &(qra_data->insDate));
+	date_to_str(exp_str_date, &(qra_data->expDate));
 
 	if (api_msg_get_level() >= API_MSG_INFO) {
 		CT_INFO("object # %lu\n"
@@ -415,36 +411,50 @@ void tsm_print_query_node(const qryRespArchiveData *qry_resp_arv_data,
 			"restore order (top,hi_hi,hi_lo,lo_hi,lo_lo): (%u,%u,%u,%u,%u)\n"
 			"estimated size (hi,lo)                     : (%u,%u)\n",
 			n,
-			qry_resp_arv_data->objName.fs,
-			qry_resp_arv_data->objName.hl,
-			qry_resp_arv_data->objName.ll,
-			qry_resp_arv_data->objId.hi,
-			qry_resp_arv_data->objId.lo,
-			qry_resp_arv_data->objInfolen,
+			qra_data->objName.fs,
+			qra_data->objName.hl,
+			qra_data->objName.ll,
+			qra_data->objId.hi,
+			qra_data->objId.lo,
+			qra_data->objInfolen,
 			obj_info.size.hi,
 			obj_info.size.lo,
-			OBJ_TYPE(qry_resp_arv_data->objName.objType),
+			OBJ_TYPE(qra_data->objName.objType),
 			obj_info.magic,
-			qry_resp_arv_data->descr,
-			qry_resp_arv_data->owner,
+			qra_data->descr,
+			qra_data->owner,
 			ins_str_date,
 			exp_str_date,
-			qry_resp_arv_data->restoreOrderExt.top,
-			qry_resp_arv_data->restoreOrderExt.hi_hi,
-			qry_resp_arv_data->restoreOrderExt.hi_lo,
-			qry_resp_arv_data->restoreOrderExt.lo_hi,
-			qry_resp_arv_data->restoreOrderExt.lo_lo,
-			qry_resp_arv_data->sizeEstimate.hi,
-			qry_resp_arv_data->sizeEstimate.lo);
+			qra_data->restoreOrderExt.top,
+			qra_data->restoreOrderExt.hi_hi,
+			qra_data->restoreOrderExt.hi_lo,
+			qra_data->restoreOrderExt.lo_hi,
+			qra_data->restoreOrderExt.lo_lo,
+			qra_data->sizeEstimate.hi,
+			qra_data->sizeEstimate.lo);
 	} else {
 		fprintf(stdout, "%s %12zu, fs:%s hl:%s ll:%s\n",
-			OBJ_TYPE(qry_resp_arv_data->objName.objType),
+			OBJ_TYPE(qra_data->objName.objType),
 			to_off64_t(obj_info.size),
-			qry_resp_arv_data->objName.fs,
-			qry_resp_arv_data->objName.hl,
-			qry_resp_arv_data->objName.ll);
+			qra_data->objName.fs,
+			qra_data->objName.hl,
+			qra_data->objName.ll);
 		fflush(stdout);
 	}
+}
+
+dsInt16_t tsm_print_query(struct session_t *session)
+{
+	dsInt16_t rc;
+
+	qryRespArchiveData qra_data;
+	for (uint32_t n = 0; n < session->qtable.qarray.size; n++) {
+		rc = get_qra(&session->qtable, &qra_data, n);
+		if (rc)
+			return DSM_RC_UNSUCCESSFUL;
+		display_qra(&qra_data, n);
+	}
+	return DSM_RC_SUCCESSFUL;
 }
 
 dsInt16_t tsm_init(const dsBool_t mt_flag)
@@ -710,9 +720,8 @@ dsInt16_t tsm_query_session(struct session_t *session, const char *fsname)
 	return rc;
 }
 
-dsInt16_t tsm_query_hl_ll(const char *fs, const char *hl, const char *ll,
-			  const char *desc, dsBool_t display,
-			  struct session_t *session)
+static dsInt16_t tsm_query_hl_ll(const char *fs, const char *hl, const char *ll,
+				 const char *desc, struct session_t *session)
 {
 	qryArchiveData qry_ar_data;
 	dsmObjName obj_name;
@@ -760,29 +769,23 @@ dsInt16_t tsm_query_hl_ll(const char *fs, const char *hl, const char *ll,
 	qry_resp_ar_data.stVersion = qryRespArchiveDataVersion;
 
 	dsBool_t done = bFalse;
-	unsigned long n = 0;
 	while (!done) {
 		rc = dsmGetNextQObj(session->handle, &data_blk);
-		TSM_DEBUG(session, rc,  "dsmGetNextQObj");
+		TSM_DEBUG(session, rc, "dsmGetNextQObj");
 
-		if (((rc == DSM_RC_OK) || (rc == DSM_RC_MORE_DATA) || (rc == DSM_RC_FINISHED))
+		if (((rc == DSM_RC_OK) || (rc == DSM_RC_MORE_DATA) ||
+		     (rc == DSM_RC_FINISHED))
 		    && data_blk.numBytes) {
 
 			qry_resp_ar_data.objInfo[qry_resp_ar_data.objInfolen] = '\0';
-
-			if (display)	/* If query is only for printing, we are not filling the query array. */
-				tsm_print_query_node(&qry_resp_ar_data, ++n);
-			else {
-				rc = insert_qtable(&session->qtable, &qry_resp_ar_data);
-				if (rc) {
-					CT_ERROR(0, "add_query");
-					goto cleanup;
-				}
+			rc = insert_qtable(&session->qtable, &qry_resp_ar_data);
+			if (rc) {
+				CT_ERROR(EFAILED, "insert_qtable failed");
+				goto cleanup;
 			}
-		} else if (rc == DSM_RC_UNKNOWN_FORMAT) {
-			/* head over to next object if format error occurs when trying to access non api archived files */
+		} else if (rc == DSM_RC_UNKNOWN_FORMAT)
                         CT_WARN("DSM_OBJECT not archived by API, skipping object");
-                } else {
+		else {
 			done = bTrue;
 			if (rc == DSM_RC_ABORT_NO_MATCH)
 				CT_MESSAGE("query has no match");
@@ -897,27 +900,18 @@ static dsInt16_t tsm_delete_hl_ll(const char *fs, const char *hl,
 				  const char *ll, struct session_t *session)
 {
 	dsInt16_t rc;
-
-	rc = init_qtable(&session->qtable);
-	if (rc)
-		return rc;
-
-	rc = tsm_query_hl_ll(fs, hl, ll, NULL, bFalse, session);
-	if (rc)
-		goto cleanup;
-
 	qryRespArchiveData query_data;
 
 	for (uint32_t n = 0; n < session->qtable.qarray.size; n++) {
 		rc = get_qra(&session->qtable, &query_data, n);
 		CT_INFO("get_query: %lu, rc: %d", n, rc);
-		if (rc != DSM_RC_SUCCESSFUL) {
+		if (rc) {
 			errno = ENODATA; /* No data available */
 			CT_ERROR(errno, "get_query");
-			goto cleanup;
+			return rc;
 		}
 		rc = tsm_del_obj(&query_data, session);
-		if (rc != DSM_RC_SUCCESSFUL) {
+		if (rc) {
 			CT_WARN("\ncannot delete obj %s\n"
 				"\t\tfs: %s\n"
 				"\t\thl: %s\n"
@@ -937,9 +931,6 @@ static dsInt16_t tsm_delete_hl_ll(const char *fs, const char *hl,
 				query_data.objName.ll);
 		}
 	}
-
-cleanup:
-	destroy_qtable(&session->qtable);
 	return rc;
 }
 
@@ -955,17 +946,36 @@ dsInt16_t tsm_delete_fpath(const char *fs, const char *fpath,
 		"fpath: %s\n"
 		"hl: %s\n"
 		"ll: %s\n", fpath, hl, ll);
-	if (rc != DSM_RC_SUCCESSFUL) {
-		CT_ERROR(rc, "extract_hl_ll");
+	if (rc) {
+		CT_ERROR(EFAILED, "extract_hl_ll failed");
 		return rc;
 	}
+	rc = init_qtable(&session->qtable);
+	if (rc) {
+		CT_ERROR(EFAILED, "init_qtable failed");
+		return rc;
+	}
+	rc = tsm_query_hl_ll(fs, hl, ll, NULL, session);
+	if (rc) {
+		CT_ERROR(EFAILED, "tsm_query_hl_ll failed");
+		goto cleanup;
+	}
+	rc = create_array(&session->qtable, bFalse);
+	if (rc) {
+		CT_ERROR(EFAILED, "create_array failed");
+		goto cleanup;
+	}
 	rc = tsm_delete_hl_ll(fs, hl, ll, session);
+	if (rc)
+		CT_ERROR(EFAILED, "tsm_print_query failed");
 
+cleanup:
+	destroy_qtable(&session->qtable);
 	return rc;
 }
 
 dsInt16_t tsm_query_fpath(const char *fs, const char *fpath, const char *desc,
-			  dsBool_t display, struct session_t *session)
+			  struct session_t *session)
 {
 	dsInt16_t rc;
 	char hl[DSM_MAX_HL_LENGTH + 1] = {0};
@@ -976,12 +986,31 @@ dsInt16_t tsm_query_fpath(const char *fs, const char *fpath, const char *desc,
 		"fpath: %s\n"
 		"hl: %s\n"
 		"ll: %s\n", fpath, hl, ll);
-	if (rc != DSM_RC_SUCCESSFUL) {
-		CT_ERROR(rc, "extract_hl_ll");
+	if (rc) {
+		CT_ERROR(EFAILED, "extract_hl_ll");
 		return rc;
 	}
-	rc = tsm_query_hl_ll(fs, hl, ll, desc, display, session);
+	rc = init_qtable(&session->qtable);
+	if (rc) {
+		CT_ERROR(EFAILED, "init_qtable failed");
+		return rc;
+	}
+	rc = tsm_query_hl_ll(fs, hl, ll, desc, session);
+	if (rc) {
+		CT_ERROR(EFAILED, "tsm_query_hl_ll failed");
+		goto cleanup;
+	}
+	rc = create_array(&session->qtable, bFalse);
+	if (rc) {
+		CT_ERROR(EFAILED, "create_array failed");
+		goto cleanup;
+	}
+	rc = tsm_print_query(session);
+	if (rc)
+		CT_ERROR(EFAILED, "tsm_print_query failed");
 
+cleanup:
+	destroy_qtable(&session->qtable);
 	return rc;
 }
 
@@ -993,22 +1022,7 @@ static dsInt16_t tsm_retrieve_generic(const char *fs, const char *hl,
 	dsInt16_t rc;
 	dsInt16_t rc_minor = 0;
 	dsmGetList get_list;
-
 	get_list.objId = NULL;
-
-	rc = init_qtable(&session->qtable);
-	if (rc)
-		return rc;
-
-	rc = tsm_query_hl_ll(fs, hl, ll, desc, bFalse, session);
-	if (rc != DSM_RC_SUCCESSFUL)
-		goto cleanup;
-
-	/* Sort query replies to ensure that the data are read from the server in the most efficient order.
-	   At least this is written on page Chapter 3. API design recommendations and considerations 57. */
-	rc = create_array(&session->qtable, bTrue);
-	if (rc)
-		goto cleanup;
 
 	/* TODO: Implement later also partialObjData handling. See page 56.*/
 	get_list.stVersion = dsmGetListVersion; /* dsmGetListVersion: Not using Partial Obj data,
@@ -1078,7 +1092,7 @@ static dsInt16_t tsm_retrieve_generic(const char *fs, const char *hl,
 
 			if (api_msg_get_level() >= API_MSG_INFO) {
 				CT_INFO("retrieving object:");
-				tsm_print_query_node(&query_data, c_iter);
+				display_qra(&query_data, c_iter);
 			}
 
 			if (obj_info.magic != MAGIC_ID_V1) {
@@ -1091,7 +1105,7 @@ static dsInt16_t tsm_retrieve_generic(const char *fs, const char *hl,
 				rc_minor = retrieve_obj(&query_data, &obj_info, fd, session);
 				CT_INFO("retrieve_obj, rc: %d\n", rc_minor);
 				if (rc_minor != DSM_RC_SUCCESSFUL) {
-					CT_ERROR(0, "retrieve_obj");
+					CT_ERROR(EFAILED, "retrieve_obj failed");
 					goto cleanup_getdata;
 				}
 			} break;
@@ -1139,8 +1153,6 @@ cleanup:
 	if (get_list.objId)
 		free(get_list.objId);
 
-	destroy_qtable(&session->qtable);
-
 	return (rc_minor == 0 ? rc : rc_minor);
 }
 
@@ -1153,12 +1165,34 @@ dsInt16_t tsm_retrieve_fpath(const char *fs, const char *fpath,
 	char ll[DSM_MAX_LL_LENGTH + 1] = {0};
 
 	rc = extract_hl_ll(fpath, hl, ll);
-	if (rc != DSM_RC_SUCCESSFUL) {
-		CT_ERROR(rc, "extract_hl_ll");
+	if (rc) {
+		CT_ERROR(EFAILED, "extract_hl_ll");
 		return rc;
 	}
-	rc = tsm_retrieve_generic(fs, hl, ll, fd, desc, session);
 
+	rc = init_qtable(&session->qtable);
+	if (rc) {
+		CT_ERROR(EFAILED, "init_qtable failed");
+		return rc;
+	}
+
+	rc = tsm_query_hl_ll(fs, hl, ll, desc, session);
+	if (rc) {
+		CT_ERROR(EFAILED, "tsm_query_hl_ll failed");
+		goto cleanup;
+	}
+
+	rc = create_array(&session->qtable, bFalse);
+	if (rc) {
+		CT_ERROR(EFAILED, "create_array failed");
+		goto cleanup;
+	}
+	rc = tsm_retrieve_generic(fs, hl, ll, fd, desc, session);
+	if (rc)
+		CT_ERROR(EFAILED, "tsm_retrieve_generic failed");
+
+cleanup:
+	destroy_qtable(&session->qtable);
 	return rc;
 }
 
