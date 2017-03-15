@@ -1014,10 +1014,7 @@ cleanup:
 	return rc;
 }
 
-static dsInt16_t tsm_retrieve_generic(const char *fs, const char *hl,
-				      const char *ll, int fd,
-				      const char *desc,
-				      struct session_t *session)
+static dsInt16_t tsm_retrieve_generic(int fd, struct session_t *session)
 {
 	dsInt16_t rc;
 	dsInt16_t rc_minor = 0;
@@ -1033,15 +1030,14 @@ static dsInt16_t tsm_retrieve_generic(const char *fs, const char *hl,
 	   function call dsmBeginGetData. To overcome this limitation, partition
 	   the query replies in chunks of maximum size DSM_MAX_GET_OBJ and call
 	   dsmBeginGetData on each chunk. */
-	unsigned long c_begin = 0;
-	unsigned long c_end = MIN(session->qtable.qarray.size,
-				  DSM_MAX_GET_OBJ) - 1;
-	unsigned int c_total = ceil((double)session->qtable.qarray.size /
-				    (double)DSM_MAX_GET_OBJ);
-	unsigned int c_cur = 0;
-	unsigned long num_objs;
+	uint32_t c_begin = 0;
+	uint32_t c_end = MIN(session->qtable.qarray.size, DSM_MAX_GET_OBJ) - 1;
+	uint32_t c_total = ceil((double)session->qtable.qarray.size /
+				(double)DSM_MAX_GET_OBJ);
+	uint32_t c_cur = 0;
+	uint32_t num_objs;
 	qryRespArchiveData query_data;
-	unsigned long i;
+	uint32_t i;
 
 	do {
 		num_objs = c_end - c_begin + 1;
@@ -1054,7 +1050,7 @@ static dsInt16_t tsm_retrieve_generic(const char *fs, const char *hl,
 			CT_ERROR(rc, "malloc");
 			goto cleanup;
 		}
-		for (unsigned long c_iter = c_begin; c_iter <= c_end; c_iter++) {
+		for (uint32_t c_iter = c_begin; c_iter <= c_end; c_iter++) {
 
 			rc = get_qra(&session->qtable, &query_data, c_iter);
 			CT_INFO("get_query: %lu, rc: %d", c_iter, rc);
@@ -1077,7 +1073,7 @@ static dsInt16_t tsm_retrieve_generic(const char *fs, const char *hl,
 		}
 
 		struct obj_info_t obj_info;
-		for (unsigned long c_iter = c_begin; c_iter <= c_end; c_iter++) {
+		for (uint32_t c_iter = c_begin; c_iter <= c_end; c_iter++) {
 
 			rc = get_qra(&session->qtable, &query_data, c_iter);
 			CT_INFO("get_query: %lu, rc: %d", c_iter, rc);
@@ -1187,7 +1183,7 @@ dsInt16_t tsm_retrieve_fpath(const char *fs, const char *fpath,
 		CT_ERROR(EFAILED, "create_array failed");
 		goto cleanup;
 	}
-	rc = tsm_retrieve_generic(fs, hl, ll, fd, desc, session);
+	rc = tsm_retrieve_generic(fd, session);
 	if (rc)
 		CT_ERROR(EFAILED, "tsm_retrieve_generic failed");
 
