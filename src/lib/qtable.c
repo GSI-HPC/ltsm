@@ -155,7 +155,7 @@ void destroy_qtable(struct qtable_t *qtable)
 		qtable->chashtable = NULL;
 	}
 
-	if (qtable->qarray.size > 0 && qtable->qarray.data) {
+	if (qtable->qarray.data) {
 		free(qtable->qarray.data);
 		qtable->qarray.size = 0;
 		qtable->qarray.data = NULL;
