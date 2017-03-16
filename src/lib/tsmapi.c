@@ -387,7 +387,8 @@ cleanup:
 	return (rc_minor ? DSM_RC_UNSUCCESSFUL : rc);
 }
 
-static void display_qra(const qryRespArchiveData *qra_data, const uint32_t n)
+static void display_qra(const qryRespArchiveData *qra_data, const uint32_t n,
+	const char *msg)
 {
 	char ins_str_date[128] = {0};
 	char exp_str_date[128] = {0};
@@ -396,8 +397,17 @@ static void display_qra(const qryRespArchiveData *qra_data, const uint32_t n)
 	date_to_str(ins_str_date, &(qra_data->insDate));
 	date_to_str(exp_str_date, &(qra_data->expDate));
 
-	if (api_msg_get_level() >= API_MSG_INFO) {
-		CT_INFO("object # %lu\n"
+	if (api_msg_get_level() <= API_MSG_NORMAL) {
+		fprintf(stdout, "%s %20s %14zu, fs:%s hl:%s ll:%s\n",
+			msg,
+			OBJ_TYPE(qra_data->objName.objType),
+			to_off64_t(obj_info.size),
+			qra_data->objName.fs,
+			qra_data->objName.hl,
+			qra_data->objName.ll);
+		fflush(stdout);
+	} else if (api_msg_get_level() > API_MSG_NORMAL) {
+		CT_INFO("%s object # %lu\n"
 			"fs: %s, hl: %s, ll: %s\n"
 			"object id (hi,lo)                          : (%u,%u)\n"
 			"object info length                         : %d\n"
@@ -410,6 +420,7 @@ static void display_qra(const qryRespArchiveData *qra_data, const uint32_t n)
 			"expiration date                            : %s\n"
 			"restore order (top,hi_hi,hi_lo,lo_hi,lo_lo): (%u,%u,%u,%u,%u)\n"
 			"estimated size (hi,lo)                     : (%u,%u)\n",
+			msg,
 			n,
 			qra_data->objName.fs,
 			qra_data->objName.hl,
@@ -432,14 +443,6 @@ static void display_qra(const qryRespArchiveData *qra_data, const uint32_t n)
 			qra_data->restoreOrderExt.lo_lo,
 			qra_data->sizeEstimate.hi,
 			qra_data->sizeEstimate.lo);
-	} else {
-		fprintf(stdout, "%s %12zu, fs:%s hl:%s ll:%s\n",
-			OBJ_TYPE(qra_data->objName.objType),
-			to_off64_t(obj_info.size),
-			qra_data->objName.fs,
-			qra_data->objName.hl,
-			qra_data->objName.ll);
-		fflush(stdout);
 	}
 }
 
@@ -452,7 +455,7 @@ dsInt16_t tsm_print_query(struct session_t *session)
 		rc = get_qra(&session->qtable, &qra_data, n);
 		if (rc)
 			return DSM_RC_UNSUCCESSFUL;
-		display_qra(&qra_data, n);
+		display_qra(&qra_data, n, "[query]");
 	}
 	return DSM_RC_SUCCESSFUL;
 }
@@ -899,36 +902,23 @@ static dsInt16_t tsm_del_obj(const qryRespArchiveData *qry_resp_ar_data,
 static dsInt16_t tsm_delete_hl_ll(struct session_t *session)
 {
 	dsInt16_t rc;
-	qryRespArchiveData query_data;
+	qryRespArchiveData qra_data;
 
 	for (uint32_t n = 0; n < session->qtable.qarray.size; n++) {
-		rc = get_qra(&session->qtable, &query_data, n);
+		rc = get_qra(&session->qtable, &qra_data, n);
 		CT_INFO("get_query: %lu, rc: %d", n, rc);
 		if (rc) {
 			errno = ENODATA; /* No data available */
 			CT_ERROR(errno, "get_query");
 			return rc;
 		}
-		rc = tsm_del_obj(&query_data, session);
+		rc = tsm_del_obj(&qra_data, session);
+		CT_DEBUG("tsm_del_obj: %lu, rc: %d", n, rc);
 		if (rc) {
-			CT_WARN("\ncannot delete obj %s\n"
-				"\t\tfs: %s\n"
-				"\t\thl: %s\n"
-				"\t\tll: %s",
-				OBJ_TYPE(query_data.objName.objType),
-				query_data.objName.fs,
-				query_data.objName.hl,
-				query_data.objName.ll);
-		} else {
-			CT_INFO("\ndeleted obj fs: %s\n"
-				"\t\tfs: %s\n"
-				"\t\thl: %s\n"
-				"\t\tll: %s",
-				OBJ_TYPE(query_data.objName.objType),
-				query_data.objName.fs,
-				query_data.objName.hl,
-				query_data.objName.ll);
-		}
+			CT_WARN("tsm_del_obj failed, object not deleted\n");
+			display_qra(&qra_data, n, "[delete failed]");
+		} else
+			display_qra(&qra_data, n, "[delete]");
 	}
 	return rc;
 }
@@ -1085,16 +1075,12 @@ static dsInt16_t tsm_retrieve_generic(int fd, struct session_t *session)
 			       (char *)&(query_data.objInfo),
 			       query_data.objInfolen);
 
-			if (api_msg_get_level() >= API_MSG_INFO) {
-				CT_INFO("retrieving object:");
-				display_qra(&query_data, c_iter);
-			}
-
 			if (obj_info.magic != MAGIC_ID_V1) {
 				CT_WARN("skip object due magic mismatch with MAGIC_ID: %d\n", obj_info.magic);
 				continue;	/* Ignore this object and try next one. */
 			}
 
+			display_qra(&query_data, c_iter, "[retrieve]");
 			switch (query_data.objName.objType) {
 			case DSM_OBJ_FILE: {
 				rc_minor = retrieve_obj(&query_data, &obj_info, fd, session);
