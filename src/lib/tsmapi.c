@@ -896,8 +896,7 @@ static dsInt16_t tsm_del_obj(const qryRespArchiveData *qry_resp_ar_data,
 	return rc;
 }
 
-static dsInt16_t tsm_delete_hl_ll(const char *fs, const char *hl,
-				  const char *ll, struct session_t *session)
+static dsInt16_t tsm_delete_hl_ll(struct session_t *session)
 {
 	dsInt16_t rc;
 	qryRespArchiveData query_data;
@@ -965,7 +964,7 @@ dsInt16_t tsm_delete_fpath(const char *fs, const char *fpath,
 		CT_ERROR(EFAILED, "create_array failed");
 		goto cleanup;
 	}
-	rc = tsm_delete_hl_ll(fs, hl, ll, session);
+	rc = tsm_delete_hl_ll(session);
 	if (rc)
 		CT_ERROR(EFAILED, "tsm_print_query failed");
 
