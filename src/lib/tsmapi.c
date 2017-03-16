@@ -397,7 +397,7 @@ static void display_qra(const qryRespArchiveData *qra_data, const uint32_t n,
 	date_to_str(ins_str_date, &(qra_data->insDate));
 	date_to_str(exp_str_date, &(qra_data->expDate));
 
-	if (api_msg_get_level() <= API_MSG_NORMAL) {
+	if (api_msg_get_level() == API_MSG_NORMAL) {
 		fprintf(stdout, "%s %20s %14zu, fs:%s hl:%s ll:%s\n",
 			msg,
 			OBJ_TYPE(qra_data->objName.objType),
@@ -1242,14 +1242,30 @@ static dsInt16_t tsm_archive_generic(struct archive_info_t *archive_info,
 			TSM_ERROR(session, err_reason, "dsmEndTxn reason");
 			success = bFalse;
 		}
-
 		if (success) {
-			CT_INFO("\n*** successfully archived: %s %s of size: %lu bytes "
-				"with settings ***\nfs: %s\nhl: %s\nll: %s\ndesc: %s\n",
-				OBJ_TYPE(fsm.archive_info->obj_name.objType),
-				fsm.archive_info->fpath, total_read,
-				fsm.archive_info->obj_name.fs, fsm.archive_info->obj_name.hl,
-				fsm.archive_info->obj_name.ll, fsm.archive_info->desc);
+			if (api_msg_get_level() == API_MSG_NORMAL) {
+				fprintf(stdout, "%s %20s %14zu, fs:%s hl:%s "
+					"ll:%s\n",
+					"[archive] ",
+					OBJ_TYPE(fsm.archive_info->
+						 obj_name.objType),
+					total_read,
+					fsm.archive_info->obj_name.fs,
+					fsm.archive_info->obj_name.hl,
+					fsm.archive_info->obj_name.ll);
+			} else if (api_msg_get_level() > API_MSG_NORMAL) {
+				CT_INFO("\n*** successfully archived: %s %s of "
+					"size: %lu bytes "
+					"with settings ***\nfs: %s\nhl: "
+					"%s\nll: %s\ndesc: %s\n",
+					OBJ_TYPE(fsm.archive_info->
+						 obj_name.objType),
+					fsm.archive_info->fpath, total_read,
+					fsm.archive_info->obj_name.fs,
+					fsm.archive_info->obj_name.hl,
+					fsm.archive_info->obj_name.ll,
+					fsm.archive_info->desc);
+			}
 		}
 
 		free(fsm.data_buf);
@@ -1311,9 +1327,8 @@ static dsInt16_t tsm_archive_generic(struct archive_info_t *archive_info,
 			break;
 		}
 
-		CT_INFO("Sending [%s]: %s", OBJ_TYPE(fsm.archive_info->obj_name.objType),
+		CT_INFO("sending [%s]: %s", OBJ_TYPE(fsm.archive_info->obj_name.objType),
 			fsm.archive_info->fpath);
-
 
 		if (fsm.archive_info->obj_name.objType == DSM_OBJ_FILE) {
 			fsm.state = TSMAPI_SEND_DATA;
