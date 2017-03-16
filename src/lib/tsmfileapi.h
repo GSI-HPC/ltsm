@@ -29,10 +29,6 @@
 #ifndef TSMFILEAPI_H
 #define TSMFILEAPI_H
 
-#if HAVE_CONFIG_H
- #include <config.h>
-#endif
-
 #include <sys/types.h>
 #include "dsmapitd.h"
 #include "dsmapifp.h"
@@ -51,7 +47,7 @@ struct tsm_filehandle_t
 	int mode; //mode in which the file is opened
 	struct login_t *login; //login information of the connection
 	struct session_t session; //hols the dsm session (and fs name)
-	struct archive_info_t archive_info; //hols hl/ll name and addition archive_info
+	struct archive_info_t archive_info; //holds hl/ll name parts
 	mcBindKey mc_bind_key; //used in file open write to bind mc
 	DataBlk data_blk; //used for read and write operations as buffer
 	ObjAttr obj_attr; //used in write as handle
@@ -62,10 +58,10 @@ int tsm_file_open(struct tsm_filehandle_t *fh, struct login_t* login,
 	char* path, char* desc, int mode);
 
 int tsm_file_write(struct tsm_filehandle_t *fh, void* data_ptr,
-	int datasize, int elements);
+	size_t datasize, size_t elements);
 
 int tsm_file_read(struct tsm_filehandle_t *fh, void* data_ptr,
-	int datasize, int elements, int *read);
+	size_t datasize, size_t elements, size_t *read);
 
 int tsm_file_close(struct tsm_filehandle_t *fh);
 

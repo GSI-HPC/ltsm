@@ -67,7 +67,7 @@ static int tsm_file_open_read(struct tsm_filehandle_t *fh)
 		CT_ERROR(rc, "create_array failed");
 		return rc;
 	}
-	if(fh->session.qtable.qarray.size != 1) {
+	if (fh->session.qtable.qarray.size != 1) {
 		CT_ERROR(rc, "qtable does not have exactly one object");
 		return ENOENT;
 	}
@@ -140,7 +140,7 @@ static int tsm_file_open_write(struct tsm_filehandle_t *fh)
 	fh->obj_attr.owner[0] = '\0';
 	fh->obj_attr.objInfoLength = sizeof(struct obj_info_t);
 	fh->obj_attr.objInfo = (char *)malloc(fh->obj_attr.objInfoLength);
-	if(fh->obj_attr.objInfo == NULL) {
+	if (fh->obj_attr.objInfo == NULL) {
 		CT_ERROR(rc, "fh->obj_attr.objInfo space reservation failed");
 		return rc;
 	}
@@ -185,20 +185,20 @@ int tsm_file_open(struct tsm_filehandle_t *fh, struct login_t* login,
 	fh->mode = mode;
 
 	rc = tsm_connect(fh->login, &fh->session);
-	if(rc) {
+	if (rc) {
 		CT_ERROR(rc, "tsm_connect failed for %s", path);
 		return rc;
 	}
 
 	rc = tsm_query_session(&fh->session, login->fsname);
-	if(rc) {
+	if (rc) {
 		CT_ERROR(rc, "tsm_query_session failed for %s", path);
 		return rc;
 	}
 
 	rc = extract_hl_ll(path, fh->archive_info.obj_name.hl,
 			   fh->archive_info.obj_name.ll);
-	if(rc) {
+	if (rc) {
 		CT_ERROR(rc, "extract_hl_ll failed for %s", path);
 		return rc;
 	}
@@ -233,9 +233,9 @@ int tsm_file_open(struct tsm_filehandle_t *fh, struct login_t* login,
  * @return DSM_RC_SUCCESSFUL on success. error code otherwise
  */
 int tsm_file_write(struct tsm_filehandle_t *fh, void* data_ptr,
-		   int datasize, int elements)
+		   size_t datasize, size_t elements)
 {
-	if(fh->mode != TSM_FILE_MODE_WRITE)
+	if (fh->mode != TSM_FILE_MODE_WRITE)
 		return DSM_RC_UNSUCCESSFUL;
 	int rc;
 	fh->data_blk.bufferLen = datasize*elements;
@@ -262,9 +262,9 @@ int tsm_file_write(struct tsm_filehandle_t *fh, void* data_ptr,
  * if EOF. Some error code otherwise
  */
 int tsm_file_read(struct tsm_filehandle_t *fh, void* data_ptr,
-		  int datasize, int elements, int *read)
+		  size_t datasize, size_t elements, size_t *read)
 {
-	if(fh->mode != TSM_FILE_MODE_READ)
+	if (fh->mode != TSM_FILE_MODE_READ)
 		return DSM_RC_UNSUCCESSFUL;
 	int rc;
 	fh->data_blk.bufferLen = datasize*elements;
@@ -309,7 +309,8 @@ static  int tsm_file_close_read(struct tsm_filehandle_t *fh)
 }
 
 /**
- * @brief closes a filestream to an tsm-object
+ * @brief closes a filestream to an
+  tsm-object
  *
  * Shutdown the connection to the tsm-server.
  * If file was opened in write mode the transaction will be commited.

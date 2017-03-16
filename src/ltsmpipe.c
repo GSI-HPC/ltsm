@@ -57,15 +57,18 @@ static void usage(const char *cmd_name, const int rc)
 	dsmApiVersionEx libapi_ver = get_libapi_ver();
 	dsmAppVersion appapi_ver = get_appapi_ver();
 
-	CT_INFO("\nqueries file if no pipe input is given and prints it to stdout\n"
-		"if pipe input is given it will directly written to specified file\n"
+	CT_MESSAGE("\nqueries file if no pipe input is given and prints"
+		" it to stdout\n"
+		"if pipe input is given it will directly written to "
+		"specified file\n"
 		"usage: %s [options] <files|directories|wildcards>\n"
 		"\t-f, --fsname <string> [default: '/']\n"
 		"\t-n, --node <string>\n"
 		"\t-o, --owner <string>\n"
 		"\t-p, --password <string>\n"
 		"\t-s, --servername <string>\n"
-		"\t-v, --verbose {error, warn, message, info, debug} [default: message]\n"
+		"\t-v, --verbose {error, warn, message, info, debug} "
+		"[default: message]\n"
 		"\t-h, --help\n"
 		"\nIBM API library version: %d.%d.%d.%d, "
 		"IBM API application client version: %d.%d.%d.%d\n"
@@ -84,13 +87,13 @@ static void sanity_arg_check(const struct options *opts, const char *argv)
 {
 
 	if (!strlen(opt.o_node)) {
-		CT_ERROR(1,, "missing argument -n, --node <string>");
+		CT_ERROR(1, "missing argument -n, --node <string>");
 		usage(argv, 1);
 	} else if (!strlen(opt.o_password)) {
-		CT_ERROR(1,, "missing argument -p, --password <string>");
+		CT_ERROR(1, "missing argument -p, --password <string>");
 		usage(argv, 1);
 	} else if (!strlen(opt.o_servername)) {
-		CT_ERROR(1,, "missing argument -s, --servername "
+		CT_ERROR(1, "missing argument -s, --servername "
 			"<string>");
 		usage(argv, 1);
 	} else if (!strlen(opt.o_fsname)) {
@@ -191,7 +194,7 @@ int write_stdin_to_tsmfile(){
 	int rc = DSM_RC_UNSUCCESSFUL;
 	int blocksize = TSM_BUF_LENGTH;
 	void *buffer = malloc(blocksize);
-	if(buffer == NULL) {
+	if (buffer == NULL) {
 		rc = DSM_RC_UNSUCCESSFUL;
 		CT_ERROR(rc, "Buffer allocation failed");
 		return rc;
@@ -199,11 +202,9 @@ int write_stdin_to_tsmfile(){
 	while (1) {
 		size_t size = fread(buffer, 1, blocksize, stdin);
 		CT_DEBUG("Got %lu from stdin", size);
-		if(size == 0){
-			break;
-		};
+		if (size == 0) break;
 		rc = tsm_file_write(&filehandle, buffer, 1, size);
-		if(rc) {
+		if (rc) {
 			CT_ERROR(rc, "tsm_file_write failed");
 			break;
 		}
@@ -216,21 +217,20 @@ int read_tsmfile_to_stdout(){
 	int rc;
 	int blocksize = TSM_BUF_LENGTH;
 	char *buffer = malloc(blocksize);
-	if(buffer == NULL) {
+	if (buffer == NULL) {
 		rc = DSM_RC_UNSUCCESSFUL;
 		CT_ERROR(rc, "Buffer allocation failed");
 		return rc;
 	}
 	rc = DSM_RC_MORE_DATA;
-	while(rc == DSM_RC_MORE_DATA) {
-		int bytes_read = 0;
-		rc = tsm_file_read(&filehandle, buffer, 1, blocksize, &bytes_read);
+	while (rc == DSM_RC_MORE_DATA) {
+		size_t bytes_read = 0;
+		rc = tsm_file_read(&filehandle, buffer, 1,
+				   blocksize, &bytes_read);
 		fwrite(buffer, bytes_read, 1, stdout);
 	}
 	free(buffer);
-	if(rc == DSM_RC_FINISHED){
-		return 0;
-	}
+	if (rc == DSM_RC_FINISHED) return 0;
 	CT_ERROR(rc, "tsm_file_read failed");
 	return rc;
 }
@@ -259,29 +259,37 @@ int main(int argc, char *argv[])
 		   opt.o_owner, LINUX_PLATFORM,
 		   opt.o_fsname, DEFAULT_FSTYPE);
 
-	if(isatty(fileno(stdin))){
-		rc = tsm_file_open(&filehandle, &login, filename, opt.o_desc, TSM_FILE_MODE_READ);
-		if(rc){
-			CT_ERROR(rc, "Cannot create filehandle for file %s", filename);
+	if (isatty(fileno(stdin))) {
+		rc = tsm_file_open(&filehandle, &login, filename,
+				   opt.o_desc, TSM_FILE_MODE_READ);
+		if (rc) {
+			CT_ERROR(rc, "Cannot create filehandle for file %s",
+				 filename);
 			goto cleanup;
 		}
 		rc = read_tsmfile_to_stdout();
-		if(rc){
-			CT_ERROR(rc, "Reading from tsm file %s return error", filename);
-		}else{
-			CT_MESSAGE("Reading from tsm file %s successfull", filename);
+		if (rc) {
+			CT_ERROR(rc, "Reading from tsm file %s return error",
+				 filename);
+		} else {
+			CT_MESSAGE("Reading from tsm file %s successfull",
+				   filename);
 		}
-	}else{
-		rc = tsm_file_open(&filehandle, &login, filename, opt.o_desc, TSM_FILE_MODE_WRITE);
-		if(rc){
-			CT_ERROR(rc, "Cannot create filehandle for file %s", filename);
+	} else {
+		rc = tsm_file_open(&filehandle, &login, filename, opt.o_desc,
+			           TSM_FILE_MODE_WRITE);
+		if (rc) {
+			CT_ERROR(rc, "Cannot create filehandle for file %s",
+				 filename);
 			goto cleanup;
 		}
 		rc = write_stdin_to_tsmfile();
-		if(rc){
-			CT_ERROR(rc, "Writing stdin to tsm file %s return error", filename);
-		}else{
-			CT_MESSAGE("Writing to tsm file %s successfull", filename);
+		if (rc) {
+			CT_ERROR(rc, "Writing stdin to tsm file %s return "
+				 "error", filename);
+		} else {
+			CT_MESSAGE("Writing to tsm file %s successfull",
+				    filename);
 		}
 	}
 	tsm_file_close(&filehandle);
