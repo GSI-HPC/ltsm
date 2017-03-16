@@ -27,6 +27,12 @@ AC_LANG([C])
 LT_INIT
 AC_CONFIG_MACRO_DIR([m4])
 
+AC_ARG_ENABLE([timings],
+  AS_HELP_STRING([--enable-timings], [enable performance timings for tsmfileapi]),
+  AC_DEFINE([WITH_TIMINGS],[1],[define to 1 if build with timings]),
+  AC_DEFINE([WITH_TIMINGS],[0],[define to 0 if build without timings])
+)
+
 # Path to Lustre src directory.
 AC_ARG_WITH([lustre], AS_HELP_STRING([--with-lustre[=PATH]],[path to location for Lustre sources]),
 	LUSTRE_SRC_DIR="$withval", LUSTRE_SRC_DIR="lustre-release")
@@ -52,7 +58,6 @@ AS_IF([test -x "$with_lustre"],
 	AC_MSG_WARN("cannot find Lustre source tree and Lustre library. Only TSM console client ltsmc will be build")
 	]
 )
-
 # Path to TSM API src directory.
 AC_ARG_WITH([tsm-headers], AS_HELP_STRING([--with-tsm-headers[=PATH]],[path to location for IBM TSM header files [default=/opt/tivoli/tsm/client/api/bin64/sample]]),
 	TSM_SRC_DIR="$withval", TSM_SRC_DIR="/opt/tivoli/tsm/client/api/bin64/sample")

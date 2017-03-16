@@ -35,8 +35,15 @@
 #include <sys/types.h>
 #include <sys/param.h>
 #include "tsmapi.h"
-#include "qtable.h"
 #include "tsmapi_impl.h"
+#include "qtable.h"
+#include "timing.h"
+
+TIMER_DECLARE(single_retrieve, 0); /* disabled timer */
+TIMER_DECLARE(single_archive, 0);
+TIMER_DECLARE(total_retrieve, 1); /* enabled timer */
+TIMER_DECLARE(total_archive, 1);
+
 
 #define OBJ_TYPE(type)							\
 	(DSM_OBJ_FILE == type ? "DSM_OBJ_FILE" :			\
@@ -302,6 +309,7 @@ static dsInt16_t retrieve_obj(qryRespArchiveData *query_data,
 		CT_ERROR(errno, "malloc");
 		return DSM_RC_UNSUCCESSFUL;
 	}
+	TIMER_START(single_retrieve);
 
 	DataBlk dataBlk;
 	dataBlk.stVersion = DataBlkVersion;
@@ -333,6 +341,10 @@ static dsInt16_t retrieve_obj(qryRespArchiveData *query_data,
 			goto cleanup;
 		}
 		total_written += cur_written;
+
+		TIMER_ADD_DATA(single_retrieve,cur_written);
+		TIMER_ADD_DATA(total_retrieve,cur_written);
+
 		CT_INFO("datablk_numbytes: %zu, cur_written: %zu,"
 			" total_written: %zu, obj_size: %zu",
 			dataBlk.numBytes, cur_written, total_written, obj_size);
@@ -384,6 +396,10 @@ cleanup:
 
 	}
 
+	TIMER_STOP(single_retrieve);
+	PRINT_TIMING_Bps(single_retrieve);
+	PRINT_TIMING_KBps(single_retrieve);
+	PRINT_TIMING_MBps(single_retrieve);
 	return (rc_minor ? DSM_RC_UNSUCCESSFUL : rc);
 }
 
@@ -1155,6 +1171,7 @@ dsInt16_t tsm_retrieve_fpath(const char *fs, const char *fpath,
 			     const char *desc, int fd,
 			     struct session_t *session)
 {
+	TIMER_START(total_retrieve);
 	dsInt16_t rc;
 	char hl[DSM_MAX_HL_LENGTH + 1] = {0};
 	char ll[DSM_MAX_LL_LENGTH + 1] = {0};
@@ -1188,12 +1205,19 @@ dsInt16_t tsm_retrieve_fpath(const char *fs, const char *fpath,
 
 cleanup:
 	destroy_qtable(&session->qtable);
+
+	TIMER_STOP(total_retrieve);
+	PRINT_TIMING_Bps(total_retrieve);
+	PRINT_TIMING_KBps(total_retrieve);
+	PRINT_TIMING_MBps(total_retrieve);
 	return rc;
 }
 
 static dsInt16_t tsm_archive_generic(struct archive_info_t *archive_info,
 				     int fd, struct session_t *session)
 {
+
+	TIMER_START(single_archive);
 	dsInt16_t rc;
 	ObjAttr obj_attr;
 	dsBool_t success_data = bFalse;
@@ -1389,6 +1413,7 @@ static dsInt16_t tsm_archive_generic(struct archive_info_t *archive_info,
 		/* Send the chunk */
 		total_read += cur_read;
 
+
 		fsm.file.pos += cur_read;
 		data_blk.bufferLen = cur_read;
 		cur_sent = 0;
@@ -1413,6 +1438,10 @@ static dsInt16_t tsm_archive_generic(struct archive_info_t *archive_info,
 					data_blk.numBytes, data_blk.bufferLen);
 
 			cur_sent += data_blk.numBytes;
+
+			TIMER_ADD_DATA(single_archive,data_blk.numBytes);
+			TIMER_ADD_DATA(total_archive,data_blk.numBytes);
+
 		} while (cur_sent < cur_read);
 
 		if (rc) {
@@ -1445,6 +1474,10 @@ static dsInt16_t tsm_archive_generic(struct archive_info_t *archive_info,
 	}
 	}
 
+	TIMER_STOP(single_archive);
+	PRINT_TIMING_Bps(single_archive);
+	PRINT_TIMING_KBps(single_retrieve);
+	PRINT_TIMING_MBps(single_archive);
 	return (success ? 0 : DSM_RC_UNSUCCESSFUL);
 }
 
@@ -1672,6 +1705,7 @@ dsInt16_t tsm_archive_fpath(const char *fs, const char *fpath, const char *desc,
                             int fd, const struct lu_fid_t *lu_fid,
 			    struct session_t *session)
 {
+	TIMER_START(total_archive);
 	int rc;
 	struct archive_info_t archive_info;
 
@@ -1694,10 +1728,15 @@ dsInt16_t tsm_archive_fpath(const char *fs, const char *fpath, const char *desc,
 	   regular files and directories inside D. */
 	if (archive_info.obj_name.objType == DSM_OBJ_DIRECTORY)
 		/* Archive (recursively) inside D. */
-		return tsm_archive_recursive(&archive_info, session);
+		rc = tsm_archive_recursive(&archive_info, session);
 	else
 		/* Archive regular file. */
-		return tsm_archive_generic(&archive_info, fd, session);
+		rc = tsm_archive_generic(&archive_info, fd, session);
 
+
+	TIMER_STOP(total_archive);
+	PRINT_TIMING_Bps(total_archive);
+	PRINT_TIMING_KBps(total_archive);
+	PRINT_TIMING_MBps(total_archive);
 	return rc;
 }
