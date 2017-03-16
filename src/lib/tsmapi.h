@@ -150,4 +150,9 @@ dsInt16_t tsm_retrieve_fpath(const char *fs, const char *fpath,
 			     const char *desc, int fd,
 			     struct session_t *session);
 
+dsInt16_t tsm_query_hl_ll(const char *fs, const char *hl, const char *ll,
+				 const char *desc, struct session_t *session);
+
+dsInt16_t extract_hl_ll(const char *fpath, char *hl, char *ll);
+
 #endif /* TSMAPI_H */

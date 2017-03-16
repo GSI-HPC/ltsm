@@ -720,7 +720,7 @@ dsInt16_t tsm_query_session(struct session_t *session, const char *fsname)
 	return rc;
 }
 
-static dsInt16_t tsm_query_hl_ll(const char *fs, const char *hl, const char *ll,
+dsInt16_t tsm_query_hl_ll(const char *fs, const char *hl, const char *ll,
 				 const char *desc, struct session_t *session)
 {
 	qryArchiveData qry_ar_data;
@@ -804,7 +804,7 @@ cleanup:
 	return rc;
 }
 
-static dsInt16_t extract_hl_ll(const char *fpath, char *hl, char *ll)
+dsInt16_t extract_hl_ll(const char *fpath, char *hl, char *ll)
 {
 	size_t len, i;
 
