@@ -289,7 +289,9 @@ static dsInt16_t retrieve_obj(qryRespArchiveData *query_data,
 			return  DSM_RC_UNSUCCESSFUL;
 
 		fd = open(fpath, O_WRONLY | O_TRUNC | O_CREAT,
-			  obj_info->st_mode);
+			  obj_info->st_mode == 0 ? /*fallback to 644 file perm*/
+			  S_IREAD+S_IWRITE+S_IRGRP+S_IROTH : obj_info->st_mode);
+
 		if (fd < 0) {
 			CT_ERROR(errno, "open '%s'", fpath);
 			return DSM_RC_UNSUCCESSFUL;
