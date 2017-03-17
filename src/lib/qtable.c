@@ -74,7 +74,10 @@ static int remove_older_obj(struct qtable_t *qtable,
 	struct object_t *oldobj = NULL;
 	rc = chashtable_lookup(qtable->chashtable, newobj,
 			       (void **)&oldobj);
-	if (rc == RC_DATA_FOUND && (date_in_sec(&newobj->qra_data.insDate) >
+	/* If newobj has same key (fs/hl/ll) and same date or
+	   later date than the oldobj (which is already in the hashtable),
+	   then we remove oldobj. */
+	if (rc == RC_DATA_FOUND && (date_in_sec(&newobj->qra_data.insDate) >=
 				    date_in_sec(&oldobj->qra_data.insDate))) {
 		rc = chashtable_remove(qtable->chashtable,
 				       newobj, (void **)&oldobj);
