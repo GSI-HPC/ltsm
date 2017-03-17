@@ -526,6 +526,10 @@ dsInt16_t tsm_connect(struct login_t *login, struct session_t *session)
 		return rc;
 	}
 
+	/* Default value, can be adjusted by calling tsm_query_session()
+	   which sets value offered by TSM server. */
+	session->max_obj_per_txn = 1;
+
 	regFSData reg_fs_data;
 	memset(&reg_fs_data, 0, sizeof(reg_fs_data));
 	reg_fs_data.fsName = login->fsname;
@@ -691,6 +695,13 @@ dsInt16_t tsm_query_session(struct session_t *session)
 		TSM_ERROR(session, rc, "dsmQuerySessInfo");
 		return rc;
 	}
+	/* Note: There seems to be a bug in IBM's implementation.
+	   If dsmSessInfo.maxObjPerTxn is the max value of 4096, then
+	   one can process only 4095 objects in one transaction. To
+	   be one the safe side we process dsmSessInfo.maxObjPerTxn - 1
+	   objects. */
+	session->max_obj_per_txn = dsmSessInfo.maxObjPerTxn > 1 ?
+		dsmSessInfo.maxObjPerTxn - 1 : 1;
 
 	CT_INFO("\n"
 		 "Server's ver.rel.lev       : %d.%d.%d.%d\n"
@@ -880,32 +891,12 @@ static dsInt16_t tsm_del_obj(const qryRespArchiveData *qry_resp_ar_data,
 {
 	dsmDelInfo del_info;
 	dsInt16_t rc;
-	dsUint16_t reason;
-
-	rc = dsmBeginTxn(session->handle);
-	TSM_DEBUG(session, rc,  "dsmBeginTxn");
-	if (rc != DSM_RC_SUCCESSFUL) {
-		TSM_ERROR(session, rc, "dsmBeginTxn");
-		return rc;
-	}
 
 	del_info.archInfo.stVersion = delArchVersion;
 	del_info.archInfo.objId = qry_resp_ar_data->objId;
 
 	rc = dsmDeleteObj(session->handle, dtArchive, del_info);
 	TSM_DEBUG(session, rc,  "dsmDeleteObj");
-	if (rc != DSM_RC_SUCCESSFUL) {
-		TSM_ERROR(session, rc, "dsmDeleteObj");
-		dsmEndTxn(session->handle, DSM_VOTE_COMMIT, &reason);
-		return rc;
-	}
-
-	rc = dsmEndTxn(session->handle, DSM_VOTE_COMMIT, &reason);
-	TSM_DEBUG(session, rc,  "dsmEndTxn");
-	if (rc != DSM_RC_SUCCESSFUL) {
-		TSM_ERROR(session, rc, "dsmEndTxn");
-		return rc;
-	}
 
 	return rc;
 }
@@ -914,22 +905,65 @@ static dsInt16_t tsm_delete_hl_ll(struct session_t *session)
 {
 	dsInt16_t rc;
 	qryRespArchiveData qra_data;
+	dsUint16_t err_reason;
+	uint32_t n = 0;
 
-	for (uint32_t n = 0; n < session->qtable.qarray.size; n++) {
+	while (n < session->qtable.qarray.size) {
+
+		if (n % (session->max_obj_per_txn) == 0) {
+			rc = dsmBeginTxn(session->handle);
+			TSM_DEBUG(session, rc,  "dsmBeginTxn");
+			if (rc) {
+				TSM_ERROR(session, rc, "dsmBeginTxn");
+				return rc;
+			}
+			CT_INFO("[delete txn begin, %d]", n);
+		}
+
 		rc = get_qra(&session->qtable, &qra_data, n);
 		CT_INFO("get_query: %lu, rc: %d", n, rc);
 		if (rc) {
 			errno = ENODATA; /* No data available */
 			CT_ERROR(errno, "get_query");
-			return rc;
+			goto cleanup_transaction;
 		}
+
 		rc = tsm_del_obj(&qra_data, session);
 		CT_DEBUG("tsm_del_obj: %lu, rc: %d", n, rc);
 		if (rc) {
-			CT_WARN("tsm_del_obj failed, object not deleted\n");
-			display_qra(&qra_data, n, "[delete failed]");
-		} else
-			display_qra(&qra_data, n, "[delete]");
+			CT_ERROR(EFAILED, "tsm_del_obj failed fs: %s,"
+				 " hl: %s, ll: %s",
+				 qra_data.objName.fs,
+				 qra_data.objName.hl,
+				 qra_data.objName.ll);
+			goto cleanup_transaction;
+		}
+
+		display_qra(&qra_data, n, "[delete txn active]");
+
+		if ((n % session->max_obj_per_txn ==
+		     (session->max_obj_per_txn - 1))
+		    || (n == session->qtable.qarray.size - 1)) {
+			rc = dsmEndTxn(session->handle, DSM_VOTE_COMMIT, &err_reason);
+			TSM_DEBUG(session, rc,  "dsmEndTxn");
+			if (rc || err_reason) {
+				TSM_ERROR(session, rc, "dsmEndTxn");
+				TSM_ERROR(session, err_reason, "dsmEndTxn reason");
+				display_qra(&qra_data, n, "[delete txn abort]");
+				goto cleanup_transaction;
+			}
+			CT_INFO("[delete txn end, %d]", n);
+		}
+		n++;
+	}
+	return rc;
+
+cleanup_transaction:
+	rc = dsmEndTxn(session->handle, DSM_VOTE_ABORT, &err_reason);
+	TSM_DEBUG(session, rc,  "dsmEndTxn");
+	if (rc || err_reason) {
+		TSM_ERROR(session, rc, "dsmEndTxn");
+		TSM_ERROR(session, err_reason, "dsmEndTxn reason");
 	}
 	return rc;
 }

@@ -110,6 +110,7 @@ struct progress_size_t {
 
 struct session_t {
 	dsUint32_t handle;
+	dsUint16_t max_obj_per_txn;
 	struct qtable_t qtable;
 	struct hsm_action_item *hai;
 	struct hsm_copyaction_private *hcp;
