@@ -2,6 +2,8 @@ LTSM - Lightweight TSM API, TSM Console Client and Lustre TSM Copytool for Archi
 ==============
 
 [![Build Status](https://travis-ci.org/tstibor/ltsm.svg?branch=master)](https://travis-ci.org/tstibor/ltsm)
+[![Tag Version](https://img.shields.io/github/tag/tstibor/ltsm.svg)](https://github.com/tstibor/ltsm/tags)
+[![License](http://img.shields.io/:license-gpl2-blue.svg)](http://www.gnu.org/licenses/gpl-2.0.html)
 
 A lightweight high-level TSM API/library (called *tsmapi*) supporting operations
 * *archiving*
