@@ -133,9 +133,8 @@ static int tsm_file_open_write(struct tsm_filehandle_t *fh)
 	ob.size.lo = ~((dsUint32_t)0);
 	ob.magic = MAGIC_ID_V1;
 
-	sndArchiveData arch_data;
-	arch_data.descr = fh->o_desc;
-	arch_data.stVersion = sndArchiveDataVersion;
+	fh->arch_data.descr = fh->o_desc;
+	fh->arch_data.stVersion = sndArchiveDataVersion;
 
 	fh->obj_attr.owner[0] = '\0';
 	fh->obj_attr.objInfoLength = sizeof(struct obj_info_t);
@@ -149,7 +148,7 @@ static int tsm_file_open_write(struct tsm_filehandle_t *fh)
 	fh->obj_attr.sizeEstimate.lo = ob.size.lo;
 	fh->obj_attr.stVersion = ObjAttrVersion;
 
-	rc = dsmSendObj(fh->session.handle, stArchive, &arch_data,
+	rc = dsmSendObj(fh->session.handle, stArchive, &fh->arch_data,
 			 &(fh->archive_info.obj_name), &fh->obj_attr, NULL);
 	if (rc) {
 		CT_ERROR(rc, "dsmSendObj failed");
@@ -183,6 +182,7 @@ int tsm_file_open(struct tsm_filehandle_t *fh, struct login_t* login,
 	strcpy(fh->o_desc, desc);
 	fh->login = login;
 	fh->mode = mode;
+	fh->bytes_processed = 0;
 
 	rc = tsm_connect(fh->login, &fh->session);
 	if (rc) {
@@ -246,6 +246,7 @@ int tsm_file_write(struct tsm_filehandle_t *fh, void* data_ptr,
 		CT_ERROR(rc, "dsmSendData failed");
 		return rc;
 	}
+	fh->bytes_processed += fh->data_blk.numBytes;
 	return rc;
 }
 
@@ -277,6 +278,7 @@ int tsm_file_read(struct tsm_filehandle_t *fh, void* data_ptr,
 		CT_ERROR(rc, "dsmGetData failed");
 		return rc;
 	}
+	fh->bytes_processed += fh->data_blk.numBytes;
 	return rc;
 }
 
@@ -292,7 +294,27 @@ static  int tsm_file_close_write(struct tsm_filehandle_t *fh)
 	rc = dsmEndTxn(fh->session.handle, DSM_VOTE_COMMIT, &reason);
 	if (rc) {
 		CT_ERROR(rc, "dsmEndTxn failed with reason %i", reason);
+	} else {
+		CT_DEBUG("finalizing object by setting size to %lu",
+			 fh->bytes_processed);
+		dsStruct64_t res = to_dsStruct64_t(fh->bytes_processed);
+		struct obj_info_t ob;
+		ob.size.hi = res.hi;
+		ob.size.lo = res.lo;
+		ob.magic = MAGIC_ID_V1;
+		memcpy(fh->obj_attr.objInfo, (char *)&(ob),
+		       fh->obj_attr.objInfoLength);
+		fh->obj_attr.sizeEstimate.hi = ob.size.hi;
+		fh->obj_attr.sizeEstimate.lo = ob.size.lo;
+		rc = dsmUpdateObj(fh->session.handle, stArchive, &fh->arch_data,
+				  &(fh->archive_info.obj_name), &fh->obj_attr,
+				  DSM_ARCHUPD_OBJINFO);
+		if (rc) {
+			CT_ERROR(rc, "setting size with dsmUpdateObj failed");
+		}
 	}
+
+
 	free(fh->obj_attr.objInfo);
 	return rc;
 }

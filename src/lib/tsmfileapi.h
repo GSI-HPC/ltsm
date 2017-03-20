@@ -44,14 +44,16 @@
 
 struct tsm_filehandle_t
 {
-	int mode; //mode in which the file is opened
-	struct login_t *login; //login information of the connection
-	struct session_t session; //hols the dsm session (and fs name)
-	struct archive_info_t archive_info; //holds hl/ll name parts
-	mcBindKey mc_bind_key; //used in file open write to bind mc
-	DataBlk data_blk; //used for read and write operations as buffer
-	ObjAttr obj_attr; //used in write as handle
-	char o_desc[DSM_MAX_DESCR_LENGTH + 1];
+	int mode; /* mode in which the file is opened */
+	struct login_t *login; /* login information of the connection */
+	struct session_t session; /* hols the dsm session (and fs name) */
+	struct archive_info_t archive_info; /* holds hl/ll name parts */
+	mcBindKey mc_bind_key; /* used in file open write to bind mc */
+	DataBlk data_blk; /* used for read and write operations as buffer */
+	ObjAttr obj_attr; /* used in write as handle */
+	char o_desc[DSM_MAX_DESCR_LENGTH + 1]; /* description of tsm-obj */
+	sndArchiveData arch_data; /* additional obj information */
+	off64_t bytes_processed; /* total bytes read/write since file open */
 };
 
 int tsm_file_open(struct tsm_filehandle_t *fh, struct login_t* login,
