@@ -76,14 +76,14 @@ struct lu_fid_t{
 	dsUint32_t f_ver;
 };
 
-struct obj_info_t{
+struct obj_info_t {
 	unsigned int magic;
 	dsStruct64_t size;
 	mode_t st_mode;
 	struct lu_fid_t lu_fid;
 };
 
-struct archive_info_t{
+struct archive_info_t {
 	char fpath[PATH_MAX + 1];
 	char desc[DSM_MAX_DESCR_LENGTH + 1];
 	struct obj_info_t obj_info;
@@ -137,7 +137,9 @@ void tsm_disconnect(struct session_t *session);
 dsmAppVersion get_appapi_ver();
 dsmApiVersionEx get_libapi_ver();
 
-dsInt16_t tsm_query_session(struct session_t *session, const char *fsname);
+dsInt16_t tsm_check_free_mountp(struct session_t *session,
+				const char *fsname);
+dsInt16_t tsm_query_session(struct session_t *session);
 dsInt16_t tsm_archive_fpath(const char *fs, const char *fpath,
 			    const char *desc, int fd,
 			    const struct lu_fid_t *lu_fid,

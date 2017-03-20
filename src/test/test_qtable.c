@@ -42,11 +42,12 @@ void test_qtable(CuTest *tc)
 		rc = insert_qtable(&qtable, &qra_data);
 		CuAssertTrue(tc, rc == DSM_RC_SUCCESSFUL);
 	}
-	CuAssertIntEquals(tc, N, chashtable_size(qtable.chashtable));
+	/* Objects have identical keys and dates, thus their are overwritten. */
+	CuAssertIntEquals(tc, 1, chashtable_size(qtable.chashtable));
 
 	rc = create_array(&qtable, bFalse);
 	CuAssertTrue(tc, rc == DSM_RC_SUCCESSFUL);
-	CuAssertIntEquals(tc, N, qtable.qarray.size);
+	CuAssertIntEquals(tc, 1, qtable.qarray.size);
 	CuAssertPtrNotNull(tc, qtable.qarray.data);
 
 	destroy_qtable(&qtable);
@@ -69,11 +70,12 @@ void test_qtable_sort_top(CuTest *tc)
 
 	for (uint32_t n = 0; n < N; n++) {
 		bzero(&qra_data, sizeof(qra_data));
+		qra_data.insDate.year = N - n;
 		qra_data.restoreOrderExt.top = rand() % N;
 		rc = insert_qtable(&qtable, &qra_data);
 		CuAssertTrue(tc, rc == DSM_RC_SUCCESSFUL);
 	}
-
+	CuAssertIntEquals(tc, N, chashtable_size(qtable.chashtable));
 	rc = create_array(&qtable, bTrue);
 	CuAssertTrue(tc, rc == DSM_RC_SUCCESSFUL);
 	CuAssertIntEquals(tc, qtable.qarray.size,
@@ -119,6 +121,7 @@ void test_qtable_sort_all(CuTest *tc)
 
 	for (uint32_t n = 0; n < N; n++) {
 		bzero(&qra_data, sizeof(qra_data));
+		qra_data.insDate.year = N - n;
 		qra_data.restoreOrderExt.top = rand() % N;
 		qra_data.restoreOrderExt.hi_hi = rand() % N;
 		qra_data.restoreOrderExt.hi_lo = rand() % N;

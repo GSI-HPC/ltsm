@@ -267,7 +267,7 @@ int main(int argc, char *argv[])
 	if (rc)
 		goto cleanup;
 
-	rc = tsm_query_session(&session, opt.o_fsname);
+	rc = tsm_query_session(&session);
 	if (rc)
 		goto cleanup;
 

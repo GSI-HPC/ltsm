@@ -190,7 +190,7 @@ int tsm_file_open(struct tsm_filehandle_t *fh, struct login_t* login,
 		return rc;
 	}
 
-	rc = tsm_query_session(&fh->session, login->fsname);
+	rc = tsm_query_session(&fh->session);
 	if (rc) {
 		CT_ERROR(rc, "tsm_query_session failed for %s", path);
 		return rc;

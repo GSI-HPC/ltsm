@@ -817,8 +817,13 @@ static int ct_connect_sessions(void)
 			rc = 0;
 			break;
 		}
-		/* Querying session is optional. */
-		rc = tsm_query_session(&sessions[n], opt.o_fsname);
+		/* Find maximum number of allowed mountpoints (alias the number
+		   of maxium threads) by sending DSM_OBJ_DIRECTORY and verifying
+		   whether transaction was successful. If rc is ECONNREFUSED,
+		   then number of threads > maximum number of allowed
+		   mountpoints, and the current number of threads have to be
+		   decreased. */
+		rc = tsm_check_free_mountp(&sessions[n], opt.o_fsname);
 		if (rc) {
 			tsm_disconnect(&sessions[n]);
 			nthreads = n; // don't attempt to create more threads

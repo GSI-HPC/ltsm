@@ -36,7 +36,6 @@
 #include <sys/param.h>
 #include "tsmapi.h"
 #include "qtable.h"
-#include "tsmapi_impl.h"
 
 #define OBJ_TYPE(type)							\
 	(DSM_OBJ_FILE == type ? "DSM_OBJ_FILE" :			\
@@ -389,7 +388,8 @@ cleanup:
 	return (rc_minor ? DSM_RC_UNSUCCESSFUL : rc);
 }
 
-static void display_qra(const qryRespArchiveData *qra_data, const uint32_t n)
+static void display_qra(const qryRespArchiveData *qra_data, const uint32_t n,
+	const char *msg)
 {
 	char ins_str_date[128] = {0};
 	char exp_str_date[128] = {0};
@@ -398,8 +398,17 @@ static void display_qra(const qryRespArchiveData *qra_data, const uint32_t n)
 	date_to_str(ins_str_date, &(qra_data->insDate));
 	date_to_str(exp_str_date, &(qra_data->expDate));
 
-	if (api_msg_get_level() >= API_MSG_INFO) {
-		CT_INFO("object # %lu\n"
+	if (api_msg_get_level() == API_MSG_NORMAL) {
+		fprintf(stdout, "%s %20s %14zu, fs:%s hl:%s ll:%s\n",
+			msg,
+			OBJ_TYPE(qra_data->objName.objType),
+			to_off64_t(obj_info.size),
+			qra_data->objName.fs,
+			qra_data->objName.hl,
+			qra_data->objName.ll);
+		fflush(stdout);
+	} else if (api_msg_get_level() > API_MSG_NORMAL) {
+		CT_INFO("%s object # %lu\n"
 			"fs: %s, hl: %s, ll: %s\n"
 			"object id (hi,lo)                          : (%u,%u)\n"
 			"object info length                         : %d\n"
@@ -412,6 +421,7 @@ static void display_qra(const qryRespArchiveData *qra_data, const uint32_t n)
 			"expiration date                            : %s\n"
 			"restore order (top,hi_hi,hi_lo,lo_hi,lo_lo): (%u,%u,%u,%u,%u)\n"
 			"estimated size (hi,lo)                     : (%u,%u)\n",
+			msg,
 			n,
 			qra_data->objName.fs,
 			qra_data->objName.hl,
@@ -434,14 +444,6 @@ static void display_qra(const qryRespArchiveData *qra_data, const uint32_t n)
 			qra_data->restoreOrderExt.lo_lo,
 			qra_data->sizeEstimate.hi,
 			qra_data->sizeEstimate.lo);
-	} else {
-		fprintf(stdout, "%s %12zu, fs:%s hl:%s ll:%s\n",
-			OBJ_TYPE(qra_data->objName.objType),
-			to_off64_t(obj_info.size),
-			qra_data->objName.fs,
-			qra_data->objName.hl,
-			qra_data->objName.ll);
-		fflush(stdout);
 	}
 }
 
@@ -454,7 +456,7 @@ dsInt16_t tsm_print_query(struct session_t *session)
 		rc = get_qra(&session->qtable, &qra_data, n);
 		if (rc)
 			return DSM_RC_UNSUCCESSFUL;
-		display_qra(&qra_data, n);
+		display_qra(&qra_data, n, "[query]");
 	}
 	return DSM_RC_SUCCESSFUL;
 }
@@ -589,7 +591,74 @@ dsmApiVersionEx get_libapi_ver()
 	return libapi_ver;
 }
 
-dsInt16_t tsm_query_session(struct session_t *session, const char *fsname)
+dsInt16_t tsm_check_free_mountp(struct session_t *session,
+				const char *fsname)
+{
+	dsInt16_t rc;
+
+	/* Check if we have free mountpoints left for the node */
+	dsUint8_t vote_txn = DSM_VOTE_COMMIT;
+	dsUint16_t err_reason = 0;
+	mcBindKey mc_bind_key = { .stVersion =  mcBindKeyVersion };
+	dsmObjName obj_name = {
+		.ll = "/.mount",
+		.hl = "/.test",
+		.objType = DSM_OBJ_DIRECTORY
+	};
+	strcpy(obj_name.fs, fsname);
+
+	rc = dsmBeginTxn(session->handle);
+	if (rc) {
+		TSM_ERROR(session, rc, "dsmBeginTxn");
+		return ECONNABORTED;
+	}
+
+	rc = dsmBindMC(session->handle, &obj_name, stArchive, &mc_bind_key);
+	if (rc) {
+		TSM_ERROR(session, rc, "dsmBindMC");
+		return ECONNABORTED;
+	}
+
+	sndArchiveData arch_data = { 0 };
+	ObjAttr obj_attr = { 0 };
+	arch_data.stVersion = sndArchiveDataVersion;
+	arch_data.descr = "Node mountpoint check";
+
+	obj_attr.stVersion = ObjAttrVersion;
+	obj_attr.objCompressed = bFalse;
+	obj_attr.sizeEstimate.lo = 1;
+	obj_attr.sizeEstimate.hi = 1;
+
+	rc = dsmSendObj(session->handle, stArchive, &arch_data,
+			&obj_name, &obj_attr, NULL);
+	if (rc) {
+		TSM_ERROR(session, rc, "dsmSendObj");
+		return ECONNABORTED;
+	}
+
+	rc = dsmEndSendObj(session->handle);
+	if (rc) {
+		TSM_ERROR(session, rc, "dsmEndSendObj");
+		return ECONNABORTED;
+	}
+
+	rc = dsmEndTxn(session->handle, vote_txn, &err_reason);
+	if (rc) {
+		TSM_DEBUG(session, err_reason, "dsmEndTxn reason");
+		if (err_reason == DSM_RS_ABORT_EXCEED_MAX_MP)
+			return ECONNREFUSED;
+		else
+			return ECONNABORTED;
+	}
+
+	TSM_DEBUG(session, rc, "Passed mount point check");
+
+	/* TODO: Delete the dummy DSM_OBJ_DIRECTORY. */
+
+	return rc;
+}
+
+dsInt16_t tsm_query_session(struct session_t *session)
 {
 	optStruct dsmOpt;
 	dsInt16_t rc;
@@ -652,8 +721,10 @@ dsInt16_t tsm_query_session(struct session_t *session, const char *fsname)
 
 	if (libapi_ver < appapi_ver) {
 		rc = DSM_RC_UNSUCCESSFUL;
-		TSM_ERROR(session, rc, "The TSM API library is lower than the application version\n"
-			  "Install the current library version.");
+		TSM_ERROR(session, rc, "TSM API library is lower than the"
+			  " application version, \n"
+			  "install the current library version.");
+		return rc;
 	}
 
 	CT_INFO("IBM API library version = %d.%d.%d.%d\n",
@@ -661,63 +732,6 @@ dsInt16_t tsm_query_session(struct session_t *session, const char *fsname)
 		libapi_ver_t.release,
 		libapi_ver_t.level,
 		libapi_ver_t.subLevel);
-
-	/* Check if we have free mountpoints left for the node */
-	dsUint8_t vote_txn = DSM_VOTE_COMMIT;
-	dsUint16_t err_reason = 0;
-	mcBindKey mc_bind_key = { .stVersion =  mcBindKeyVersion };
-	dsmObjName obj_name = {
-		.ll = "/.mount",
-		.hl = "/.test",
-		.objType = DSM_OBJ_DIRECTORY
-	};
-	strcpy(obj_name.fs, fsname);
-
-	rc = dsmBeginTxn(session->handle);
-	if (rc) {
-		TSM_ERROR(session, rc, "dsmBeginTxn");
-		return ECONNABORTED;
-	}
-
-	rc = dsmBindMC(session->handle, &obj_name, stArchive, &mc_bind_key);
-	if (rc) {
-		TSM_ERROR(session, rc, "dsmBindMC");
-		return ECONNABORTED;
-	}
-
-	sndArchiveData arch_data = { 0 };
-	ObjAttr obj_attr = { 0 };
-	arch_data.stVersion = sndArchiveDataVersion;
-	arch_data.descr = "Node mountpoint check";
-
-	obj_attr.stVersion = ObjAttrVersion;
-	obj_attr.objCompressed = bFalse;
-	obj_attr.sizeEstimate.lo = 1;
-	obj_attr.sizeEstimate.hi = 1;
-
-	rc = dsmSendObj(session->handle, stArchive, &arch_data,
-			&obj_name, &obj_attr, NULL);
-	if (rc) {
-		TSM_ERROR(session, rc, "dsmSendObj");
-		return ECONNABORTED;
-	}
-
-	rc = dsmEndSendObj(session->handle);
-	if (rc) {
-		TSM_ERROR(session, rc, "dsmEndSendObj");
-		return ECONNABORTED;
-	}
-
-	rc = dsmEndTxn(session->handle, vote_txn, &err_reason);
-	if (rc) {
-		TSM_DEBUG(session, err_reason, "dsmEndTxn reason");
-		if (err_reason == DSM_RS_ABORT_EXCEED_MAX_MP)
-			return ECONNREFUSED;
-		else
-			return ECONNABORTED;
-	}
-
-	TSM_DEBUG(session, rc, "Passed mount point check");
 
 	return rc;
 }
@@ -901,36 +915,23 @@ static dsInt16_t tsm_del_obj(const qryRespArchiveData *qry_resp_ar_data,
 static dsInt16_t tsm_delete_hl_ll(struct session_t *session)
 {
 	dsInt16_t rc;
-	qryRespArchiveData query_data;
+	qryRespArchiveData qra_data;
 
 	for (uint32_t n = 0; n < session->qtable.qarray.size; n++) {
-		rc = get_qra(&session->qtable, &query_data, n);
+		rc = get_qra(&session->qtable, &qra_data, n);
 		CT_INFO("get_query: %lu, rc: %d", n, rc);
 		if (rc) {
 			errno = ENODATA; /* No data available */
 			CT_ERROR(errno, "get_query");
 			return rc;
 		}
-		rc = tsm_del_obj(&query_data, session);
+		rc = tsm_del_obj(&qra_data, session);
+		CT_DEBUG("tsm_del_obj: %lu, rc: %d", n, rc);
 		if (rc) {
-			CT_WARN("\ncannot delete obj %s\n"
-				"\t\tfs: %s\n"
-				"\t\thl: %s\n"
-				"\t\tll: %s",
-				OBJ_TYPE(query_data.objName.objType),
-				query_data.objName.fs,
-				query_data.objName.hl,
-				query_data.objName.ll);
-		} else {
-			CT_INFO("\ndeleted obj fs: %s\n"
-				"\t\tfs: %s\n"
-				"\t\thl: %s\n"
-				"\t\tll: %s",
-				OBJ_TYPE(query_data.objName.objType),
-				query_data.objName.fs,
-				query_data.objName.hl,
-				query_data.objName.ll);
-		}
+			CT_WARN("tsm_del_obj failed, object not deleted\n");
+			display_qra(&qra_data, n, "[delete failed]");
+		} else
+			display_qra(&qra_data, n, "[delete]");
 	}
 	return rc;
 }
@@ -1087,16 +1088,12 @@ static dsInt16_t tsm_retrieve_generic(int fd, struct session_t *session)
 			       (char *)&(query_data.objInfo),
 			       query_data.objInfolen);
 
-			if (api_msg_get_level() >= API_MSG_INFO) {
-				CT_INFO("retrieving object:");
-				display_qra(&query_data, c_iter);
-			}
-
 			if (obj_info.magic != MAGIC_ID_V1) {
 				CT_WARN("skip object due magic mismatch with MAGIC_ID: %d\n", obj_info.magic);
 				continue;	/* Ignore this object and try next one. */
 			}
 
+			display_qra(&query_data, c_iter, "[retrieve]");
 			switch (query_data.objName.objType) {
 			case DSM_OBJ_FILE: {
 				rc_minor = retrieve_obj(&query_data, &obj_info, fd, session);
@@ -1197,259 +1194,191 @@ static dsInt16_t tsm_archive_generic(struct archive_info_t *archive_info,
 				     int fd, struct session_t *session)
 {
 	dsInt16_t rc;
+	dsInt16_t rc_minor = 0;
+	mcBindKey mc_bind_key;
+	sndArchiveData arch_data;
 	ObjAttr obj_attr;
-	dsBool_t success_data = bFalse;
+	DataBlk data_blk;
+	dsUint16_t err_reason;
 	dsBool_t success = bFalse;
 	ssize_t total_read = 0;
 	ssize_t cur_read = 0;
-	size_t cur_sent = 0;
-	off64_t total_size = 0;
+	dsBool_t done = bFalse;
+	dsUint8_t vote_txn;
+	dsBool_t is_local_fd = bFalse;
 
-	struct archive_fsm_state_t fsm = ARCHIVE_FSM_INITIALIZER();
+	data_blk.bufferPtr = NULL;
+	obj_attr.objInfo = NULL;
 
-	while(fsm.state != TSMAPI_FINISHED) switch(fsm.state) {
-
-	case TSMAPI_BEGIN_TX: {
-		success = success_data = bFalse;
-		mcBindKey mc_bind_key = { 0 };
-		rc = 0;
-
-		/* Start transaction. */
-		rc = dsmBeginTxn(session->handle);
-		TSM_DEBUG(session, rc,  "dsmBeginTxn");
-		if (rc) {
-			TSM_ERROR(session, rc, "dsmBeginTxn");
-			fsm.state = TSMAPI_FINISHED;
-			break;
+	if (fd < 0) {
+		fd = open(archive_info->fpath, O_RDONLY,
+			  archive_info->obj_info.st_mode);
+		if (fd < 0) {
+			CT_ERROR(errno, "open '%s'", archive_info->fpath);
+			return DSM_RC_UNSUCCESSFUL;
 		}
+		is_local_fd = bTrue;
+	}
 
-		mc_bind_key.stVersion = mcBindKeyVersion;
-		rc = dsmBindMC(session->handle, &(archive_info->obj_name), stArchive, &mc_bind_key);
-		TSM_DEBUG(session, rc,  "dsmBindMC");
-		if (rc) {
-			TSM_ERROR(session, rc, "dsmBindMC");
-			fsm.state = TSMAPI_END_TX;
-			break;
-		}
+	/* Start transaction. */
+	rc = dsmBeginTxn(session->handle);
+	TSM_DEBUG(session, rc,  "dsmBeginTxn");
+	if (rc) {
+		TSM_ERROR(session, rc, "dsmBeginTxn");
+		goto cleanup;
+	}
 
-		fsm.data_buf = calloc(TSM_BUF_LENGTH, sizeof(char));
-		if (!fsm.data_buf) {
+	mc_bind_key.stVersion = mcBindKeyVersion;
+	rc = dsmBindMC(session->handle, &(archive_info->obj_name), stArchive, &mc_bind_key);
+	TSM_DEBUG(session, rc,  "dsmBindMC");
+	if (rc) {
+		TSM_ERROR(session, rc, "dsmBindMC");
+		goto cleanup_transaction;
+	}
+
+	arch_data.stVersion = sndArchiveDataVersion;
+	if (strlen(archive_info->desc) <= DSM_MAX_DESCR_LENGTH)
+		arch_data.descr = (char *)archive_info->desc;
+	else
+		arch_data.descr[0] = '\0';
+
+	rc = obj_attr_prepare(&obj_attr, archive_info);
+	if (rc)
+		goto cleanup_transaction;
+
+	/* Start sending object. */
+	rc = dsmSendObj(session->handle, stArchive, &arch_data,
+			&(archive_info->obj_name), &obj_attr, NULL);
+	TSM_DEBUG(session, rc,  "dsmSendObj");
+	if (rc) {
+		TSM_ERROR(session, rc, "dsmSendObj");
+		goto cleanup_transaction;
+	}
+
+	if (archive_info->obj_name.objType == DSM_OBJ_FILE) {
+		data_blk.bufferPtr = (char *)malloc(sizeof(char) * TSM_BUF_LENGTH);
+		if (!data_blk.bufferPtr) {
 			rc = errno;
 			CT_ERROR(rc, "malloc");
-			fsm.state = TSMAPI_END_TX;
-			break;
+			goto cleanup_transaction;
 		}
+		data_blk.stVersion = DataBlkVersion;
+		ssize_t total_size = to_off64_t(archive_info->obj_info.size);
 
-		fsm.state = TSMAPI_GET_FILE;
-		break;
-	}
-	case TSMAPI_END_TX: {
-		dsUint8_t vote_txn = DSM_VOTE_ABORT;
-		dsUint16_t err_reason = 0;
+		while (!done) {
+			cur_read = read(fd, data_blk.bufferPtr, TSM_BUF_LENGTH);
+			if (cur_read < 0) {
+				CT_ERROR(errno, "read");
+				rc_minor = DSM_RC_UNSUCCESSFUL;
+				goto cleanup_transaction;
+			} else if (cur_read == 0)
+				/* Zero indicates end of file. */
+				done = bTrue;
+			else {
+				total_read += cur_read;
+				data_blk.bufferLen = cur_read;
 
-		/* Commit transaction (DSM_VOTE_COMMIT) on success, otherwise
-		   roll back current transaction (DSM_VOTE_ABORT). */
-		vote_txn = ((success == bTrue) && (success_data == bTrue)) ?
-			DSM_VOTE_COMMIT : DSM_VOTE_ABORT;
-		rc = dsmEndTxn(session->handle, vote_txn, &err_reason);
-		TSM_DEBUG(session, rc,  "dsmEndTxn");
-		if (rc || err_reason) {
-			TSM_ERROR(session, rc, "dsmEndTxn");
-			TSM_ERROR(session, err_reason, "dsmEndTxn reason");
-			success = bFalse;
-		}
+				data_blk.numBytes = 0;
+				rc = dsmSendData(session->handle, &data_blk);
+				TSM_DEBUG(session, rc,  "dsmSendData");
+				if (rc) {
+					TSM_ERROR(session, rc, "dsmSendData");
+					goto cleanup_transaction;
+				}
+				CT_INFO("cur_read: %zu, total_read: %zu,"
+					" total_size: %zu", cur_read,
+					total_read, total_size);
 
-		if (success) {
-			CT_INFO("\n*** successfully archived: %s %s of size: %lu bytes "
-				"with settings ***\nfs: %s\nhl: %s\nll: %s\ndesc: %s\n",
-				OBJ_TYPE(fsm.archive_info->obj_name.objType),
-				fsm.archive_info->fpath, total_read,
-				fsm.archive_info->obj_name.fs, fsm.archive_info->obj_name.hl,
-				fsm.archive_info->obj_name.ll, fsm.archive_info->desc);
-		}
+				if (data_blk.numBytes != data_blk.bufferLen)
+					CT_WARN("dsmSendData transmitted %u"
+						" out of %d",
+						data_blk.numBytes,
+						data_blk.bufferLen);
 
-		free(fsm.data_buf);
-		fsm.data_buf = NULL;
-
-		/* TODO: tx batch */
-		fsm.state = TSMAPI_FINISHED;
-		break;
-	}
-	case TSMAPI_GET_FILE: {
-		/* TODO: tx batching*/
-		fsm.archive_info = archive_info;
-
-		fsm.file.local = bFalse;
-		if (fd < 0) {
-			fd = open(fsm.archive_info->fpath, O_RDONLY,
-				fsm.archive_info->obj_info.st_mode);
-			if (fd < 0) {
-				CT_ERROR(errno, "open '%s'", fsm.archive_info->fpath);
-				fsm.state = TSMAPI_END_TX;
-				break;
+				/* Function callback on progress */
+				if (session->progress != NULL) {
+					struct progress_size_t progress_size = {
+						.cur = cur_read,
+						.cur_total = total_read,
+						.total = total_size
+					};
+					rc_minor = session->progress(
+						&progress_size, session);
+					if (rc_minor) {
+						CT_ERROR(rc_minor,
+							 "progress function"
+							 " callback failed");
+	 					goto cleanup_transaction;
+	 				}
+				}
 			}
-
-			fsm.file.local = bTrue;
 		}
-		fsm.file.fd = fd;
-		fsm.file.pos = 0;
-		fsm.file.len = 0;
-
-		total_size = to_off64_t(fsm.archive_info->obj_info.size);
-
-		fsm.state = TSMAPI_SEND_OBJ;
-		break;
-	}
-
-	case TSMAPI_SEND_OBJ: {
-		sndArchiveData arch_data = { 0 };
-
-		arch_data.stVersion = sndArchiveDataVersion;
-		if (strlen(fsm.archive_info->desc) <= DSM_MAX_DESCR_LENGTH)
-			arch_data.descr = (char *)fsm.archive_info->desc;
-		else
-			arch_data.descr[0] = '\0';
-
-		rc = obj_attr_prepare(&obj_attr, fsm.archive_info);
-		if (rc) {
-			fsm.state = TSMAPI_END_TX;
-			break;
-		}
-
-		/* Start sending object. */
-		rc = dsmSendObj(session->handle, stArchive, &arch_data,
-				&(fsm.archive_info->obj_name), &obj_attr, NULL);
-		TSM_DEBUG(session, rc,  "dsmSendObj");
-		if (rc) {
-			/* TODO: check rc values */
-			TSM_ERROR(session, rc, "dsmSendObj");
-			fsm.state = TSMAPI_END_TX;
-			break;
-		}
-
-		CT_INFO("Sending [%s]: %s", OBJ_TYPE(fsm.archive_info->obj_name.objType),
-			fsm.archive_info->fpath);
-
-
-		if (fsm.archive_info->obj_name.objType == DSM_OBJ_FILE) {
-			fsm.state = TSMAPI_SEND_DATA;
-		} else {
-			success_data = bTrue; /* no data to send for OBJ_DIR */
-			fsm.state = TSMAPI_END_SEND_OBJ;
-		}
-
-		break;
-	}
-	case TSMAPI_END_SEND_OBJ: {
 		/* File obj. was archived, verify that the number of bytes read
 		   from file descriptor matches the number of bytes we
 		   transfered with dsmSendData. */
+		success = total_read == to_off64_t(archive_info->obj_info.size) ?
+			bTrue : bFalse;
+	} else /* dsmSendObj was successful and we archived a directory obj. */
+		success = bTrue;
 
-		rc = dsmEndSendObj(session->handle);
-		TSM_DEBUG(session, rc,  "dsmEndSendObj");
-		if (rc) {
-			TSM_ERROR(session, rc, "dsmEndSendObj");
+	rc = dsmEndSendObj(session->handle);
+	TSM_DEBUG(session, rc,  "dsmEndSendObj");
+	if (rc) {
+		TSM_ERROR(session, rc, "dsmEndSendObj");
+		success = bFalse;
+	}
+
+cleanup_transaction:
+	/* Commit transaction (DSM_VOTE_COMMIT) on success, otherwise
+	   roll back current transaction (DSM_VOTE_ABORT). */
+	vote_txn = success == bTrue ? DSM_VOTE_COMMIT : DSM_VOTE_ABORT;
+	rc = dsmEndTxn(session->handle, vote_txn, &err_reason);
+	TSM_DEBUG(session, rc,  "dsmEndTxn");
+	if (rc || err_reason) {
+		TSM_ERROR(session, rc, "dsmEndTxn");
+		TSM_ERROR(session, err_reason, "dsmEndTxn reason");
+		success = bFalse;
+	}
+	if (success) {
+		if (api_msg_get_level() == API_MSG_NORMAL) {
+			fprintf(stdout, "%s %20s %14zu, fs:%s hl:%s "
+				"ll:%s\n",
+				"[archive] ",
+				OBJ_TYPE(archive_info->obj_name.objType),
+				total_read,
+				archive_info->obj_name.fs,
+				archive_info->obj_name.hl,
+				archive_info->obj_name.ll);
+		} else if (api_msg_get_level() > API_MSG_NORMAL) {
+			CT_INFO("\n*** successfully archived: %s %s of "
+				"size: %lu bytes "
+				"with settings ***\nfs: %s\nhl: "
+				"%s\nll: %s\ndesc: %s\n",
+				OBJ_TYPE(archive_info->obj_name.objType),
+				archive_info->fpath, total_read,
+				archive_info->obj_name.fs,
+				archive_info->obj_name.hl,
+				archive_info->obj_name.ll,
+				archive_info->desc);
 		}
-
+	}
+cleanup:
+	if (obj_attr.objInfo)
 		free(obj_attr.objInfo);
-		obj_attr.objInfo = NULL;
+	if (data_blk.bufferPtr)
+		free(data_blk.bufferPtr);
 
-
-		/* TODO: tx batch */
-		success = (rc == 0) ? bTrue : bFalse;
-		fsm.state = TSMAPI_END_TX;
-		break;
-	}
-	case TSMAPI_SEND_DATA: {
-		DataBlk data_blk = { 0 };
-
-		data_blk.bufferPtr = fsm.data_buf;
-		data_blk.stVersion = DataBlkVersion;
-		data_blk.numBytes = 0;
-
-		bzero(data_blk.bufferPtr, TSM_BUF_LENGTH);
-		cur_read = pread(fsm.file.fd, data_blk.bufferPtr, TSM_BUF_LENGTH, fsm.file.pos);
-		if (cur_read < 0) {
-			CT_ERROR(errno, "pread");
-			fsm.state = TSMAPI_END_SEND_OBJ;
-			break;
-		} else if (cur_read == 0) { /* Zero indicates end of file. */
-			if (fsm.file.local) {
-				rc = close(fd);
-				if (rc < 0) {
-					CT_ERROR(errno, "close failed: %d", fd);
-					rc = DSM_RC_UNSUCCESSFUL;
-				}
-			}
-			fd = 0;
-
-			success_data = (total_read == total_size) ? bTrue : bFalse;
-			fsm.state = TSMAPI_END_SEND_OBJ;
-			break;
+	if (is_local_fd && !(fd < 0)) {
+		rc = close(fd);
+		if (rc < 0) {
+			CT_ERROR(errno, "close failed: %d", fd);
+			rc = DSM_RC_UNSUCCESSFUL;
 		}
 
-		/* Send the chunk */
-		total_read += cur_read;
-
-		fsm.file.pos += cur_read;
-		data_blk.bufferLen = cur_read;
-		cur_sent = 0;
-
-		do {
-			data_blk.bufferPtr += cur_sent;
-			data_blk.bufferLen -= cur_sent;
-
-			rc = dsmSendData(session->handle, &data_blk);
-			TSM_DEBUG(session, rc,  "dsmSendData");
-			/* if (rc == DSM_RC_WILL_ABORT)
-			 * Doc say we should end tx with COMMIT, but that would leave
-			 * a partial file in the archive */
-
-			if (rc) {
-				TSM_ERROR(session, rc, "dsmSendData");
-				break;
-			}
-
-			if(data_blk.numBytes != data_blk.bufferLen)
-				CT_DEBUG("dsmSendData transmitted %u out of %d",
-					data_blk.numBytes, data_blk.bufferLen);
-
-			cur_sent += data_blk.numBytes;
-		} while (cur_sent < cur_read);
-
-		if (rc) {
-			success = bFalse;
-			fsm.state = TSMAPI_END_SEND_OBJ;
-			break;
-		}
-
-		CT_INFO("cur_read: %zu, total_read: %zu,"
-			" total_size: %zu", cur_read,
-			fsm.file.pos, total_size);
-
-		/* Function callback on progress */
-		if (session->progress != NULL) {
-			struct progress_size_t progress_size = {
-				.cur = cur_read,
-				.cur_total = total_read,
-				.total = total_size
-			};
-
-			session->progress(&progress_size, session);
-		}
-
-		fsm.state = TSMAPI_SEND_DATA;
-		break;
-	}
-	default: {
-		CT_ERROR(-1, "tsm_archive_generic: invalid state");
-		break;
-	}
 	}
 
-	return (success ? 0 : DSM_RC_UNSUCCESSFUL);
+	return (rc_minor ? DSM_RC_UNSUCCESSFUL : rc);
 }
-
 
 /**
  * @brief Initialize and setup archive_info_t struct fields.
