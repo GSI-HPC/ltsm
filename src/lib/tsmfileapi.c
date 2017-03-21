@@ -299,6 +299,7 @@ static  int tsm_file_close_write(struct tsm_filehandle_t *fh)
 			 fh->bytes_processed);
 		dsStruct64_t res = to_dsStruct64_t(fh->bytes_processed);
 		struct obj_info_t ob;
+		ob.st_mode = S_IREAD+S_IWRITE+S_IRGRP+S_IROTH; /*644 file perm*/
 		ob.size.hi = res.hi;
 		ob.size.lo = res.lo;
 		ob.magic = MAGIC_ID_V1;
@@ -313,7 +314,6 @@ static  int tsm_file_close_write(struct tsm_filehandle_t *fh)
 			CT_ERROR(rc, "setting size with dsmUpdateObj failed");
 		}
 	}
-
 
 	free(fh->obj_attr.objInfo);
 	return rc;
