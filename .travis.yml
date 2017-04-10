@@ -1,21 +1,26 @@
 language: c
 
-script: ./autogen.sh && ./configure CFLAGS='-g -DDEBUG -O0' --with-lustre=/opt/lustre-release/ LDFLAGS='-L/usr/include/lustre' && make && ./src/test/test_tsmapi
+env:
+    global:
+        - CFLAGS='-g -DDEBUG -O0'
+    matrix:
+        - CONFIGURE_ARGS="--with-lustre=/opt/lustre-release/" LDFLAGS='-L/usr/include/lustre'
+        -
 
-before_install:
+script: ./autogen.sh && ./configure $CONFIGURE_ARGS && make && ./src/test/test_tsmapi
+
+install:
   - sudo add-apt-repository ppa:dns/gnu --yes
   - sudo apt-get update -q
   - sudo apt-get install --only-upgrade autoconf
   - autoconf --version
-  - wget https://joergbehrendt.com/files/projects/ltsm/debian-packages/amd64/dependencies/gskssl64_8.0-50.66.linux.x86_64.deb
+  - wget http://ftp.software.ibm.com/storage/tivoli-storage-management/maintenance/client/v7r1/Linux/LinuxX86_DEB/BA/v716/7.1.6.0-TIV-TSMBAC-LinuxX86_DEB.tar
+  - tar xf 7.1.6.0-TIV-TSMBAC-LinuxX86_DEB.tar
   - sudo dpkg -i gskssl64_8.0-50.66.linux.x86_64.deb
-  - wget https://joergbehrendt.com/files/projects/ltsm/debian-packages/amd64/dependencies/gskcrypt64_8.0-50.66.linux.x86_64.deb
   - sudo dpkg -i gskcrypt64_8.0-50.66.linux.x86_64.deb
-  - wget https://joergbehrendt.com/files/projects/ltsm/debian-packages/amd64/dependencies/lustre-server-utils_2.9.0-1_amd64.deb
+  - sudo dpkg -i tivsm-api64.amd64.deb
+  - wget http://web-docs.gsi.de/~tstibor/lustre/lustre-builds/jessie/server/2.9/zfs/lustre-server-utils_2.9.0-1_amd64.deb
+  - wget http://web-docs.gsi.de/~tstibor/lustre/lustre-builds/jessie/server/2.9/zfs/lustre-dev_2.9.0-1_amd64.deb
   - sudo dpkg -i lustre-server-utils_2.9.0-1_amd64.deb
-  - wget https://joergbehrendt.com/files/projects/ltsm/debian-packages/amd64/dependencies/lustre-dev_2.9.0-1_amd64.deb
   - sudo dpkg -i lustre-dev_2.9.0-1_amd64.deb
-  - wget https://joergbehrendt.com/files/projects/ltsm/debian-packages/amd64/dependencies/tivsm-api64_amd64.deb
-  - sudo dpkg -i tivsm-api64_amd64.deb
-  - git clone https://github.com/Xyratex/lustre-stable.git /opt/lustre-release
-
+  - git clone -b v2_9_0 --single-branch https://github.com/rread/lustre.git /opt/lustre-release
