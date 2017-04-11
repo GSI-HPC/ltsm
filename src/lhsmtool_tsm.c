@@ -381,10 +381,10 @@ static int ct_archive(struct session_t *session)
 		goto cleanup;
 	}
 
-	rc = tsm_archive_fpath(DEFAULT_FSNAME, fpath, NULL, -1,
+	rc = tsm_archive_fpath(DEFAULT_FSNAME, fpath, NULL, src_fd,
 			       (const void *)&session->hai->hai_fid, session);
 	if (rc) {
-		CT_ERROR(rc, "tsm_archive_fpath_fid on '%s' failed", fpath);
+		CT_ERROR(rc, "tsm_archive_fpath on '%s' failed", fpath);
 		goto cleanup;
 	}
 	CT_MESSAGE("archiving '%s' to TSM storage done", fpath);
