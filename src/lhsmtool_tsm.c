@@ -381,7 +381,7 @@ static int ct_archive(struct session_t *session)
 		goto cleanup;
 	}
 
-	rc = tsm_archive_fpath(DEFAULT_FSNAME, fpath, NULL, src_fd,
+	rc = tsm_archive_fpath(opt.o_fsname, fpath, NULL, src_fd,
 			       (const void *)&session->hai->hai_fid, session);
 	if (rc) {
 		CT_ERROR(rc, "tsm_archive_fpath on '%s' failed", fpath);
@@ -452,7 +452,7 @@ static int ct_restore(struct session_t *session)
 		goto cleanup;
 	}
 
-	rc = tsm_retrieve_fpath(DEFAULT_FSNAME, fpath, NULL, dst_fd, session);
+	rc = tsm_retrieve_fpath(opt.o_fsname, fpath, NULL, dst_fd, session);
 	if (rc != DSM_RC_SUCCESSFUL) {
 		CT_ERROR(rc, "tsm_retrieve_fpath on '%s' failed", fpath);
 		goto cleanup;
@@ -492,7 +492,7 @@ static int ct_remove(struct session_t *session)
 		rc = 0;
 		goto cleanup;
 	}
-	rc = tsm_delete_fpath(DEFAULT_FSNAME, fpath, session);
+	rc = tsm_delete_fpath(opt.o_fsname, fpath, session);
 	if (rc != DSM_RC_SUCCESSFUL) {
 		CT_ERROR(rc, "tsm_delete_fpath on '%s' failed", fpath);
 		goto cleanup;
