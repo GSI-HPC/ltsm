@@ -880,11 +880,12 @@ static dsInt16_t tsm_del_obj(const qryRespArchiveData *qry_resp_ar_data,
 {
 	dsmDelInfo del_info;
 	dsInt16_t rc;
-	dsUint16_t reason;
+	dsUint16_t err_reason;
+	dsUint8_t vote_txn = DSM_VOTE_COMMIT;
 
 	rc = dsmBeginTxn(session->handle);
 	TSM_DEBUG(session, rc,  "dsmBeginTxn");
-	if (rc != DSM_RC_SUCCESSFUL) {
+	if (rc) {
 		TSM_ERROR(session, rc, "dsmBeginTxn");
 		return rc;
 	}
@@ -893,18 +894,19 @@ static dsInt16_t tsm_del_obj(const qryRespArchiveData *qry_resp_ar_data,
 	del_info.archInfo.objId = qry_resp_ar_data->objId;
 
 	rc = dsmDeleteObj(session->handle, dtArchive, del_info);
-	TSM_DEBUG(session, rc,  "dsmDeleteObj");
-	if (rc != DSM_RC_SUCCESSFUL) {
+	TSM_DEBUG(session, rc, "dsmDeleteObj");
+	if (rc) {
 		TSM_ERROR(session, rc, "dsmDeleteObj");
-		dsmEndTxn(session->handle, DSM_VOTE_COMMIT, &reason);
-		return rc;
+		vote_txn = DSM_VOTE_ABORT;
+		goto cleanup_transaction;
 	}
 
-	rc = dsmEndTxn(session->handle, DSM_VOTE_COMMIT, &reason);
+cleanup_transaction:
+	rc = dsmEndTxn(session->handle, vote_txn, &err_reason);
 	TSM_DEBUG(session, rc,  "dsmEndTxn");
-	if (rc != DSM_RC_SUCCESSFUL) {
+	if (rc || err_reason) {
 		TSM_ERROR(session, rc, "dsmEndTxn");
-		return rc;
+		TSM_ERROR(session, err_reason, "dsmEndTxn reason");
 	}
 
 	return rc;
@@ -912,7 +914,7 @@ static dsInt16_t tsm_del_obj(const qryRespArchiveData *qry_resp_ar_data,
 
 static dsInt16_t tsm_delete_hl_ll(struct session_t *session)
 {
-	dsInt16_t rc;
+	dsInt16_t rc = DSM_RC_SUCCESSFUL;
 	qryRespArchiveData qra_data;
 
 	for (uint32_t n = 0; n < session->qtable.qarray.size; n++) {
