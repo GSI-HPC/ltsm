@@ -260,10 +260,10 @@ static dsInt16_t retrieve_obj(qryRespArchiveData *query_data,
 			      const struct obj_info_t *obj_info, int fd,
 			      struct session_t* session)
 {
-	char *buf = NULL;
+	char	  *buf		= NULL;
 	dsInt16_t rc;
-	dsInt16_t rc_minor = 0;
-	dsBool_t is_local_fd = bFalse;
+	dsInt16_t rc_minor	= 0;
+	dsBool_t  is_local_fd	= bFalse;
 
 	if (fd < 0) {
 		/* If a regular file was archived, e.g. /dir1/dir2/data.txt,
@@ -299,7 +299,8 @@ static dsInt16_t retrieve_obj(qryRespArchiveData *query_data,
 	buf = malloc(sizeof(char) * TSM_BUF_LENGTH);
 	if (!buf) {
 		CT_ERROR(errno, "malloc");
-		return DSM_RC_UNSUCCESSFUL;
+		rc_minor = DSM_RC_UNSUCCESSFUL;
+		goto cleanup_fd;
 	}
 
 	DataBlk dataBlk;
@@ -374,6 +375,7 @@ cleanup:
 	if (buf)
 		free(buf);
 
+cleanup_fd:
 	if (is_local_fd && !(fd < 0)) {
 		rc = close(fd);
 		if (rc < 0) {
