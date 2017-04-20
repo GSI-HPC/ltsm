@@ -19,8 +19,8 @@ install:
   - sudo dpkg -i gskssl64_8.0-50.66.linux.x86_64.deb
   - sudo dpkg -i gskcrypt64_8.0-50.66.linux.x86_64.deb
   - sudo dpkg -i tivsm-api64.amd64.deb
-  - wget http://web-docs.gsi.de/~tstibor/lustre/lustre-builds/jessie/server/2.9/zfs/lustre-server-utils_2.9.0-1_amd64.deb
-  - wget http://web-docs.gsi.de/~tstibor/lustre/lustre-builds/jessie/server/2.9/zfs/lustre-dev_2.9.0-1_amd64.deb
+  - wget http://web-docs.gsi.de/~tstibor/lustre/lustre-builds/jessie/server/2.9/zfs/2.9.0-1/lustre-server-modules-3.16.0-4-amd64_2.9.0-1_amd64.deb
+  - wget http://web-docs.gsi.de/~tstibor/lustre/lustre-builds/jessie/server/2.9/zfs/2.9.0-1/lustre-dev_2.9.0-1_amd64.deb
   - sudo dpkg -i lustre-server-utils_2.9.0-1_amd64.deb
   - sudo dpkg -i lustre-dev_2.9.0-1_amd64.deb
   - git clone -b v2_9_0 --single-branch https://github.com/rread/lustre.git /opt/lustre-release
