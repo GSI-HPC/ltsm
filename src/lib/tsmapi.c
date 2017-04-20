@@ -591,73 +591,6 @@ dsmApiVersionEx get_libapi_ver()
 	return libapi_ver;
 }
 
-dsInt16_t tsm_check_free_mountp(struct session_t *session,
-				const char *fsname)
-{
-	dsInt16_t rc;
-
-	/* Check if we have free mountpoints left for the node */
-	dsUint8_t vote_txn = DSM_VOTE_COMMIT;
-	dsUint16_t err_reason = 0;
-	mcBindKey mc_bind_key = { .stVersion =  mcBindKeyVersion };
-	dsmObjName obj_name = {
-		.ll = "/.mount",
-		.hl = "/.test",
-		.objType = DSM_OBJ_DIRECTORY
-	};
-	strcpy(obj_name.fs, fsname);
-
-	rc = dsmBeginTxn(session->handle);
-	if (rc) {
-		TSM_ERROR(session, rc, "dsmBeginTxn");
-		return ECONNABORTED;
-	}
-
-	rc = dsmBindMC(session->handle, &obj_name, stArchive, &mc_bind_key);
-	if (rc) {
-		TSM_ERROR(session, rc, "dsmBindMC");
-		return ECONNABORTED;
-	}
-
-	sndArchiveData arch_data = { 0 };
-	ObjAttr obj_attr = { 0 };
-	arch_data.stVersion = sndArchiveDataVersion;
-	arch_data.descr = "Node mountpoint check";
-
-	obj_attr.stVersion = ObjAttrVersion;
-	obj_attr.objCompressed = bFalse;
-	obj_attr.sizeEstimate.lo = 1;
-	obj_attr.sizeEstimate.hi = 1;
-
-	rc = dsmSendObj(session->handle, stArchive, &arch_data,
-			&obj_name, &obj_attr, NULL);
-	if (rc) {
-		TSM_ERROR(session, rc, "dsmSendObj");
-		return ECONNABORTED;
-	}
-
-	rc = dsmEndSendObj(session->handle);
-	if (rc) {
-		TSM_ERROR(session, rc, "dsmEndSendObj");
-		return ECONNABORTED;
-	}
-
-	rc = dsmEndTxn(session->handle, vote_txn, &err_reason);
-	if (rc) {
-		TSM_DEBUG(session, err_reason, "dsmEndTxn reason");
-		if (err_reason == DSM_RS_ABORT_EXCEED_MAX_MP)
-			return ECONNREFUSED;
-		else
-			return ECONNABORTED;
-	}
-
-	TSM_DEBUG(session, rc, "Passed mount point check");
-
-	/* TODO: Delete the dummy DSM_OBJ_DIRECTORY. */
-
-	return rc;
-}
-
 dsInt16_t tsm_query_session(struct session_t *session)
 {
 	optStruct dsmOpt;
@@ -1631,6 +1564,106 @@ dsInt16_t tsm_archive_fpath(const char *fs, const char *fpath, const char *desc,
 	else
 		/* Archive regular file. */
 		return tsm_archive_generic(&archive_info, fd, session);
+
+	return rc;
+}
+
+
+/**
+ * @brief Send dummy object to find the maximum number of mountpoints.
+ *
+ * The TSM API allows to create multiple sessions, thus
+ * enabling multithreaded operations. This however requires, that the TSM server
+ * has enabled multiple parallel mount points. There exists no low level TSM API
+ * function to query this value. This function should be called by threaded
+ * applications (e.g. lhsmtool_tsm) having multiple sessions opened to find
+ * maximum number of allowed mountpoints (alias the number of maxium threads)
+ * by sending DSM_OBJ_DIRECTORY and verifying whether transaction was
+ * successful.
+ *
+ * @param[in] session Active session.
+ * @param[in] fsname File space name
+ * @return    DSM_RC_SUCCESSFUL on succes, otherwise ECONNABORTED, or
+ *            ECONNREFUSED if maximum number of mountpoints is exceeded.
+ */
+dsInt16_t tsm_check_free_mountp(struct session_t *session, const char *fsname)
+{
+	dsInt16_t rc;
+
+	/* Create dummy DSM_OBJ_DIRECTORY. */
+	struct archive_info_t archive_info = {.fpath =
+					      "/.mount/.test-maxnummp",
+					      .desc = "node mountpoint check",
+					      .obj_info = {.magic =
+							   MAGIC_ID_V1,
+							   .size.hi = 0,
+							   .size.lo = 1},
+					      .obj_name = {.hl = "/.mount",
+							   .ll =
+							   "/.test-maxnummp",
+							   .objType =
+							   DSM_OBJ_DIRECTORY}};
+	strcpy(archive_info.obj_name.fs, fsname);
+
+	/* Check if we have free mountpoints left for the node. */
+	dsUint8_t vote_txn = DSM_VOTE_COMMIT;
+	dsUint16_t err_reason = 0;
+	mcBindKey mc_bind_key = {.stVersion =  mcBindKeyVersion};
+	ObjAttr obj_attr;
+	rc = obj_attr_prepare(&obj_attr, &archive_info);
+	if (rc) {
+		TSM_ERROR(session, rc, "obj_attr_prepare");
+		return ECONNABORTED;
+	}
+
+	rc = dsmBeginTxn(session->handle);
+	if (rc) {
+		TSM_ERROR(session, rc, "dsmBeginTxn");
+		return ECONNABORTED;
+	}
+
+	rc = dsmBindMC(session->handle, &(archive_info.obj_name), stArchive,
+		       &mc_bind_key);
+	if (rc) {
+		TSM_ERROR(session, rc, "dsmBindMC");
+		return ECONNABORTED;
+	}
+
+	sndArchiveData arch_data = {
+		.stVersion = sndArchiveDataVersion,
+		.descr = archive_info.desc};
+
+	rc = dsmSendObj(session->handle, stArchive, &arch_data,
+			&(archive_info.obj_name), &obj_attr, NULL);
+	if (rc) {
+		TSM_ERROR(session, rc, "dsmSendObj");
+		return ECONNABORTED;
+	}
+
+	rc = dsmEndSendObj(session->handle);
+	if (rc) {
+		TSM_ERROR(session, rc, "dsmEndSendObj");
+		return ECONNABORTED;
+	}
+
+	rc = dsmEndTxn(session->handle, vote_txn, &err_reason);
+	if (rc) {
+		TSM_DEBUG(session, err_reason, "dsmEndTxn reason");
+		if (err_reason == DSM_RS_ABORT_EXCEED_MAX_MP)
+			return ECONNREFUSED;
+		else
+			return ECONNABORTED;
+	}
+
+	/* Delete dummy DSM_OBJ_DIRECTORY. */
+	rc = tsm_delete_fpath(fsname, archive_info.fpath, session);
+	if (rc) {
+		CT_ERROR(rc, "tsm_delete_fpath failed on '%s'",
+			 archive_info.fpath);
+		rc = ECONNABORTED;
+	}
+	else
+		CT_INFO("passed mount point check");
 
 	return rc;
 }
