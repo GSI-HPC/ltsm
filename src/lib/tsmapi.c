@@ -277,7 +277,7 @@ static dsInt16_t retrieve_obj(qryRespArchiveData *query_data,
 		   S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH */
 		rc = mkdir_p(query_data->objName.hl,
 			     S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH);
-		CT_INFO("mkdir_p(%s)", query_data->objName.hl);
+		CT_DEBUG("[rc:%d] mkdir_p(%s)", rc, query_data->objName.hl);
 		if (rc) {
 			CT_ERROR(rc, "mkdir_p");
 			return DSM_RC_UNSUCCESSFUL;
@@ -889,14 +889,14 @@ static dsInt16_t tsm_delete_hl_ll(struct session_t *session)
 
 	for (uint32_t n = 0; n < session->qtable.qarray.size; n++) {
 		rc = get_qra(&session->qtable, &qra_data, n);
-		CT_INFO("get_query: %lu, rc: %d", n, rc);
+		CT_DEBUG("[rc:%d] get_qra: %lu", rc, n);
 		if (rc) {
 			errno = ENODATA; /* No data available */
 			CT_ERROR(errno, "get_query");
 			return rc;
 		}
 		rc = tsm_del_obj(&qra_data, session);
-		CT_DEBUG("tsm_del_obj: %lu, rc: %d", n, rc);
+		CT_DEBUG("[rc:%d] tsm_del_obj: %lu", rc, n);
 		if (rc) {
 			CT_WARN("tsm_del_obj failed, object not deleted\n");
 			display_qra(&qra_data, n, "[delete failed]");
@@ -914,10 +914,10 @@ dsInt16_t tsm_delete_fpath(const char *fs, const char *fpath,
 	char ll[DSM_MAX_LL_LENGTH + 1] = {0};
 
 	rc = extract_hl_ll(fpath, hl, ll);
-	CT_INFO("extract_hl_ll:\n"
-		"fpath: %s\n"
-		"hl: %s\n"
-		"ll: %s\n", fpath, hl, ll);
+	CT_DEBUG("[rc:%d] extract_hl_ll:\n"
+		 "fpath: %s\n"
+		 "hl: %s\n"
+		 "ll: %s\n", rc, fpath, hl, ll);
 	if (rc) {
 		CT_ERROR(EFAILED, "extract_hl_ll failed");
 		return rc;
@@ -954,10 +954,10 @@ dsInt16_t tsm_query_fpath(const char *fs, const char *fpath, const char *desc,
 	char ll[DSM_MAX_LL_LENGTH + 1] = {0};
 
 	rc = extract_hl_ll(fpath, hl, ll);
-	CT_INFO("extract_hl_ll:\n"
-		"fpath: %s\n"
-		"hl: %s\n"
-		"ll: %s\n", fpath, hl, ll);
+	CT_DEBUG("[rc:%d] extract_hl_ll:\n"
+		 "fpath: %s\n"
+		 "hl: %s\n"
+		 "ll: %s\n", rc, fpath, hl, ll);
 	if (rc) {
 		CT_ERROR(EFAILED, "extract_hl_ll");
 		return rc;
@@ -1025,7 +1025,7 @@ static dsInt16_t tsm_retrieve_generic(int fd, struct session_t *session)
 		for (uint32_t c_iter = c_begin; c_iter <= c_end; c_iter++) {
 
 			rc = get_qra(&session->qtable, &query_data, c_iter);
-			CT_INFO("get_query: %lu, rc: %d", c_iter, rc);
+			CT_DEBUG("[rc:%d] get_qra: %lu", rc, c_iter);
 			if (rc != DSM_RC_SUCCESSFUL) {
 				errno = ENODATA; /* No data available */
 				CT_ERROR(errno, "get_query");
@@ -1048,7 +1048,7 @@ static dsInt16_t tsm_retrieve_generic(int fd, struct session_t *session)
 		for (uint32_t c_iter = c_begin; c_iter <= c_end; c_iter++) {
 
 			rc = get_qra(&session->qtable, &query_data, c_iter);
-			CT_INFO("get_query: %lu, rc: %d", c_iter, rc);
+			CT_DEBUG("[rc:%d] get_qra: %lu", rc, c_iter);
 			if (rc != DSM_RC_SUCCESSFUL) {
 				rc_minor = ENODATA; /* No data available */
 				CT_ERROR(rc_minor, "get_query");
@@ -1067,7 +1067,7 @@ static dsInt16_t tsm_retrieve_generic(int fd, struct session_t *session)
 			switch (query_data.objName.objType) {
 			case DSM_OBJ_FILE: {
 				rc_minor = retrieve_obj(&query_data, &obj_info, fd, session);
-				CT_INFO("retrieve_obj, rc: %d\n", rc_minor);
+				CT_DEBUG("[rc:%d] retrieve_obj\n", rc_minor);
 				if (rc_minor != DSM_RC_SUCCESSFUL) {
 					CT_ERROR(EFAILED, "retrieve_obj failed");
 					goto cleanup_getdata;
@@ -1084,7 +1084,7 @@ static dsInt16_t tsm_retrieve_generic(int fd, struct session_t *session)
 					 query_data.objName.hl,
 					 query_data.objName.ll);
 				rc_minor = mkdir_p(directory, obj_info.st_mode);
-				CT_INFO("mkdir_p(%s)\n", directory);
+				CT_DEBUG("[rc:%d] mkdir_p(%s)\n", rc_minor, directory);
 				if (rc_minor) {
 					CT_ERROR(rc_minor, "mkdir_p");
 					goto cleanup_getdata;
@@ -1340,8 +1340,8 @@ cleanup_transaction:
 	}
 
 	rc = tsm_obj_update_crc32(&obj_attr, archive_info, crc32sum, session);
-	CT_INFO("tsm_obj_update_crc32, rc: %d, crc32: 0x%08x (%010u)", rc,
-		crc32sum, crc32sum);
+	CT_DEBUG("[rc:%d] tsm_obj_update_crc32, crc32: 0x%08x (%010u)", rc,
+		 crc32sum, crc32sum);
 	if (rc)
 		CT_ERROR(EFAILED, "tsm_obj_update_crc32");
 
