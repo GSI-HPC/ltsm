@@ -22,6 +22,7 @@
 #include <time.h>
 #include <getopt.h>
 #include <sys/stat.h>
+#include <zlib.h>
 #include "tsmapi.h"
 
 struct options {
@@ -32,6 +33,7 @@ struct options {
 	int o_verbose;
 	int o_latest;
 	int o_recursive;
+	int o_checksum;
 	char o_servername[DSM_MAX_SERVERNAME_LENGTH + 1];
 	char o_node[DSM_MAX_NODE_LENGTH + 1];
 	char o_owner[DSM_MAX_OWNER_LENGTH + 1];
@@ -50,6 +52,7 @@ struct options opt = {
 	.o_fsname = {0},
 	.o_fstype = {0},
 	.o_desc = {0},
+	.o_checksum = 0,
 };
 
 static void usage(const char *cmd_name, const int rc)
@@ -71,6 +74,7 @@ static void usage(const char *cmd_name, const int rc)
 		"\t-p, --password <string>\n"
 		"\t-s, --servername <string>\n"
 		"\t-v, --verbose {error, warn, message, info, debug} [default: message]\n"
+		"\t-c, --checksum <file>\n"
 		"\t-h, --help\n"
 		"\nIBM API library version: %d.%d.%d.%d, "
 		"IBM API application client version: %d.%d.%d.%d\n"
@@ -85,23 +89,28 @@ static void usage(const char *cmd_name, const int rc)
 	exit(rc);
 }
 
-static void sanity_arg_check(const struct options *opts, const char *argv)
+static void sanity_arg_check(const char *argv)
 {
-	unsigned char count = 0;
+	uint8_t count = 0;
 	count = opt.o_archive  == 1 ? count + 1 : count;
 	count = opt.o_retrieve == 1 ? count + 1 : count;
 	count = opt.o_delete   == 1 ? count + 1 : count;
 	count = opt.o_query    == 1 ? count + 1 : count;
+	count = opt.o_checksum == 1 ? count + 1 : count;
 
 	if (count == 0) {
 		fprintf(stdout, "missing argument --archive, --retrieve,"
-			" --query or --delete\n\n");
+			" --query, --delete or --checksum\n\n");
 		usage(argv, 1);
 	} else if (count != 1) {
 		printf("multiple incompatible arguments"
-		       " --archive, --retrieve, --query or --delete\n\n");
+		       " --archive, --retrieve, --query, --delete or "
+		       "--checksum\n\n");
 		usage(argv, 1);
 	}
+
+	if (opt.o_checksum)
+		return;
 
 	if (!strlen(opt.o_node)) {
 		fprintf(stdout, "missing argument -n, --node <string>\n\n");
@@ -134,12 +143,13 @@ static int parseopts(int argc, char *argv[])
 		{"password",    required_argument, 0,                'p'},
 		{"servername",  required_argument, 0,                's'},
 		{"verbose",	required_argument, 0,                'v'},
+		{"checksum",          no_argument, 0,	             'c'},
 		{"help",              no_argument, 0,	             'h'},
 		{0, 0, 0, 0}
 	};
 
 	int c;
-	while ((c = getopt_long(argc, argv, "lrf:d:n:o:p:s:v:h",
+	while ((c = getopt_long(argc, argv, "lrf:d:n:o:p:s:v:ch",
 				long_opts, NULL)) != -1) {
 		switch (c) {
 		case 'l': {
@@ -206,6 +216,10 @@ static int parseopts(int argc, char *argv[])
 			api_msg_set_level(opt.o_verbose);
 			break;
 		}
+		case 'c': {
+			opt.o_checksum = 1;
+			break;
+		}
 		case 'h': {
 			usage(argv[0], 0);
 			break;
@@ -218,9 +232,47 @@ static int parseopts(int argc, char *argv[])
 		}
 	}
 
-	sanity_arg_check(&opt, argv[0]);
+	sanity_arg_check(argv[0]);
 
 	return 0;
+}
+
+static int calc_crc32sum(const char *filename, uint32_t *crc32result)
+{
+	int rc;
+	FILE *file;
+	size_t cur_read;
+	uint32_t crc32sum = 0;
+	unsigned char buf[TSM_BUF_LENGTH] = {0};
+
+	file = fopen(filename, "r");
+	if (file == NULL) {
+		rc = errno;
+		CT_ERROR(rc, "fopen failed on '%s'", filename);
+		return rc;
+	}
+
+	do {
+		cur_read = fread(buf, 1, TSM_BUF_LENGTH, file);
+		if (ferror(file)) {
+			CT_ERROR(EIO, "fread failed on '%s'", filename);
+			break;
+		}
+		crc32sum = crc32(crc32sum, (const unsigned char *)buf,
+				 cur_read);
+
+	} while (!feof(file));
+
+
+	rc = fclose(file);
+	if (rc) {
+		rc = errno;
+		CT_ERROR(rc, "fclose failed on '%s'", filename);
+		return rc;
+	}
+
+	*crc32result = crc32sum;
+	return rc;
 }
 
 int main(int argc, char *argv[])
@@ -249,6 +301,28 @@ int main(int argc, char *argv[])
 		}
 	}
 
+	if (opt.o_checksum) {
+
+		if (num_files_dirs == 0) {
+			fprintf(stdout, "missing argument <files>\n");
+			usage(argv[0], 1);
+		}
+
+		uint32_t crc32sum = 0;
+		for (size_t i = 0; i < num_files_dirs &&
+			     files_dirs_arg[i]; i++) {
+			rc = calc_crc32sum(files_dirs_arg[i], &crc32sum);
+			if (rc)
+				CT_WARN("calculation of crc32 for '%s' failed",
+					files_dirs_arg[i]);
+			else
+				fprintf(stdout, "crc32: "
+					"0x%08x (%010u), file: '%s'\n", crc32sum,
+					crc32sum, files_dirs_arg[i]);
+		}
+		goto cleanup;
+	}
+
 	struct login_t login;
 	login_fill(&login, opt.o_servername,
 		   opt.o_node, opt.o_password,
@@ -261,15 +335,15 @@ int main(int argc, char *argv[])
 
 	rc = tsm_init(DSM_SINGLETHREAD);
 	if (rc)
-		goto cleanup;
+		goto cleanup_tsm;
 
 	rc = tsm_connect(&login, &session);
 	if (rc)
-		goto cleanup;
+		goto cleanup_tsm;
 
 	rc = tsm_query_session(&session);
 	if (rc)
-		goto cleanup;
+		goto cleanup_tsm;
 
 	/* Handle operations on files and directories resp. */
 	for (size_t i = 0; i < num_files_dirs &&
@@ -288,8 +362,12 @@ int main(int argc, char *argv[])
 					       files_dirs_arg[i],
 					       opt.o_desc, -1, NULL, &session);
 		if (rc)
-			goto cleanup;
+			goto cleanup_tsm;
 	}
+
+cleanup_tsm:
+	tsm_disconnect(&session);
+	tsm_cleanup(DSM_SINGLETHREAD);
 
 cleanup:
 	if (files_dirs_arg) {
@@ -299,9 +377,6 @@ cleanup:
 		}
 		free(files_dirs_arg);
 	}
-
-	tsm_disconnect(&session);
-	tsm_cleanup(DSM_SINGLETHREAD);
 
 	return rc;
 }

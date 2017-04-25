@@ -10,6 +10,7 @@ m4_define([GIT_VERSION_STRING], m4_esyscmd([git describe --always | tr -d '\n'])
 AC_INIT([ltsm], [GIT_VERSION_STRING], [t.stibor@gsi.de], [], [https://github.com/tstibor/ltsm])
 
 m4_include([m4/ax_pthread.m4])
+m4_include([m4/ax_check_zlib.m4])
 AC_CONFIG_SRCDIR([src/ltsmc.c])
 AM_INIT_AUTOMAKE
 
@@ -20,6 +21,8 @@ AC_PROG_AWK
 AC_PROG_CC
 AC_PROG_CC_STDC
 AC_PROG_MAKE_SET
+AC_PROG_CXX
+AC_PROG_RANLIB
 
 # Use the C language and compiler for the following checks.
 AC_LANG([C])
@@ -62,6 +65,9 @@ AC_CHECK_FILE("$TSM_SRC_DIR/dsmapitd.h",,
 # Checks for other libraries.
 AC_CHECK_LIB([m],[ceil])
 AC_CHECK_LIB([ApiTSM64], [dsmInitEx], [], [AC_MSG_ERROR([cannot find proprietary IBM library ApiTSM64, provide library path e.g. ./configure LDFLAGS='-L/<PATH_TO_LIB>'])])
+
+# Check for required zlib library.
+AX_CHECK_ZLIB(, AC_MSG_ERROR([zlib is required and could not be found!]))
 
 # Checks for header files.
 AC_CHECK_HEADERS([fcntl.h stdint.h stdlib.h string.h strings.h sys/param.h sys/time.h unistd.h pthread.h float.h])

@@ -34,6 +34,7 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/param.h>
+#include <zlib.h>
 #include "tsmapi.h"
 #include "qtable.h"
 
@@ -319,6 +320,7 @@ static dsInt16_t retrieve_obj(qryRespArchiveData *query_data,
 	   is larger and we need additional dsmGetData calls. */
 	rc = dsmGetObj(session->handle, &(query_data->objId), &dataBlk);
 	TSM_DEBUG(session, rc,  "dsmGetObj");
+	uint32_t crc32sum = 0;
 
 	while (!done) {
 		if (!(rc == DSM_RC_MORE_DATA || rc == DSM_RC_FINISHED)) {
@@ -332,6 +334,8 @@ static dsInt16_t retrieve_obj(qryRespArchiveData *query_data,
 			rc_minor = DSM_RC_UNSUCCESSFUL;
 			goto cleanup;
 		}
+		crc32sum = crc32(crc32sum, (const unsigned char *)buf,
+				 cur_written);
 		total_written += cur_written;
 		CT_INFO("datablk_numbytes: %zu, cur_written: %zu,"
 			" total_written: %zu, obj_size: %zu",
@@ -365,6 +369,12 @@ static dsInt16_t retrieve_obj(qryRespArchiveData *query_data,
 	if (obj_size != total_written)
 		CT_WARN("object size: %zu and written data size: %zu differs",
 			obj_size, total_written);
+
+	/* Do a sanity check whether CRC32 sum of object matches
+	   the CRC32 sum of fd written data. */
+	if (obj_info->crc32 != crc32sum)
+		CT_WARN("object CRC32 sum: %d and written fd CRC32 sum: %d "
+			"differs", obj_info->crc32, crc32sum);
 
 cleanup:
 	rc = dsmEndGetObj(session->handle);
@@ -415,6 +425,7 @@ static void display_qra(const qryRespArchiveData *qra_data, const uint32_t n,
 			"object info size (hi,lo)                   : (%u,%u)\n"
 			"object type                                : %s\n"
 			"object magic id                            : %d\n"
+			"crc32                                      : 0x%08x (%010u)\n"
 			"archive description                        : %s\n"
 			"owner                                      : %s\n"
 			"insert date                                : %s\n"
@@ -433,6 +444,7 @@ static void display_qra(const qryRespArchiveData *qra_data, const uint32_t n,
 			obj_info.size.lo,
 			OBJ_TYPE(qra_data->objName.objType),
 			obj_info.magic,
+			obj_info.crc32, obj_info.crc32,
 			qra_data->descr,
 			qra_data->owner,
 			ins_str_date,
@@ -805,8 +817,31 @@ static dsInt16_t obj_attr_prepare(ObjAttr *obj_attr,
 		return rc;
 	}
 
-	memcpy(obj_attr->objInfo, (char *)&(archive_info->obj_info), obj_attr->objInfoLength);
+	memcpy(obj_attr->objInfo, (char *)&(archive_info->obj_info),
+	       obj_attr->objInfoLength);
 
+	return DSM_RC_SUCCESSFUL;
+}
+
+static dsInt16_t tsm_obj_update_crc32(ObjAttr *obj_attr,
+				      struct archive_info_t *archive_info,
+				      const uint32_t crc32,
+				      struct session_t *session)
+{
+	dsInt16_t rc;
+	struct obj_info_t obj_info;
+
+	memcpy(&obj_info, (char *)obj_attr->objInfo, obj_attr->objInfoLength);
+	obj_info.crc32 = crc32;
+	memcpy(obj_attr->objInfo, (char *)&(obj_info), obj_attr->objInfoLength);
+
+	rc = dsmUpdateObj(session->handle, stArchive, NULL,
+			  &(archive_info->obj_name), obj_attr,
+			  DSM_ARCHUPD_OBJINFO);
+	if (rc) {
+		TSM_ERROR(session, rc, "dsmUpdateObj");
+		return DSM_RC_UNSUCCESSFUL;
+	}
 	return DSM_RC_SUCCESSFUL;
 }
 
@@ -1141,6 +1176,7 @@ static dsInt16_t tsm_archive_generic(struct archive_info_t *archive_info,
 	dsBool_t done = bFalse;
 	dsUint8_t vote_txn;
 	dsBool_t is_local_fd = bFalse;
+	uint32_t crc32sum = 0;
 
 	data_blk.bufferPtr = NULL;
 	obj_attr.objInfo = NULL;
@@ -1224,6 +1260,11 @@ static dsInt16_t tsm_archive_generic(struct archive_info_t *archive_info,
 					" total_size: %zu", cur_read,
 					total_read, total_size);
 
+				crc32sum = crc32(crc32sum,
+						 (const unsigned char *)
+						 data_blk.bufferPtr,
+						 data_blk.numBytes);
+
 				if (data_blk.numBytes != data_blk.bufferLen)
 					CT_WARN("dsmSendData transmitted %u"
 						" out of %d",
@@ -1297,6 +1338,13 @@ cleanup_transaction:
 				archive_info->desc);
 		}
 	}
+
+	rc = tsm_obj_update_crc32(&obj_attr, archive_info, crc32sum, session);
+	CT_INFO("tsm_obj_update_crc32, rc: %d, crc32: 0x%08x (%010u)", rc,
+		crc32sum, crc32sum);
+	if (rc)
+		CT_ERROR(EFAILED, "tsm_obj_update_crc32");
+
 cleanup:
 	if (obj_attr.objInfo)
 		free(obj_attr.objInfo);

@@ -70,16 +70,17 @@ struct login_t{
 	char fstype[DSM_MAX_FSTYPE_LENGTH + 1];
 };
 
-struct lu_fid_t{
+struct lu_fid_t {
 	dsUint64_t f_seq;
 	dsUint32_t f_oid;
 	dsUint32_t f_ver;
 };
 
 struct obj_info_t {
-	unsigned int magic;
+	uint32_t magic;
 	dsStruct64_t size;
 	mode_t st_mode;
+	uint32_t crc32;
 	struct lu_fid_t lu_fid;
 };
 
