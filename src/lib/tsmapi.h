@@ -60,7 +60,7 @@
 	((strlen(str1) == strlen(str2)) &&	\
 	 (strncmp(str1, str2, strlen(str1)) == 0))
 
-struct login_t{
+struct login_t {
 	char node[DSM_MAX_NODE_LENGTH + 1];
 	char password[DSM_MAX_VERIFIER_LENGTH + 1];
 	char owner[DSM_MAX_OWNER_LENGTH + 1];

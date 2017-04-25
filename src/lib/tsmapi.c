@@ -373,8 +373,8 @@ static dsInt16_t retrieve_obj(qryRespArchiveData *query_data,
 	/* Do a sanity check whether CRC32 sum of object matches
 	   the CRC32 sum of fd written data. */
 	if (obj_info->crc32 != crc32sum)
-		CT_WARN("object CRC32 sum: %d and written fd CRC32 sum: %d "
-			"differs", obj_info->crc32, crc32sum);
+		CT_WARN("object crc32: 0x%08x and written fd crc32: "
+			"0x%08x differs", obj_info->crc32, crc32sum);
 
 cleanup:
 	rc = dsmEndGetObj(session->handle);
