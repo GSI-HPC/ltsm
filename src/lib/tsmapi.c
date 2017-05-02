@@ -275,9 +275,17 @@ static dsInt16_t retrieve_obj(qryRespArchiveData *query_data,
 		   two objects, however we have no st_mode information of /dir1
 		   and /dir1/dir2, therefore use the default directory permission:
 		   S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH */
-		rc = mkdir_p(query_data->objName.hl,
+		const size_t len = strlen(query_data->objName.fs) +
+			strlen(query_data->objName.hl) + 1;
+		char directory[len];
+		bzero(directory, sizeof(char) * len);
+		snprintf(directory, len, "%s%s",
+			 query_data->objName.fs,
+			 query_data->objName.hl);
+
+		rc = mkdir_p(directory,
 			     S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH);
-		CT_DEBUG("[rc:%d] mkdir_p(%s)", rc, query_data->objName.hl);
+		CT_DEBUG("[rc:%d] mkdir_p(%s)", rc, directory);
 		if (rc) {
 			CT_ERROR(rc, "mkdir_p");
 			return DSM_RC_UNSUCCESSFUL;
@@ -765,29 +773,60 @@ cleanup:
 	return rc;
 }
 
-static dsInt16_t extract_hl_ll(const char *fpath, char *hl, char *ll)
+
+/**
+ * @brief Extract hl and ll pathname.
+ *
+ * Given input a canonicalized absolute pathname fpath and file space name
+ * which MUST be a prefix of fpath, this function extracts the hl and ll names.
+ *
+ * @param[in] fpath Canonicalized absolute pathname.
+ * @param[in] fs    TSM file space name.
+ * @param[out] hl   TSM high level name.
+ * @param[out] ll   TSM low level name.
+ * @return DSM_RC_SUCCESSFUL on success otherwise DSM_RC_UNSUCCESSFUL.
+ */
+static dsInt16_t extract_hl_ll(const char *fpath, const char *fs,
+			       char *hl, char *ll)
 {
-	size_t len, i;
 
-	bzero(hl, DSM_MAX_HL_LENGTH + 1);
-	bzero(ll, DSM_MAX_LL_LENGTH + 1);
-	len = strlen(fpath);
-	i = len;
+	size_t pos_hl = 0;
+	size_t pos_ll;
+	const size_t fpath_len = strlen(fpath);
+	const size_t fs_len = strlen(fs);
 
-	while (i > 0 && fpath[i] != '/' && i--);
+	bzero(hl, DSM_MAX_HL_LENGTH);
+	bzero(ll, DSM_MAX_LL_LENGTH);
 
-	if (i > DSM_MAX_HL_LENGTH || (len - i) > DSM_MAX_LL_LENGTH)
-	{
-		CT_ERROR(EINVAL, "incorrect length");
+	/* Find substring fs at the beginning of fpath. */
+	while (fs[pos_hl] && fpath[pos_hl] && fs[pos_hl] == fpath[pos_hl])
+		pos_hl++;
+
+	/* Sanity checks. */
+	if (pos_hl == 0 || fs_len != pos_hl) {
+		CT_ERROR(EINVAL, "fs: '%s' is not prefix of "
+			 "fpath: '%s'", fs, fpath);
+		return DSM_RC_UNSUCCESSFUL;
+	} else if (fpath[pos_hl] != '/' && pos_hl > 1) {
+		CT_ERROR(EINVAL, "hl have no leading '/' when fs has form: "
+			 "'%s'", fs);
 		return DSM_RC_UNSUCCESSFUL;
 	}
 
-	memcpy(hl, &fpath[0], i);
-	memcpy(ll, &fpath[i], len - i);
+	/* If fs: '/' then allow missing '/' at beginning of hl, and set it. */
+	if (fs[0] == '/' && fs_len == 1)
+		pos_hl--;
 
-	/* If i == 0 and either '/aaaa' or 'aaaa' was given. */
-	if (i == 0 && !strncmp(&fpath[0], &ll[0], len))
+	pos_ll = fpath_len;
+	/* Find character '/' in fpath backwards. */
+	while (pos_ll > 0 && fpath[pos_ll] != '/' && pos_ll--);
+
+	/* If fpath: '/data.txt' and fs: '/', then hl: '/', ll: '/data.txt'  */
+	if (pos_ll - pos_hl == 0)
 		hl[0] = '/';
+
+	memcpy(hl, &fpath[pos_hl], pos_ll - pos_hl);
+	memcpy(ll, &fpath[pos_ll], fpath_len - pos_ll);
 
 	return DSM_RC_SUCCESSFUL;
 }
@@ -913,11 +952,12 @@ dsInt16_t tsm_delete_fpath(const char *fs, const char *fpath,
 	char hl[DSM_MAX_HL_LENGTH + 1] = {0};
 	char ll[DSM_MAX_LL_LENGTH + 1] = {0};
 
-	rc = extract_hl_ll(fpath, hl, ll);
+	rc = extract_hl_ll(fpath, fs, hl, ll);
 	CT_DEBUG("[rc:%d] extract_hl_ll:\n"
 		 "fpath: %s\n"
+		 "fs   : %s\n"
 		 "hl: %s\n"
-		 "ll: %s\n", rc, fpath, hl, ll);
+		 "ll: %s\n", rc, fpath, fs, hl, ll);
 	if (rc) {
 		CT_ERROR(EFAILED, "extract_hl_ll failed");
 		return rc;
@@ -953,11 +993,12 @@ dsInt16_t tsm_query_fpath(const char *fs, const char *fpath, const char *desc,
 	char hl[DSM_MAX_HL_LENGTH + 1] = {0};
 	char ll[DSM_MAX_LL_LENGTH + 1] = {0};
 
-	rc = extract_hl_ll(fpath, hl, ll);
+	rc = extract_hl_ll(fpath, fs, hl, ll);
 	CT_DEBUG("[rc:%d] extract_hl_ll:\n"
 		 "fpath: %s\n"
+		 "fs   : %s\n"
 		 "hl: %s\n"
-		 "ll: %s\n", rc, fpath, hl, ll);
+		 "ll: %s\n", rc, fpath, fs, hl, ll);
 	if (rc) {
 		CT_ERROR(EFAILED, "extract_hl_ll");
 		return rc;
@@ -1128,7 +1169,12 @@ dsInt16_t tsm_retrieve_fpath(const char *fs, const char *fpath,
 	char hl[DSM_MAX_HL_LENGTH + 1] = {0};
 	char ll[DSM_MAX_LL_LENGTH + 1] = {0};
 
-	rc = extract_hl_ll(fpath, hl, ll);
+	rc = extract_hl_ll(fpath, fs, hl, ll);
+	CT_DEBUG("[rc:%d] extract_hl_ll:\n"
+		 "fpath: %s\n"
+		 "fs   : %s\n"
+		 "hl: %s\n"
+		 "ll: %s\n", rc, fpath, fs, hl, ll);
 	if (rc) {
 		CT_ERROR(EFAILED, "extract_hl_ll");
 		return rc;
@@ -1418,9 +1464,15 @@ static dsInt16_t tsm_archive_prepare(const char *fs, const char *fpath,
 		goto cleanup;
 	}
 
-	rc = extract_hl_ll(resolved_fpath, archive_info->obj_name.hl,
+	rc = extract_hl_ll(resolved_fpath, fs, archive_info->obj_name.hl,
 			   archive_info->obj_name.ll);
-	if (rc != DSM_RC_SUCCESSFUL) {
+	CT_DEBUG("[rc:%d] extract_hl_ll:\n"
+		 "fpath: %s\n"
+		 "fs   : %s\n"
+		 "hl: %s\n"
+		 "ll: %s\n", rc, fpath, fs, archive_info->obj_name.hl,
+		 archive_info->obj_name.ll);
+	if (rc) {
 		CT_ERROR(rc, "extract_hl_ll failed, resolved_path: %s, "
 			 "hl: %s, ll: %s", resolved_fpath,
 			 archive_info->obj_name.hl,
@@ -1569,16 +1621,16 @@ static dsInt16_t tsm_archive_recursive(struct archive_info_t *archive_info,
  * information. Note: If fpath is a directory and do_recursive is true, then
  * recursively all files and subdirectories inside fpath are also archived.
  *
- * @param[in] fs    File space name set in archive_info->dsmObjectName.fs.
- * @param[in] fpath Path to file or directory, converted to hl, ll and set
- *                  archive_info->dsmObjectName.hl and
- *                  archive_info->dsmObjectName.ll.
- * @param[in] desc  Description of fpath and set in
- *                  archive_info->dsmObjectName.desc.
- * @param[in] fd    File descriptor.
- * @param[in] lu_fid Lustre FID information is set in
- *                   archive_info->obj_info.lu_fid.
- * @param[in] session
+ * @param[in] fs      File space name set in archive_info->dsmObjectName.fs.
+ * @param[in] fpath   Path to file or directory, converted to hl, ll and set
+ *                    archive_info->dsmObjectName.hl and
+ *                    archive_info->dsmObjectName.ll.
+ * @param[in] desc    Description of fpath and set in
+ *                    archive_info->dsmObjectName.desc.
+ * @param[in] fd      File descriptor.
+ * @param[in] lu_fid  Lustre FID information is set in
+ *                    archive_info->obj_info.lu_fid.
+ * @param[in] session Session data.
  *
  * @return DSM_RC_SUCCESSFUL on success otherwise DSM_RC_UNSUCCESSFUL.
  */
@@ -1630,28 +1682,45 @@ dsInt16_t tsm_archive_fpath(const char *fs, const char *fpath, const char *desc,
  * successful.
  *
  * @param[in] session Active session.
- * @param[in] fsname File space name
+ * @param[in] fs File space name.
  * @return    DSM_RC_SUCCESSFUL on succes, otherwise ECONNABORTED, or
  *            ECONNREFUSED if maximum number of mountpoints is exceeded.
  */
-dsInt16_t tsm_check_free_mountp(struct session_t *session, const char *fsname)
+dsInt16_t tsm_check_free_mountp(struct session_t *session, const char *fs)
 {
 	dsInt16_t rc;
 
+	const char hl[] = "/.mount";
+	const char ll[] = "/.test-maxnummp";
+	const size_t len_fs = strlen(fs);
+	const size_t len = len_fs + strlen(hl) + strlen(ll) + 1;
+	char fpath[len];
+
+	if (len_fs > DSM_MAX_FSNAME_LENGTH) {
+		CT_ERROR(ENAMETOOLONG, "file space name too long");
+		return ECONNABORTED;
+	}
+	if (len > PATH_MAX) {
+		CT_ERROR(ENAMETOOLONG, "fpath name too long");
+		return ECONNABORTED;
+	}
+
+	bzero(fpath, len);
+	snprintf(fpath, len, "%s%s%s", fs, hl, ll);
+
 	/* Create dummy DSM_OBJ_DIRECTORY. */
-	struct archive_info_t archive_info = {.fpath =
-					      "/.mount/.test-maxnummp",
-					      .desc = "node mountpoint check",
+	struct archive_info_t archive_info = {.desc = "node mountpoint check",
 					      .obj_info = {.magic =
 							   MAGIC_ID_V1,
 							   .size.hi = 0,
 							   .size.lo = 1},
-					      .obj_name = {.hl = "/.mount",
-							   .ll =
-							   "/.test-maxnummp",
-							   .objType =
+					      .obj_name = {.objType =
 							   DSM_OBJ_DIRECTORY}};
-	strcpy(archive_info.obj_name.fs, fsname);
+
+	strcpy(archive_info.fpath, fpath);
+	strcpy(archive_info.obj_name.fs, fs);
+	strcpy(archive_info.obj_name.hl, hl);
+	strcpy(archive_info.obj_name.ll, ll);
 
 	/* Check if we have free mountpoints left for the node. */
 	dsUint8_t vote_txn = DSM_VOTE_COMMIT;
@@ -1704,7 +1773,7 @@ dsInt16_t tsm_check_free_mountp(struct session_t *session, const char *fsname)
 	}
 
 	/* Delete dummy DSM_OBJ_DIRECTORY. */
-	rc = tsm_delete_fpath(fsname, archive_info.fpath, session);
+	rc = tsm_delete_fpath(fs, archive_info.fpath, session);
 	if (rc) {
 		CT_ERROR(rc, "tsm_delete_fpath failed on '%s'",
 			 archive_info.fpath);
