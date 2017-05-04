@@ -65,6 +65,9 @@ The TSM servername to connect to. Name will be resolved to an actual ip address 
 .PP
 OPTIONAL
 .TP
+.BR \-x ", " \-\-prefix
+The directory prefix is the directory where all retrieved files and sub-directories will be saved to, i.e. the top of the retrieval tree. For example, --prefix '/tmp' assures that archived data stored at fs=/lustre/nyx,hl=/cs/turing,ll=/pub.tex is retrieved as file /tmp/lustre/nyx/cs/turing/pub.tex.
+.TP
 .BR \-r ", " \-\-recursive
 Archive directory recursively by also processing each sub-directory.
 .TP

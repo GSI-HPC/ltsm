@@ -66,6 +66,7 @@ static void usage(const char *cmd_name, const int rc)
 		"\t--query\n"
 		"\t--delete\n"
 		"\t-l, --latest [retrieve object with latest timestamp when multiple exists]\n"
+		"\t-x, --prefix [retrieve prefix directory]\n"
 		"\t-r, --recursive [archive directory and all sub-directories]\n"
 		"\t-f, --fsname <string> [default: '/']\n"
 		"\t-d, --description <string>\n"
@@ -109,9 +110,12 @@ static void sanity_arg_check(const char *argv)
 		usage(argv, 1);
 	}
 
+	/* There are no additional required arguments when
+	   --checksum is chosen. */
 	if (opt.o_checksum)
 		return;
 
+	/* Required arguments. */
 	if (!strlen(opt.o_node)) {
 		fprintf(stdout, "missing argument -n, --node <string>\n\n");
 		usage(argv, 1);
@@ -143,13 +147,14 @@ static int parseopts(int argc, char *argv[])
 		{"password",    required_argument, 0,                'p'},
 		{"servername",  required_argument, 0,                's'},
 		{"verbose",	required_argument, 0,                'v'},
+		{"prefix",	required_argument, 0,                'x'},
 		{"checksum",          no_argument, 0,	             'c'},
 		{"help",              no_argument, 0,	             'h'},
 		{0, 0, 0, 0}
 	};
 
 	int c;
-	while ((c = getopt_long(argc, argv, "lrf:d:n:o:p:s:v:ch",
+	while ((c = getopt_long(argc, argv, "lrf:d:n:o:p:s:v:x:ch",
 				long_opts, NULL)) != -1) {
 		switch (c) {
 		case 'l': {
@@ -214,6 +219,10 @@ static int parseopts(int argc, char *argv[])
 				usage(argv[0], 1);
 			}
 			api_msg_set_level(opt.o_verbose);
+			break;
+		}
+		case 'x': {
+			set_prefix(optarg);
 			break;
 		}
 		case 'c': {

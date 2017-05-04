@@ -48,8 +48,8 @@
 	(DSM_OBJ_ANY_TYPE == type ? "DSM_OBJ_ANY_TYPE" : "UNKNOWN")))))))
 
 static char rcmsg[DSM_MAX_RC_MSG_LENGTH + 1] = {0};
-
-static dsBool_t do_recursive;
+static dsBool_t do_recursive = bFalse;
+static char prefix[PATH_MAX + 1] = {0};
 
 #define TSM_GET_MSG(session, rc)			\
 do {							\
@@ -175,6 +175,29 @@ static dsInt16_t fallback_dt_unknown(struct dirent *entry, const char *fpath)
 	return rc;
 }
 
+/**
+ * @brief Set prefix name of directory where all retrieved files and
+ *        sub-directories will be saved to.
+ *
+ * The directory prefix is the directory where all retrieved files and
+ * sub-directories will be saved to, i.e. the top of the retrieval tree.
+ *
+ * @param[in] prefix Directory name prefixed when retrieving data.
+ */
+void set_prefix(const char *_prefix)
+{
+	const size_t len = strlen(_prefix);
+	size_t l = 0;
+
+	bzero(prefix, PATH_MAX + 1);
+	if (len > 0 && _prefix[l] != '/') {
+		prefix[l++] = '/';
+		CT_WARN("leading '/' in prefix is missing and automatically "
+			"added");
+	}
+	strncpy(prefix + l, _prefix, len < PATH_MAX ? len : PATH_MAX);
+}
+
 static void date_to_str(char *str, const dsmDate *date)
 {
 	sprintf(str, "%i/%02i/%02i %02i:%02i:%02i",
@@ -186,64 +209,50 @@ static void date_to_str(char *str, const dsmDate *date)
 		(dsInt16_t)date->second);
 }
 
-static dsInt16_t mkdir_p(const char *path, const mode_t st_mode)
+/**
+ * @brief Split path in all subpaths S and create directories S
+ *        when they no not exist.
+ *
+ * Split input pathname into all subpaths S, e.g.
+ * /tmp/a/b/c into S := {'/','/tmp','/tmp/a','/tmp/a/b','/tmp/a/b/c'}
+ * and create directories S when they do not exist.
+ *
+ * @param[in] path Pathname of directory.
+ * @param[in] st_mode Stat setting for directory.
+ * @return 0 on success, or -1 if an error occurred.
+ */
+static dsInt16_t mkdir_subpath(const char *path, const mode_t st_mode)
 {
-	int rc = 0;
-	size_t i = 0;
+	dsInt16_t rc = 0;
 	size_t len = strlen(path);
+	char _path[len + 1];
 
-	if (path[i] == '/')
-		i++;
+	bzero(_path, len + 1);
+	snprintf(_path, len + 1, "%s", path);
 
-	char sub_path[len + 1];
-	bzero(sub_path, len + 1);
+	if (len > 1 && _path[len - 1] != '/')
+		_path[len] = '/';
+	if (len == 1 && _path[len - 1] == '/')
+		_path[len] = '/';
 
-	while (i <= len) {
-		while (i <= len && path[i++] != '/');
-		memcpy(sub_path, &path[0], i++);
+	for (size_t l = 1; l <= len; l++) {
+		if (_path[l] == '/') {
+			_path[l] = '\0';
+			mode_t process_mask = umask(0);
+			rc = mkdir(_path, st_mode);
+			CT_DEBUG("[rc:%d] mkdir '%s'", rc, _path);
+			umask(process_mask);
 
-		mode_t process_mask = umask(0);
-		rc = mkdir(sub_path, st_mode);
-		umask(process_mask);
-
-		if (rc < 0 && errno != EEXIST)
-			return rc;
+			if (rc < 0 && errno != EEXIST) {
+				CT_ERROR(errno, "mkdir failed on '%s'", _path);
+				return rc;
+			}
+			_path[l] = '/';
+		}
 	}
 	/* If directory already exists return success. */
 	rc = rc < 0 && errno == EEXIST ? 0 : rc;
-
 	return rc;
-}
-
-
-/**
- * @brief Extract from qryRespArchiveData fields fs, hl, ll and construct fpath.
- *
- * @param[in]  query_data Query data response containing fs, hl and ll.
- * @param[out] fpath      File path contructed and set from fs, hl and ll.
- * @return DSM_RC_SUCCESSFUL on success otherwise DSM_RC_UNSUCCESSFUL.
- */
-static dsInt16_t extract_fpath(const qryRespArchiveData *query_data, char *fpath)
-{
-	if (fpath == NULL) {
-		CT_WARN("fpath: %p", fpath);
-		return DSM_RC_UNSUCCESSFUL;
-	}
-
-	const size_t len = strlen(query_data->objName.fs) +
-		strlen(query_data->objName.hl) +
-		strlen(query_data->objName.ll) + 1;
-
-	if (len > PATH_MAX) {
-		CT_ERROR(ENAMETOOLONG, "len > PATH_MAX");
-		return DSM_RC_UNSUCCESSFUL;
-	}
-
-	snprintf(fpath, len, "%s%s%s", query_data->objName.fs,
-		 query_data->objName.hl, query_data->objName.ll);
-	CT_INFO("fs/hl/ll fpath: %s\n", fpath);
-
-	return DSM_RC_SUCCESSFUL;
 }
 
 /**
@@ -275,29 +284,36 @@ static dsInt16_t retrieve_obj(qryRespArchiveData *query_data,
 		   two objects, however we have no st_mode information of /dir1
 		   and /dir1/dir2, therefore use the default directory permission:
 		   S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH */
-		const size_t len = strlen(query_data->objName.fs) +
+		size_t len = strlen(prefix) +
+			strlen(query_data->objName.fs) +
 			strlen(query_data->objName.hl) + 1;
-		char directory[len];
-		bzero(directory, sizeof(char) * len);
-		snprintf(directory, len, "%s%s",
+		char path[len + 1];
+		bzero(path, len + 1);
+		snprintf(path, len + 1, "%s%s%s",
+			 prefix,
 			 query_data->objName.fs,
 			 query_data->objName.hl);
 
-		rc = mkdir_p(directory,
-			     S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH);
-		CT_DEBUG("[rc:%d] mkdir_p(%s)", rc, directory);
+		/* Make sure the directory exists where to store the file. */
+		rc = mkdir_subpath(path,
+				   S_IRWXU | S_IRGRP | S_IXGRP |
+				   S_IROTH | S_IXOTH);
+		CT_DEBUG("[rc:%d] mkdir_subpath '%s'", rc, path);
 		if (rc) {
-			CT_ERROR(rc, "mkdir_p");
+			CT_ERROR(rc, "mkdir_subpath '%s'", path);
 			return DSM_RC_UNSUCCESSFUL;
 		}
 
 		char fpath[PATH_MAX + 1] = {0};
-		rc = extract_fpath(query_data, &fpath[0]);
-		if (rc != DSM_RC_SUCCESSFUL)
-			return  DSM_RC_UNSUCCESSFUL;
-
+		len += strlen(query_data->objName.ll);
+		if (len > PATH_MAX) {
+			CT_ERROR(ENAMETOOLONG, "fpath name too long (> PATH_MAX)");
+			return DSM_RC_UNSUCCESSFUL;
+		}
+		snprintf(fpath, len + 1, "%s%s", path, query_data->objName.ll);
 		fd = open(fpath, O_WRONLY | O_TRUNC | O_CREAT,
 			  obj_info->st_mode);
+		CT_DEBUG("[fd:%d] open '%s'", fd, fpath);
 		if (fd < 0) {
 			CT_ERROR(errno, "open '%s'", fpath);
 			return DSM_RC_UNSUCCESSFUL;
@@ -1115,19 +1131,23 @@ static dsInt16_t tsm_retrieve_generic(int fd, struct session_t *session)
 				}
 			} break;
 			case DSM_OBJ_DIRECTORY: {
-				const size_t len = strlen(query_data.objName.fs) +
+				const size_t len = strlen(prefix) +
+					strlen(query_data.objName.fs) +
 					strlen(query_data.objName.hl) +
 					strlen(query_data.objName.ll) + 1;
-				char directory[len];
-				bzero(directory, sizeof(char) * len);
-				snprintf(directory, len, "%s%s%s",
+				char path[len + 1];
+				bzero(path, len + 1);
+				snprintf(path, len, "%s%s%s%s",
+					 prefix,
 					 query_data.objName.fs,
 					 query_data.objName.hl,
 					 query_data.objName.ll);
-				rc_minor = mkdir_p(directory, obj_info.st_mode);
-				CT_DEBUG("[rc:%d] mkdir_p(%s)\n", rc_minor, directory);
+				rc_minor = mkdir_subpath(path,
+							 obj_info.st_mode);
+				CT_DEBUG("[rc:%d] mkdir_subpath(%s)\n",
+					 rc_minor, path);
 				if (rc_minor) {
-					CT_ERROR(rc_minor, "mkdir_p");
+					CT_ERROR(rc_minor, "mkdir_subpath '%s'", path);
 					goto cleanup_getdata;
 				}
 				break;

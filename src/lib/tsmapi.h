@@ -123,6 +123,7 @@ off64_t to_off64_t(const dsStruct64_t size);
 dsStruct64_t to_dsStruct64_t(const off_t size);
 void set_recursive(const dsBool_t recursive);
 void select_latest(const dsBool_t latest);
+void set_prefix(const char *_prefix);
 
 void login_fill(struct login_t *login, const char *servername,
 		const char *node, const char *password,
