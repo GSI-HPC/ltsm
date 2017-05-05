@@ -310,7 +310,18 @@ static int fid_realpath(const char *mnt, const lustre_fid *fid,
 	return rc;
 }
 
-static int ct_finish(struct session_t *session, int ct_rc, char *fpath)
+static int ct_hsm_action_begin(struct session_t *session,
+			       int mdt_index,
+			       int open_flags,
+			       bool is_error,
+			       const char *fpath)
+{
+	return llapi_hsm_action_begin(&session->hcp, ctdata, session->hai,
+				      mdt_index, open_flags, is_error);
+}
+
+static int ct_hsm_action_end(struct session_t *session, const int ct_rc,
+			     const char *fpath)
 {
 	int rc;
 
@@ -320,27 +331,17 @@ static int ct_finish(struct session_t *session, int ct_rc, char *fpath)
 		   PFID(&session->hai->hai_fid),
 		   -ct_rc);
 
-	if (session->hcp == NULL) {
-		rc = llapi_hsm_action_begin(&session->hcp, ctdata, session->hai,
-					    -1, 0, true);
-		CT_DEBUG("[rc=%d] llapi_hsm_action_begin() on '%s'", rc, fpath);
-		if (rc < 0) {
-			CT_ERROR(rc, "llapi_hsm_action_begin() on '%s' failed",
-				 fpath);
-			return rc;
-		}
-	}
 	rc = llapi_hsm_action_end(&session->hcp, &session->hai->hai_extent,
-				0 /* HP_FLAG_RETRY */, ct_rc ? EIO : 0);
+				  0 /* HP_FLAG_RETRY */, ct_rc ? EIO : 0);
 	if (rc == -ECANCELED)
 		CT_ERROR(rc, "completed action on '%s' has been canceled: "
 			 "cookie=%#jx, FID="DFID, fpath,
 			 (uintmax_t)session->hai->hai_cookie,
 			 PFID(&session->hai->hai_fid));
 	else if (rc < 0)
-		CT_ERROR(rc, "llapi_hsm_action_end() on '%s' failed", fpath);
+		CT_ERROR(rc, "llapi_hsm_action_end on '%s' failed", fpath);
 	else
-		CT_DEBUG("[rc=%d] llapi_hsm_action_end() on '%s' ok", rc,
+		CT_DEBUG("[rc=%d] llapi_hsm_action_end on '%s' ok", rc,
 			 fpath);
 
 	return rc;
@@ -350,7 +351,7 @@ static int ct_archive(struct session_t *session)
 {
 	char fpath[PATH_MAX + 1] = {0};
 	int rc;
-	int src_fd = -1;
+	int fd = -1;
 
 	rc = fid_realpath(opt.o_mnt, &session->hai->hai_fid, fpath, sizeof(fpath));
 	if (rc < 0) {
@@ -358,10 +359,10 @@ static int ct_archive(struct session_t *session)
 		goto cleanup;
 	}
 
-	rc = llapi_hsm_action_begin(&session->hcp, ctdata, session->hai, -1, 0, false);
-	CT_DEBUG("[rc=%d] llapi_hsm_action_begin() on '%s'", rc, fpath);
+	rc = ct_hsm_action_begin(session, -1, 0, false, fpath);
+	CT_DEBUG("[rc=%d] ct_hsm_action_begin on '%s'", rc, fpath);
 	if (rc < 0) {
-		CT_ERROR(rc, "llapi_hsm_action_begin on '%s' failed", fpath);
+		CT_ERROR(rc, "ct_hsm_action_begin on '%s' failed", fpath);
 		goto cleanup;
 	}
 	CT_MESSAGE("archiving '%s' to TSM storage", fpath);
@@ -373,15 +374,15 @@ static int ct_archive(struct session_t *session)
 		goto cleanup;
 	}
 
-	src_fd = llapi_hsm_action_get_fd(session->hcp);
-	CT_DEBUG("[fd=%d] llapi_hsm_action_get_fd()", src_fd);
-	if (src_fd < 0) {
-		rc = src_fd;
+	fd = llapi_hsm_action_get_fd(session->hcp);
+	CT_DEBUG("[fd=%d] llapi_hsm_action_get_fd()", fd);
+	if (fd < 0) {
+		rc = fd;
 		CT_ERROR(rc, "cannot open '%s' for read", fpath);
 		goto cleanup;
 	}
 
-	rc = tsm_archive_fpath(opt.o_fsname, fpath, NULL, src_fd,
+	rc = tsm_archive_fpath(opt.o_fsname, fpath, NULL, fd,
 			       (const void *)&session->hai->hai_fid, session);
 	if (rc) {
 		CT_ERROR(rc, "tsm_archive_fpath on '%s' failed", fpath);
@@ -390,10 +391,10 @@ static int ct_archive(struct session_t *session)
 	CT_MESSAGE("archiving '%s' to TSM storage done", fpath);
 
 cleanup:
-	if (!(src_fd < 0))
-		close(src_fd);
+	if (!(fd < 0))
+		close(fd);
 
-	rc = ct_finish(session, rc, fpath);
+	rc = ct_hsm_action_end(session, rc, fpath);
 
 	return rc;
 }
@@ -401,9 +402,8 @@ cleanup:
 static int ct_restore(struct session_t *session)
 {
 	int rc;
-	int dst_fd = -1;
+	int fd = -1;
 	int mdt_index = -1;
-	int open_flags = 0;
 	char fpath[PATH_MAX + 1] = {0};
 	struct lu_fid dfid;
 
@@ -422,8 +422,7 @@ static int ct_restore(struct session_t *session)
 		return rc;
 	}
 
-	rc = llapi_hsm_action_begin(&session->hcp, ctdata, session->hai,
-				    mdt_index, open_flags, false);
+	rc = ct_hsm_action_begin(session, mdt_index, 0, false, fpath);
 	if (rc < 0) {
 		CT_ERROR(rc, "llapi_hsm_action_begin on '%s' failed", fpath);
 		return rc;
@@ -445,14 +444,14 @@ static int ct_restore(struct session_t *session)
 		goto cleanup;
 	}
 
-	dst_fd = llapi_hsm_action_get_fd(session->hcp);
-	if (dst_fd < 0) {
-		rc = dst_fd;
+	fd = llapi_hsm_action_get_fd(session->hcp);
+	if (fd < 0) {
+		rc = fd;
 		CT_ERROR(rc, "cannot open '%s' for write", fpath);
 		goto cleanup;
 	}
 
-	rc = tsm_retrieve_fpath(opt.o_fsname, fpath, NULL, dst_fd, session);
+	rc = tsm_retrieve_fpath(opt.o_fsname, fpath, NULL, fd, session);
 	if (rc != DSM_RC_SUCCESSFUL) {
 		CT_ERROR(rc, "tsm_retrieve_fpath on '%s' failed", fpath);
 		goto cleanup;
@@ -460,10 +459,10 @@ static int ct_restore(struct session_t *session)
 	CT_MESSAGE("data restore from TSM storage to '%s' done", fpath);
 
 cleanup:
-	rc = ct_finish(session, rc, fpath);
+	if (!(fd < 0))
+		close(fd);
 
-	if (!(dst_fd < 0))
-		close(dst_fd);
+	rc = ct_hsm_action_end(session, rc, fpath);
 
 	return rc;
 }
@@ -479,9 +478,9 @@ static int ct_remove(struct session_t *session)
 		goto cleanup;
 	}
 
-	rc = llapi_hsm_action_begin(&session->hcp, ctdata, session->hai, -1, 0, false);
+	rc = ct_hsm_action_begin(session, -1, 0, false, fpath);
 	if (rc < 0) {
-		CT_ERROR(rc, "llapi_hsm_action_begin() on '%s' failed", fpath);
+		CT_ERROR(rc, "ct_hsm_action_begin on '%s' failed", fpath);
 		goto cleanup;
 	}
 	CT_MESSAGE("removing from TSM storage file '%s'", fpath);
@@ -499,7 +498,7 @@ static int ct_remove(struct session_t *session)
 	}
 
 cleanup:
-	rc = ct_finish(session, rc, fpath);
+	rc = ct_hsm_action_end(session, rc, fpath);
 
 	return rc;
 }
@@ -543,7 +542,7 @@ static int ct_process_item(struct session_t *session)
 		CT_ERROR(rc, "unknown action %d, on '%s'", session->hai->hai_action,
 			 opt.o_mnt);
 		err_minor++;
-		ct_finish(session, rc, NULL);
+		ct_hsm_action_end(session, rc, NULL);
 	}
 	free(session->hai);
 
