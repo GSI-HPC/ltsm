@@ -35,6 +35,7 @@
 #include <linux/limits.h>
 #include <sys/syscall.h>
 #include <sys/time.h>
+#include <attr/xattr.h>
 #include <lustre/lustre_idl.h>
 #include <lustre/lustreapi.h>
 #include "tsmapi.h"
@@ -271,6 +272,28 @@ static int ct_parseopts(int argc, char *argv[])
 	return 0;
 }
 
+static int xattr_get_lov(const int fd, struct lustre_info_t *lustre_info,
+			 const char *fpath)
+{
+	int rc = 0;
+	char lov_buf[XATTR_SIZE_MAX] = {0};
+	ssize_t xattr_size;
+
+	xattr_size = fgetxattr(fd, XATTR_LUSTRE_LOV, lov_buf, sizeof(lov_buf));
+	if (xattr_size < 0) {
+		rc = errno;
+		CT_ERROR(rc, "fgetxattr failed on '%s'", fpath);
+		return rc;
+	}
+
+	struct lov_user_md *lum;
+	lum = (struct lov_user_md *)lov_buf;
+	lustre_info->stripe_size = lum->lmm_stripe_size;
+	lustre_info->stripe_count = lum->lmm_stripe_count;
+
+	return rc;
+}
+
 static int progress_callback(struct progress_size_t *pg_size,
 			     struct session_t *session)
 {
@@ -352,6 +375,7 @@ static int ct_archive(struct session_t *session)
 	char fpath[PATH_MAX + 1] = {0};
 	int rc;
 	int fd = -1;
+	struct lustre_info_t lustre_info = {0};
 
 	rc = fid_realpath(opt.o_mnt, &session->hai->hai_fid, fpath, sizeof(fpath));
 	if (rc < 0) {
@@ -382,8 +406,16 @@ static int ct_archive(struct session_t *session)
 		goto cleanup;
 	}
 
+	lustre_info.fid_seq = session->hai->hai_fid.f_seq;
+	lustre_info.fid_oid = session->hai->hai_fid.f_oid;
+	lustre_info.fid_ver = session->hai->hai_fid.f_ver;
+	rc = xattr_get_lov(fd, &lustre_info, fpath);
+	if (rc)
+		CT_WARN("[rc=%d] xattr_get_lov failed on '%s' "
+			"stripe information cannot be stored");
+
 	rc = tsm_archive_fpath(opt.o_fsname, fpath, NULL, fd,
-			       (const void *)&session->hai->hai_fid, session);
+			       &lustre_info, session);
 	if (rc) {
 		CT_ERROR(rc, "tsm_archive_fpath on '%s' failed", fpath);
 		goto cleanup;

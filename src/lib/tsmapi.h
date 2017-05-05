@@ -70,10 +70,12 @@ struct login_t {
 	char fstype[DSM_MAX_FSTYPE_LENGTH + 1];
 };
 
-struct lu_fid_t {
-	dsUint64_t f_seq;
-	dsUint32_t f_oid;
-	dsUint32_t f_ver;
+struct lustre_info_t {
+	uint64_t fid_seq;
+	uint32_t fid_oid;
+	uint32_t fid_ver;
+	uint32_t stripe_size;
+	uint16_t stripe_count;
 };
 
 struct obj_info_t {
@@ -81,7 +83,7 @@ struct obj_info_t {
 	dsStruct64_t size;
 	mode_t st_mode;
 	uint32_t crc32;
-	struct lu_fid_t lu_fid;
+	struct lustre_info_t lustre_info;
 };
 
 struct archive_info_t {
@@ -144,7 +146,7 @@ dsInt16_t tsm_check_free_mountp(struct session_t *session,
 dsInt16_t tsm_query_session(struct session_t *session);
 dsInt16_t tsm_archive_fpath(const char *fs, const char *fpath,
 			    const char *desc, int fd,
-			    const struct lu_fid_t *lu_fid,
+			    const struct lustre_info_t *lustre_info,
 			    struct session_t *session);
 dsInt16_t tsm_query_fpath(const char *fs, const char *fpath,
 			  const char *desc, struct  session_t *session);

@@ -69,8 +69,11 @@ AC_CHECK_LIB([ApiTSM64], [dsmInitEx], [], [AC_MSG_ERROR([cannot find proprietary
 # Check for required zlib library.
 AX_CHECK_ZLIB(, AC_MSG_ERROR([zlib is required and could not be found!]))
 
+# Check for required xattr library.
+AC_CHECK_LIB([attr], [fgetxattr], [], [AC_MSG_ERROR([libattr is required and could not be found!])])
+
 # Checks for header files.
-AC_CHECK_HEADERS([fcntl.h stdint.h stdlib.h string.h strings.h sys/param.h sys/time.h unistd.h pthread.h float.h])
+AC_CHECK_HEADERS([fcntl.h stdint.h stdlib.h string.h strings.h sys/param.h sys/time.h unistd.h pthread.h float.h attr/xattr.h])
 
 AX_PTHREAD([AC_DEFINE(HAVE_PTHREAD, 1, [Define if you have POSIX threads libraries and header files.])
             CLIBS="$PTHREAD_LIBS $LIBS"

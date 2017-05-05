@@ -455,7 +455,13 @@ static void display_qra(const qryRespArchiveData *qra_data, const uint32_t n,
 			"insert date                                : %s\n"
 			"expiration date                            : %s\n"
 			"restore order (top,hi_hi,hi_lo,lo_hi,lo_lo): (%u,%u,%u,%u,%u)\n"
-			"estimated size (hi,lo)                     : (%u,%u)\n",
+			"estimated size (hi,lo)                     : (%u,%u)\n"
+#ifdef HAVE_LUSTRE
+			"lustre fid                                 : [%#llx:0x%x:0x%x]\n"
+			"lustre stripe size                         : %u\n"
+			"lustre stripe count                        : %u\n"
+#endif
+			,
 			msg,
 			n,
 			qra_data->objName.fs,
@@ -479,7 +485,15 @@ static void display_qra(const qryRespArchiveData *qra_data, const uint32_t n,
 			qra_data->restoreOrderExt.lo_hi,
 			qra_data->restoreOrderExt.lo_lo,
 			qra_data->sizeEstimate.hi,
-			qra_data->sizeEstimate.lo);
+			qra_data->sizeEstimate.lo
+#ifdef HAVE_LUSTRE
+			,obj_info.lustre_info.fid_seq,
+			obj_info.lustre_info.fid_oid,
+			obj_info.lustre_info.fid_ver,
+			obj_info.lustre_info.stripe_size,
+			obj_info.lustre_info.stripe_count
+#endif
+			);
 	}
 }
 
@@ -1655,19 +1669,24 @@ static dsInt16_t tsm_archive_recursive(struct archive_info_t *archive_info,
  * @return DSM_RC_SUCCESSFUL on success otherwise DSM_RC_UNSUCCESSFUL.
  */
 dsInt16_t tsm_archive_fpath(const char *fs, const char *fpath, const char *desc,
-                            int fd, const struct lu_fid_t *lu_fid,
+                            int fd, const struct lustre_info_t *lustre_info,
 			    struct session_t *session)
 {
 	int rc;
 	struct archive_info_t archive_info;
 
 	CT_INFO("tsm_archive_fpath:\n"
-		"fs: %s, fpath: %s, desc: %s, fd: %d, *lu_fid: %p",
-		fs, fpath, desc, fd, lu_fid);
+		"fs: %s, fpath: %s, desc: %s, fd: %d, *lustre_info: %p",
+		fs, fpath, desc, fd, lustre_info);
 
 	memset(&archive_info, 0, sizeof(struct archive_info_t));
-	if (lu_fid)
-		memcpy(&(archive_info.obj_info.lu_fid), lu_fid, sizeof(struct lu_fid_t));
+
+#if HAVE_LUSTRE
+	if (lustre_info)
+		memcpy(&(archive_info.obj_info.lustre_info),
+		       lustre_info, sizeof(struct lustre_info_t));
+#endif
+
 	rc = tsm_archive_prepare(fs, fpath, desc, &archive_info);
 	if (rc) {
 		CT_WARN("tsm_archive_prepare failed: \n"
