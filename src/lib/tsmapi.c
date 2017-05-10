@@ -492,7 +492,7 @@ static void display_qra(const qryRespArchiveData *qra_data, const uint32_t n,
 			"fs: %s, hl: %s, ll: %s\n"
 			"object id (hi,lo)                          : (%u,%u)\n"
 			"object info length                         : %d\n"
-			"object info size (hi,lo)                   : (%u,%u)\n"
+			"object info size (hi,lo)                   : (%u,%u) (%zu bytes)\n"
 			"object type                                : %s\n"
 			"object magic id                            : %d\n"
 			"crc32                                      : 0x%08x (%010u)\n"
@@ -501,7 +501,7 @@ static void display_qra(const qryRespArchiveData *qra_data, const uint32_t n,
 			"insert date                                : %s\n"
 			"expiration date                            : %s\n"
 			"restore order (top,hi_hi,hi_lo,lo_hi,lo_lo): (%u,%u,%u,%u,%u)\n"
-			"estimated size (hi,lo)                     : (%u,%u)\n"
+			"estimated size (hi,lo)                     : (%u,%u) (%zu bytes)\n"
 #ifdef HAVE_LUSTRE
 			"lustre fid                                 : [%#llx:0x%x:0x%x]\n"
 			"lustre stripe size                         : %u\n"
@@ -521,6 +521,7 @@ static void display_qra(const qryRespArchiveData *qra_data, const uint32_t n,
 			qra_data->objInfolen,
 			obj_info.size.hi,
 			obj_info.size.lo,
+			to_off64_t(obj_info.size),
 			OBJ_TYPE(qra_data->objName.objType),
 			obj_info.magic,
 			obj_info.crc32, obj_info.crc32,
@@ -534,7 +535,8 @@ static void display_qra(const qryRespArchiveData *qra_data, const uint32_t n,
 			qra_data->restoreOrderExt.lo_hi,
 			qra_data->restoreOrderExt.lo_lo,
 			qra_data->sizeEstimate.hi,
-			qra_data->sizeEstimate.lo
+			qra_data->sizeEstimate.lo,
+			to_off64_t(qra_data->sizeEstimate)
 #ifdef HAVE_LUSTRE
 			,obj_info.lustre_info.fid.seq,
 			obj_info.lustre_info.fid.oid,
