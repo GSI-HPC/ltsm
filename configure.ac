@@ -36,17 +36,20 @@ AC_ARG_WITH([lustre], AS_HELP_STRING([--with-lustre[=PATH]],[path to location fo
 
 AS_IF([test -x "$with_lustre"],
 	[
-	# Check for Lustre header file
+	# Check for Lustre header file.
 	AC_CHECK_FILE("$LUSTRE_SRC_DIR/lustre/include/lustre/lustre_user.h",
 		[],
 		[AC_MSG_ERROR("cannot find Lustre source tree. Use --with-lustre[=PATH]")]
 	)
-	# Check for Lustre library
+	# Check for Lustre library.
 	AC_CHECK_LIB([lustreapi],
 		 [llapi_error],
 		 [],
 		 [AC_MSG_ERROR([cannot find Lustre API library lustreapi, fix it by providing library path e.g. ./configure LDFLAGS='-L/<PATH_TO_LIB>'])]
         )
+	# Check for required xattr library, otherwise we cannot get Lustre stripe information.
+	AC_CHECK_LIB([attr], [fgetxattr], [], [AC_MSG_ERROR([libattr is required and could not be found!])])
+	#
 	AC_DEFINE([HAVE_LUSTRE], [1], [define to 1 if Lustre source is available])
 	AM_CONDITIONAL([HAVE_LUSTRE], [true])
 	],
@@ -69,9 +72,6 @@ AC_CHECK_LIB([ApiTSM64], [dsmInitEx], [], [AC_MSG_ERROR([cannot find proprietary
 # Check for required zlib library.
 AX_CHECK_ZLIB(, AC_MSG_ERROR([zlib is required and could not be found!]))
 
-# Check for required xattr library.
-AC_CHECK_LIB([attr], [fgetxattr], [], [AC_MSG_ERROR([libattr is required and could not be found!])])
-
 # Checks for header files.
 AC_CHECK_HEADERS([fcntl.h stdint.h stdlib.h string.h strings.h sys/param.h sys/time.h unistd.h pthread.h float.h attr/xattr.h])
 
@@ -81,6 +81,21 @@ AX_PTHREAD([AC_DEFINE(HAVE_PTHREAD, 1, [Define if you have POSIX threads librari
             LDFLAGS="$LDFLAGS $PTHREAD_CFLAGS"
             CC="$PTHREAD_CC"],[])
 AC_SEARCH_LIBS(pthread_create, pthread)
+
+# Check whether struct lov_user_md has member lmm_pool_name.
+AC_MSG_CHECKING([whether 'struct lov_user_md_v3' is defined])
+AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[
+#include <lustre/lustre_user.h>
+]], [[
+do {
+   ((struct lov_user_md *)0)->lmm_pool_name = NULL;
+} while(0)
+]])],[
+  AC_MSG_RESULT(yes)
+  AC_DEFINE(LOV_MAGIC_V3,[1],[define if you have 'struct lov_user_md_v3'])
+],[
+  AC_MSG_RESULT(no)
+])
 
 # Propage flags and dirs among final Makefiles.
 AC_SUBST([AM_CFLAGS])

@@ -35,7 +35,6 @@
 #include <linux/limits.h>
 #include <sys/syscall.h>
 #include <sys/time.h>
-#include <attr/xattr.h>
 #include <lustre/lustre_idl.h>
 #include <lustre/lustreapi.h>
 #include "tsmapi.h"
@@ -272,28 +271,6 @@ static int ct_parseopts(int argc, char *argv[])
 	return 0;
 }
 
-static int xattr_get_lov(const int fd, struct lustre_info_t *lustre_info,
-			 const char *fpath)
-{
-	int rc = 0;
-	char lov_buf[XATTR_SIZE_MAX] = {0};
-	ssize_t xattr_size;
-
-	xattr_size = fgetxattr(fd, XATTR_LUSTRE_LOV, lov_buf, sizeof(lov_buf));
-	if (xattr_size < 0) {
-		rc = errno;
-		CT_ERROR(rc, "fgetxattr failed on '%s'", fpath);
-		return rc;
-	}
-
-	struct lov_user_md *lum;
-	lum = (struct lov_user_md *)lov_buf;
-	lustre_info->stripe_size = lum->lmm_stripe_size;
-	lustre_info->stripe_count = lum->lmm_stripe_count;
-
-	return rc;
-}
-
 static int progress_callback(struct progress_size_t *pg_size,
 			     struct session_t *session)
 {
@@ -333,11 +310,8 @@ static int fid_realpath(const char *mnt, const lustre_fid *fid,
 	return rc;
 }
 
-static int ct_hsm_action_begin(struct session_t *session,
-			       int mdt_index,
-			       int open_flags,
-			       bool is_error,
-			       const char *fpath)
+static int ct_hsm_action_begin(struct session_t *session, int mdt_index,
+			       int open_flags, bool is_error)
 {
 	return llapi_hsm_action_begin(&session->hcp, ctdata, session->hai,
 				      mdt_index, open_flags, is_error);
@@ -372,18 +346,22 @@ static int ct_hsm_action_end(struct session_t *session, const int ct_rc,
 
 static int ct_archive(struct session_t *session)
 {
-	char fpath[PATH_MAX + 1] = {0};
 	int rc;
 	int fd = -1;
-	struct lustre_info_t lustre_info = {0};
+	int mdt_index = -1;
+	int open_flags = 0;
+	char fpath[PATH_MAX + 1] = {0};
+	struct lustre_info_t lustre_info = {.fid = {0},
+					    .lov = {0}};
 
-	rc = fid_realpath(opt.o_mnt, &session->hai->hai_fid, fpath, sizeof(fpath));
+	rc = fid_realpath(opt.o_mnt, &session->hai->hai_fid, fpath,
+			  sizeof(fpath));
 	if (rc < 0) {
 		CT_ERROR(rc, "fid_realpath failed");
 		goto cleanup;
 	}
 
-	rc = ct_hsm_action_begin(session, -1, 0, false, fpath);
+	rc = ct_hsm_action_begin(session, mdt_index, open_flags, false);
 	CT_DEBUG("[rc=%d] ct_hsm_action_begin on '%s'", rc, fpath);
 	if (rc < 0) {
 		CT_ERROR(rc, "ct_hsm_action_begin on '%s' failed", fpath);
@@ -406,15 +384,15 @@ static int ct_archive(struct session_t *session)
 		goto cleanup;
 	}
 
-	lustre_info.fid_seq = session->hai->hai_fid.f_seq;
-	lustre_info.fid_oid = session->hai->hai_fid.f_oid;
-	lustre_info.fid_ver = session->hai->hai_fid.f_ver;
+	lustre_info.fid.seq = session->hai->hai_fid.f_seq;
+	lustre_info.fid.oid = session->hai->hai_fid.f_oid;
+	lustre_info.fid.ver = session->hai->hai_fid.f_ver;
 	rc = xattr_get_lov(fd, &lustre_info, fpath);
 	if (rc)
 		CT_WARN("[rc=%d] xattr_get_lov failed on '%s' "
-			"stripe information cannot be stored");
+			"stripe information cannot be stored", rc, fpath);
 
-	rc = tsm_archive_fpath(opt.o_fsname, fpath, NULL, fd,
+	rc = tsm_archive_fpath(opt.o_fsname, fpath, NULL /* Description */, fd,
 			       &lustre_info, session);
 	if (rc) {
 		CT_ERROR(rc, "tsm_archive_fpath on '%s' failed", fpath);
@@ -436,8 +414,8 @@ static int ct_restore(struct session_t *session)
 	int rc;
 	int fd = -1;
 	int mdt_index = -1;
+	int open_flags = 0;
 	char fpath[PATH_MAX + 1] = {0};
-	struct lu_fid dfid;
 
 	rc = fid_realpath(opt.o_mnt, &session->hai->hai_fid, fpath,
 			  sizeof(fpath));
@@ -454,18 +432,10 @@ static int ct_restore(struct session_t *session)
 		return rc;
 	}
 
-	rc = ct_hsm_action_begin(session, mdt_index, 0, false, fpath);
+	rc = ct_hsm_action_begin(session, mdt_index, open_flags, false);
 	if (rc < 0) {
 		CT_ERROR(rc, "llapi_hsm_action_begin on '%s' failed", fpath);
 		return rc;
-	}
-
-	rc = llapi_hsm_action_get_dfid(session->hcp, &dfid);
-	if (rc < 0) {
-		CT_ERROR(rc, "restoring "DFID
-			 ", cannot get FID of created volatile file",
-			 PFID(&session->hai->hai_fid));
-		goto cleanup;
 	}
 	CT_MESSAGE("restoring data from TSM storage to '%s'", fpath);
 
@@ -483,8 +453,9 @@ static int ct_restore(struct session_t *session)
 		goto cleanup;
 	}
 
-	rc = tsm_retrieve_fpath(opt.o_fsname, fpath, NULL, fd, session);
-	if (rc != DSM_RC_SUCCESSFUL) {
+	rc = tsm_retrieve_fpath(opt.o_fsname, fpath, NULL /* Description */,
+				fd, session);
+	if (rc) {
 		CT_ERROR(rc, "tsm_retrieve_fpath on '%s' failed", fpath);
 		goto cleanup;
 	}
@@ -501,16 +472,19 @@ cleanup:
 
 static int ct_remove(struct session_t *session)
 {
-	char fpath[PATH_MAX + 1] = {0};
 	int rc;
+	int mdt_index = -1;
+	int open_flags = 0;
+	char fpath[PATH_MAX + 1] = {0};
 
-	rc = fid_realpath(opt.o_mnt, &session->hai->hai_fid, fpath, sizeof(fpath));
+	rc = fid_realpath(opt.o_mnt, &session->hai->hai_fid, fpath,
+			  sizeof(fpath));
 	if (rc < 0) {
 		CT_ERROR(rc, "fid_realpath()");
 		goto cleanup;
 	}
 
-	rc = ct_hsm_action_begin(session, -1, 0, false, fpath);
+	rc = ct_hsm_action_begin(session, mdt_index, open_flags, false);
 	if (rc < 0) {
 		CT_ERROR(rc, "ct_hsm_action_begin on '%s' failed", fpath);
 		goto cleanup;

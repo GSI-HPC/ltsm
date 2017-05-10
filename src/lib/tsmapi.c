@@ -38,6 +38,11 @@
 #include "tsmapi.h"
 #include "qtable.h"
 
+#ifdef HAVE_LUSTRE
+#include <attr/xattr.h>
+#include <lustre/lustreapi.h>
+#endif
+
 #define OBJ_TYPE(type)							\
 	(DSM_OBJ_FILE == type ? "DSM_OBJ_FILE" :			\
 	(DSM_OBJ_DIRECTORY == type ? "DSM_OBJ_DIRECTORY" :		\
@@ -255,6 +260,43 @@ static dsInt16_t mkdir_subpath(const char *path, const mode_t st_mode)
 	return rc;
 }
 
+#ifdef HAVE_LUSTRE
+int xattr_get_lov(const int fd, struct lustre_info_t *lustre_info,
+		  const char *fpath)
+{
+	int rc = 0;
+	char lov_buf[XATTR_SIZE_MAX] = {0};
+	ssize_t xattr_size;
+
+	xattr_size = fgetxattr(fd, XATTR_LUSTRE_LOV, lov_buf, sizeof(lov_buf));
+	if (xattr_size < 0) {
+		rc = errno;
+		CT_ERROR(rc, "fgetxattr failed on '%s'", fpath);
+		return rc;
+	}
+
+#ifdef LOV_MAGIC_V3
+	struct lov_user_md_v3 *lum;
+	lum = (struct lov_user_md_v3 *)lov_buf;
+#else
+	struct lov_user_md *lum;
+	lum = (struct lov_user_md *)lov_buf;
+#endif
+
+	lustre_info->lov.stripe_size = lum->lmm_stripe_size;
+	lustre_info->lov.stripe_count = lum->lmm_stripe_count;
+
+#ifdef LOV_MAGIC_V3
+	bzero(lustre_info->lov.pool_name, LOV_MAXPOOLNAME + 1);
+	strncpy(lustre_info->lov.pool_name, lum->lmm_pool_name,
+		LOV_MAXPOOLNAME + 1);
+#endif
+
+	return rc;
+}
+
+#endif /* HAVE_LUSTRE */
+
 /**
  * @brief Retrieve and write object data into file descriptor.
  *
@@ -275,6 +317,10 @@ static dsInt16_t retrieve_obj(qryRespArchiveData *query_data,
 	dsInt16_t rc_minor	= 0;
 	dsBool_t  is_local_fd	= bFalse;
 
+	/* If no file descriptor (fd = -1) is provided from outside, then we
+	   open a local one based on fs/hl/ll information and close it at the
+	   function end.
+	*/
 	if (fd < 0) {
 		/* If a regular file was archived, e.g. /dir1/dir2/data.txt,
 		   then on the TSM storage only the object
@@ -460,6 +506,9 @@ static void display_qra(const qryRespArchiveData *qra_data, const uint32_t n,
 			"lustre fid                                 : [%#llx:0x%x:0x%x]\n"
 			"lustre stripe size                         : %u\n"
 			"lustre stripe count                        : %u\n"
+#ifdef LOV_MAGIC_V3
+			"lustre pool name                           : %s\n"
+#endif
 #endif
 			,
 			msg,
@@ -487,11 +536,14 @@ static void display_qra(const qryRespArchiveData *qra_data, const uint32_t n,
 			qra_data->sizeEstimate.hi,
 			qra_data->sizeEstimate.lo
 #ifdef HAVE_LUSTRE
-			,obj_info.lustre_info.fid_seq,
-			obj_info.lustre_info.fid_oid,
-			obj_info.lustre_info.fid_ver,
-			obj_info.lustre_info.stripe_size,
-			obj_info.lustre_info.stripe_count
+			,obj_info.lustre_info.fid.seq,
+			obj_info.lustre_info.fid.oid,
+			obj_info.lustre_info.fid.ver,
+			obj_info.lustre_info.lov.stripe_size,
+			obj_info.lustre_info.lov.stripe_count
+#ifdef LOV_MAGIC_V3
+			,obj_info.lustre_info.lov.pool_name
+#endif
 #endif
 			);
 	}

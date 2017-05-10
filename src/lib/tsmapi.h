@@ -70,12 +70,23 @@ struct login_t {
 	char fstype[DSM_MAX_FSTYPE_LENGTH + 1];
 };
 
-struct lustre_info_t {
-	uint64_t fid_seq;
-	uint32_t fid_oid;
-	uint32_t fid_ver;
+struct fid_t {
+	uint64_t seq;
+	uint32_t oid;
+	uint32_t ver;
+};
+
+struct lov_t {
 	uint32_t stripe_size;
 	uint16_t stripe_count;
+#ifdef LOV_MAGIC_V3
+	char pool_name[LOV_MAXPOOLNAME + 1];
+#endif
+};
+
+struct lustre_info_t {
+	struct fid_t fid;
+	struct lov_t lov;
 };
 
 struct obj_info_t {
@@ -156,4 +167,8 @@ dsInt16_t tsm_retrieve_fpath(const char *fs, const char *fpath,
 			     const char *desc, int fd,
 			     struct session_t *session);
 
+#ifdef HAVE_LUSTRE
+int xattr_get_lov(const int fd, struct lustre_info_t *lustre_info,
+		  const char *fpath);
+#endif
 #endif /* TSMAPI_H */
