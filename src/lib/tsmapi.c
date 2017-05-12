@@ -862,11 +862,11 @@ static dsInt16_t tsm_query_hl_ll(const char *fs, const char *hl, const char *ll,
 	qry_ar_data.objName = &obj_name;
 
 	CT_INFO("query structure\n"
-		 "fs: %s\n"
-		 "hl: %s\n"
-		 "ll: %s\n"
-		 "owner: %s\n"
-		 "descr: %s",
+		 "fs   : '%s'\n"
+		 "hl   : '%s'\n"
+		 "ll   : '%s'\n"
+		 "owner: '%s'\n"
+		 "descr: '%s'",
 		 qry_ar_data.objName->fs,
 		 qry_ar_data.objName->hl,
 		 qry_ar_data.objName->ll,
@@ -1103,11 +1103,11 @@ dsInt16_t tsm_delete_fpath(const char *fs, const char *fpath,
 	char ll[DSM_MAX_LL_LENGTH + 1] = {0};
 
 	rc = extract_hl_ll(fpath, fs, hl, ll);
-	CT_DEBUG("[rc:%d] extract_hl_ll:\n"
-		 "fpath: %s\n"
-		 "fs   : %s\n"
-		 "hl: %s\n"
-		 "ll: %s\n", rc, fpath, fs, hl, ll);
+	CT_DEBUG("[rc=%d] extract_hl_ll\n"
+		 "fpath: '%s'\n"
+		 "fs   : '%s'\n"
+		 "hl   : '%s'\n"
+		 "ll   : '%s'\n", rc, fpath, fs, hl, ll);
 	if (rc) {
 		CT_ERROR(EFAILED, "extract_hl_ll failed");
 		return rc;
@@ -1865,7 +1865,11 @@ dsInt16_t tsm_check_free_mountp(struct session_t *session, const char *fs)
 	}
 
 	bzero(fpath, len);
-	snprintf(fpath, len, "%s%s%s", fs, hl, ll);
+
+	if (len_fs == 1 && fs[0] == '/')
+		snprintf(fpath, len - 1, "%s%s", hl, ll);
+	else
+		snprintf(fpath, len, "%s%s%s", fs, hl, ll);
 
 	/* Create dummy DSM_OBJ_DIRECTORY. */
 	struct archive_info_t archive_info = {.desc = "node mountpoint check",
