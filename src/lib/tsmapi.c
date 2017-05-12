@@ -119,7 +119,7 @@ void set_recursive(const dsBool_t recursive)
  * @param[in] size Type used to represent file/object sizes.
  * @return off64_t
  */
-off64_t to_off64_t(const dsStruct64_t size)
+static off64_t to_off64_t(const dsStruct64_t size)
 {
 	return (uint64_t)size.hi << 32 | (uint64_t)size.lo;
 }
@@ -134,7 +134,7 @@ off64_t to_off64_t(const dsStruct64_t size)
  * @param[in] size Type used to represent file/object sizes.
  * @return dsStruct64_t Struct consists of {dsUint32_t hi, dsUint32_t lo};
  */
-dsStruct64_t to_dsStruct64_t(const off64_t size)
+static dsStruct64_t to_dsStruct64_t(const off64_t size)
 {
 	dsStruct64_t res;
 	res.lo = (dsUint32_t)size;
