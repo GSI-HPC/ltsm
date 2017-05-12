@@ -46,6 +46,7 @@ struct options {
 	int o_dry_run;
 	int o_nthreads;
 	int o_verbose;
+	int o_restore_stripe;
 	int o_abort_on_err;
         int o_archive_cnt;
         int o_archive_id[LL_HSM_MAX_ARCHIVE];
@@ -124,6 +125,8 @@ static void usage(const char *cmd_name, const int rc)
 		"\t\t""daemon mode run in background\n"
 		"\t--dry-run\n"
 		"\t\t""don't run, just show what would be done\n"
+		"\t--restore-stripe\n"
+		"\t\t""restore stripe information\n"
 		"\t-h, --help\n"
 		"\t\t""show this help\n"
 		"\nIBM API library version: %d.%d.%d.%d, "
@@ -170,6 +173,7 @@ static int ct_parseopts(int argc, char *argv[])
 		{"fsname",         required_argument, 0,                   'f'},
 		{"verbose",        required_argument, 0,                   'v'},
 		{"dry-run",	   no_argument,	      &opt.o_dry_run,        1},
+		{"restore-stripe", no_argument,	      &opt.o_restore_stripe, 1},
 		{"help",           no_argument,       0,		   'h'},
 		{0, 0, 0, 0}
 	};
@@ -387,10 +391,15 @@ static int ct_archive(struct session_t *session)
 	lustre_info.fid.seq = session->hai->hai_fid.f_seq;
 	lustre_info.fid.oid = session->hai->hai_fid.f_oid;
 	lustre_info.fid.ver = session->hai->hai_fid.f_ver;
-	rc = xattr_get_lov(fd, &lustre_info, fpath);
-	if (rc)
-		CT_WARN("[rc=%d] xattr_get_lov failed on '%s' "
-			"stripe information cannot be stored", rc, fpath);
+
+	if (opt.o_restore_stripe) {
+		rc = xattr_get_lov(fd, &lustre_info, fpath);
+		CT_DEBUG("[rc=%d,fd=%d] xattr_get_lov '%s'", rc, fd, fpath);
+		if (rc)
+			CT_WARN("[rc=%d,fd=%d] xattr_get_lov failed on '%s' "
+				"stripe information cannot be obtained", rc, fd,
+				fpath);
+	}
 
 	rc = tsm_archive_fpath(opt.o_fsname, fpath, NULL /* Description */, fd,
 			       &lustre_info, session);
@@ -431,6 +440,9 @@ static int ct_restore(struct session_t *session)
 			 PFID(&session->hai->hai_fid));
 		return rc;
 	}
+
+	if (opt.o_restore_stripe)
+		open_flags |= O_LOV_DELAY_CREATE;
 
 	rc = ct_hsm_action_begin(session, mdt_index, open_flags, false);
 	if (rc < 0) {
@@ -920,6 +932,11 @@ static int ct_setup(void)
 		CT_ERROR(rc, "cannot open mount point at '%s'",
 			 opt.o_mnt);
 		return rc;
+	}
+
+	if (opt.o_restore_stripe) {
+		set_restore_stripe(true);
+		CT_MESSAGE("stripe information will be restored");
 	}
 
 	sem_init(&queue_sem, 0, QUEUE_MAX_ITEMS);

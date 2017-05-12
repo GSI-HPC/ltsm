@@ -54,6 +54,7 @@
 
 static char rcmsg[DSM_MAX_RC_MSG_LENGTH + 1] = {0};
 static dsBool_t do_recursive = bFalse;
+static dsBool_t restore_stripe = bFalse;
 static char prefix[PATH_MAX + 1] = {0};
 
 #define TSM_GET_MSG(session, rc)			\
@@ -203,6 +204,23 @@ void set_prefix(const char *_prefix)
 	strncpy(prefix + l, _prefix, len < PATH_MAX ? len : PATH_MAX);
 }
 
+/**
+ * @brief Enable in retrieve_obj to set Lustre stripe information.
+ *
+ * @param[in] _restore_stripe Boolean variable flags whether to restore
+ *                            Lustre stripe information.
+ */
+void set_restore_stripe(const dsBool_t _restore_stripe)
+{
+	restore_stripe = _restore_stripe;
+}
+
+/**
+ * @brief Convert TSM dsmDate to string.
+ *
+ * @param[out] str Formatted date string.
+ * @param[in]  date TSM dsmDate.
+ */
 static void date_to_str(char *str, const dsmDate *date)
 {
 	sprintf(str, "%i/%02i/%02i %02i:%02i:%02i",
@@ -295,6 +313,40 @@ int xattr_get_lov(const int fd, struct lustre_info_t *lustre_info,
 	return rc;
 }
 
+int xattr_set_lov(int fd, const struct lustre_info_t *lustre_info,
+		  const char *fpath)
+{
+	int rc;
+	char lov_buf[XATTR_SIZE_MAX] = {0};
+
+#ifdef LOV_MAGIC_V3
+	struct lov_user_md_v3 lum  = {0};
+	lum.lmm_magic = LOV_USER_MAGIC_V3;
+#else
+	struct lov_user_md_v1 lum  = {0};
+	lum.lmm_magic = LOV_USER_MAGIC_V1;
+#endif
+
+	lum.lmm_stripe_size = lustre_info->lov.stripe_size;
+	lum.lmm_stripe_count = lustre_info->lov.stripe_count;
+
+#ifdef LOV_MAGIC_V3
+	bzero(lum->lmm_pool_name, LOV_MAXPOOLNAME + 1);
+	strncpy(lum->lmm_pool_name, lustre_info->lov.pool_name,
+		LOV_MAXPOOLNAME + 1);
+#endif
+
+	memcpy(lov_buf, (char *)&lum, sizeof(struct lov_user_md));
+	rc = fsetxattr(fd, XATTR_LUSTRE_LOV, lov_buf, sizeof(lov_buf),
+		       0);
+	if (rc < 0) {
+		rc = errno;
+		CT_ERROR(rc, "fsetxattr failed on '%s'", fpath);
+		return rc;
+	}
+
+	return rc;
+}
 #endif /* HAVE_LUSTRE */
 
 /**
@@ -317,8 +369,27 @@ static dsInt16_t retrieve_obj(qryRespArchiveData *query_data,
 	dsInt16_t rc_minor	= 0;
 	dsBool_t  is_local_fd	= bFalse;
 
+	size_t len = strlen(prefix) +
+		strlen(query_data->objName.fs) +
+		strlen(query_data->objName.hl) + 1;
+	char path[len + 1];
+	char fpath[PATH_MAX + 1] = {0};
+
+	bzero(path, len + 1);
+	snprintf(path, len + 1, "%s%s%s",
+		 prefix,
+		 query_data->objName.fs,
+		 query_data->objName.hl);
+
+	len += strlen(query_data->objName.ll);
+	if (len > PATH_MAX) {
+		CT_ERROR(ENAMETOOLONG, "fpath name too long (> PATH_MAX)");
+		return DSM_RC_UNSUCCESSFUL;
+	}
+	snprintf(fpath, len + 1, "%s%s", path, query_data->objName.ll);
+
 	/* If no file descriptor (fd = -1) is provided from outside, then we
-	   open a local one based on fs/hl/ll information and close it at the
+	   open a fd one based on fs/hl/ll information and close it at the
 	   function end.
 	*/
 	if (fd < 0) {
@@ -330,42 +401,37 @@ static dsInt16_t retrieve_obj(qryRespArchiveData *query_data,
 		   two objects, however we have no st_mode information of /dir1
 		   and /dir1/dir2, therefore use the default directory permission:
 		   S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH */
-		size_t len = strlen(prefix) +
-			strlen(query_data->objName.fs) +
-			strlen(query_data->objName.hl) + 1;
-		char path[len + 1];
-		bzero(path, len + 1);
-		snprintf(path, len + 1, "%s%s%s",
-			 prefix,
-			 query_data->objName.fs,
-			 query_data->objName.hl);
 
 		/* Make sure the directory exists where to store the file. */
 		rc = mkdir_subpath(path,
 				   S_IRWXU | S_IRGRP | S_IXGRP |
 				   S_IROTH | S_IXOTH);
-		CT_DEBUG("[rc:%d] mkdir_subpath '%s'", rc, path);
+		CT_DEBUG("[rc=%d] mkdir_subpath '%s'", rc, path);
 		if (rc) {
 			CT_ERROR(rc, "mkdir_subpath '%s'", path);
 			return DSM_RC_UNSUCCESSFUL;
 		}
 
-		char fpath[PATH_MAX + 1] = {0};
-		len += strlen(query_data->objName.ll);
-		if (len > PATH_MAX) {
-			CT_ERROR(ENAMETOOLONG, "fpath name too long (> PATH_MAX)");
-			return DSM_RC_UNSUCCESSFUL;
-		}
-		snprintf(fpath, len + 1, "%s%s", path, query_data->objName.ll);
 		fd = open(fpath, O_WRONLY | O_TRUNC | O_CREAT,
 			  obj_info->st_mode);
-		CT_DEBUG("[fd:%d] open '%s'", fd, fpath);
+		CT_DEBUG("[fd=%d] open '%s'", fd, fpath);
 		if (fd < 0) {
 			CT_ERROR(errno, "open '%s'", fpath);
 			return DSM_RC_UNSUCCESSFUL;
 		}
 		is_local_fd = bTrue;
 	}
+
+#ifdef HAVE_LUSTRE
+	if (restore_stripe) {
+		rc = xattr_set_lov(fd, &obj_info->lustre_info, fpath);
+		CT_DEBUG("[rc=%d,fd=%d] xattr_set_lov '%s'", rc, fd, fpath);
+		if (rc)
+			CT_WARN("[rc=%d,fd=%d] xattr_set_lov failed on '%s' "
+				"stripe information cannot be set", rc, fd,
+				fpath);
+	}
+#endif
 
 	buf = malloc(sizeof(char) * TSM_BUF_LENGTH);
 	if (!buf) {

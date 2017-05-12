@@ -137,6 +137,7 @@ dsStruct64_t to_dsStruct64_t(const off_t size);
 void set_recursive(const dsBool_t recursive);
 void select_latest(const dsBool_t latest);
 void set_prefix(const char *_prefix);
+void set_restore_stripe(const dsBool_t _restore_stripe);
 
 void login_fill(struct login_t *login, const char *servername,
 		const char *node, const char *password,
@@ -169,6 +170,8 @@ dsInt16_t tsm_retrieve_fpath(const char *fs, const char *fpath,
 
 #ifdef HAVE_LUSTRE
 int xattr_get_lov(const int fd, struct lustre_info_t *lustre_info,
+		  const char *fpath);
+int xattr_set_lov(int fd, const struct lustre_info_t *lustre_info,
 		  const char *fpath);
 #endif
 #endif /* TSMAPI_H */
