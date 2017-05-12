@@ -443,4 +443,4 @@ This project itself is licensed under the [GPL-2 license](http://www.gnu.org/lic
 under different licenses and thus are not provided in the repository. See [IBM Tivoli Storage Manager Server](http://ftp.software.ibm.com/storage/tivoli-storage-management/maintenance/server/v7r1/Linux/7.1.5.000/README.htm).
 
 ## Warranty
-Note, this project is still under development and in an early beta development state.
+Note, this project is still under development and in a beta development state. It is however ready to be tested.
