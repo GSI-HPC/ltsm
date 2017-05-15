@@ -545,8 +545,9 @@ static void display_qra(const qryRespArchiveData *qra_data, const uint32_t n,
 	date_to_str(exp_str_date, &(qra_data->expDate));
 
 	if (api_msg_get_level() == API_MSG_NORMAL) {
-		fprintf(stdout, "%s %20s %14zu, fs:%s hl:%s ll:%s\n",
+		fprintf(stdout, "%s %16s %20s %14zu, fs:%s hl:%s ll:%s\n",
 			msg,
+			ins_str_date,
 			OBJ_TYPE(qra_data->objName.objType),
 			to_off64_t(obj_info.size),
 			qra_data->objName.fs,
