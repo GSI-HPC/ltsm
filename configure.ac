@@ -128,6 +128,6 @@ AC_CONFIG_FILES([Makefile
 LDFLAGS="$LDFLAGS -Wl,--as-needed"
 
 # Halt on warnings.
-CFLAGS="$CFLAGS -Wall -Werror"
+CFLAGS="$CFLAGS -Wall -Werror -fPIC"
 
 AC_OUTPUT
