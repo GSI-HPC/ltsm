@@ -1841,12 +1841,12 @@ dsInt16_t tsm_archive_fpath(const char *fs, const char *fpath, const char *desc,
  * by sending DSM_OBJ_DIRECTORY and verifying whether transaction was
  * successful.
  *
- * @param[in] session Active session.
  * @param[in] fs File space name.
+ * @param[in] session Active session.
  * @return    DSM_RC_SUCCESSFUL on succes, otherwise ECONNABORTED, or
  *            ECONNREFUSED if maximum number of mountpoints is exceeded.
  */
-dsInt16_t tsm_check_free_mountp(struct session_t *session, const char *fs)
+dsInt16_t tsm_check_free_mountp(const char *fs, struct session_t *session)
 {
 	dsInt16_t rc;
 

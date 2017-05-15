@@ -151,8 +151,7 @@ void tsm_disconnect(struct session_t *session);
 dsmAppVersion get_appapi_ver();
 dsmApiVersionEx get_libapi_ver();
 
-dsInt16_t tsm_check_free_mountp(struct session_t *session,
-				const char *fsname);
+dsInt16_t tsm_check_free_mountp(const char *fs, struct session_t *session);
 dsInt16_t tsm_query_session(struct session_t *session);
 dsInt16_t tsm_archive_fpath(const char *fs, const char *fpath,
 			    const char *desc, int fd,

@@ -840,7 +840,7 @@ static int ct_connect_sessions(void)
 		   then number of threads > maximum number of allowed
 		   mountpoints, and the current number of threads have to be
 		   decreased. */
-		rc = tsm_check_free_mountp(&sessions[n], opt.o_fsname);
+		rc = tsm_check_free_mountp(opt.o_fsname, &sessions[n]);
 		if (rc) {
 			tsm_disconnect(&sessions[n]);
 			nthreads = n; // don't attempt to create more threads
