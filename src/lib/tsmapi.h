@@ -60,6 +60,11 @@
 	((strlen(str1) == strlen(str2)) &&	\
 	 (strncmp(str1, str2, strlen(str1)) == 0))
 
+enum sort_by_t {SORT_NONE	     = 0,
+		SORT_DATE_ASCENDING  = 1,
+		SORT_DATE_DESCENDING = 2,
+		SORT_RESTORE_ORDER   = 3};
+
 struct login_t {
 	char node[DSM_MAX_NODE_LENGTH + 1];
 	char password[DSM_MAX_VERIFIER_LENGTH + 1];
@@ -113,6 +118,7 @@ struct qtable_t {
 	chashtable_t *chashtable;
 	uint32_t nbuckets;
 	dsmBool_t multiple;
+	enum sort_by_t sort_by;
 	struct qarray_t qarray;
 };
 

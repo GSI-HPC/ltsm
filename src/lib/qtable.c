@@ -22,7 +22,7 @@
 
 #include <stdlib.h>
 #include <stdint.h>
-#include "tsmapi.h"
+#include "qtable.h"
 
 struct object_t {
 	char key[DSM_MAX_FSNAME_LENGTH +
@@ -204,7 +204,33 @@ int cmp_restore_order(const void *a, const void *b)
 		return(DS_EQUAL);
 }
 
-dsInt16_t create_array(struct qtable_t *qtable, const dsmBool_t sorted)
+int cmp_date_ascending(const void *a, const void *b)
+{
+	const qryRespArchiveData *query_data_a = (qryRespArchiveData *)a;
+	const qryRespArchiveData *query_data_b = (qryRespArchiveData *)b;
+
+	if (date_in_sec(&query_data_a->insDate) > date_in_sec(&query_data_b->insDate))
+		return DS_GREATERTHAN;
+	else if (date_in_sec(&query_data_a->insDate) < date_in_sec(&query_data_b->insDate))
+		return DS_LESSTHAN;
+	else
+		return DS_EQUAL;
+}
+
+int cmp_date_descending(const void *a, const void *b)
+{
+	const qryRespArchiveData *query_data_a = (qryRespArchiveData *)a;
+	const qryRespArchiveData *query_data_b = (qryRespArchiveData *)b;
+
+	if (date_in_sec(&query_data_b->insDate) > date_in_sec(&query_data_a->insDate))
+		return DS_GREATERTHAN;
+	else if (date_in_sec(&query_data_b->insDate) < date_in_sec(&query_data_a->insDate))
+		return DS_LESSTHAN;
+	else
+		return DS_EQUAL;
+}
+
+dsInt16_t create_array(struct qtable_t *qtable, enum sort_by_t sort_by)
 {
 	if (qtable->qarray.size > 0 || qtable->qarray.data)
 		return DSM_RC_UNSUCCESSFUL;
@@ -228,9 +254,28 @@ dsInt16_t create_array(struct qtable_t *qtable, const dsmBool_t sorted)
 	}
 	qtable->qarray.size = c;
 
-	if (c && sorted)
-		qsort(qtable->qarray.data, c, sizeof(qryRespArchiveData),
-		      cmp_restore_order);
+	if (c) {
+		switch (sort_by) {
+		case SORT_RESTORE_ORDER: {
+			qsort(qtable->qarray.data, c, sizeof(qryRespArchiveData),
+			      cmp_restore_order);
+			break;
+		}
+		case SORT_DATE_ASCENDING: {
+			qsort(qtable->qarray.data, c, sizeof(qryRespArchiveData),
+			      cmp_date_ascending);
+			break;
+		}
+		case SORT_DATE_DESCENDING: {
+			qsort(qtable->qarray.data, c, sizeof(qryRespArchiveData),
+			      cmp_date_descending);
+			break;
+		}
+		case SORT_NONE:
+		default:
+			break;
+		}
+	}
 
 	return DSM_RC_SUCCESSFUL;
 }

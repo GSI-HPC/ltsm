@@ -20,7 +20,7 @@
 #include <strings.h>
 #include <time.h>
 #include "tsmapi.h"
-#include "qtable.h"
+#include "qtable.c"
 #include "log.h"
 #include "CuTest.h"
 
@@ -45,7 +45,7 @@ void test_qtable(CuTest *tc)
 	/* Objects have identical keys and dates, thus their are overwritten. */
 	CuAssertIntEquals(tc, 1, chashtable_size(qtable.chashtable));
 
-	rc = create_array(&qtable, bFalse);
+	rc = create_array(&qtable, SORT_NONE);
 	CuAssertTrue(tc, rc == DSM_RC_SUCCESSFUL);
 	CuAssertIntEquals(tc, 1, qtable.qarray.size);
 	CuAssertPtrNotNull(tc, qtable.qarray.data);
@@ -76,7 +76,7 @@ void test_qtable_sort_top(CuTest *tc)
 		CuAssertTrue(tc, rc == DSM_RC_SUCCESSFUL);
 	}
 	CuAssertIntEquals(tc, N, chashtable_size(qtable.chashtable));
-	rc = create_array(&qtable, bTrue);
+	rc = create_array(&qtable, SORT_RESTORE_ORDER);
 	CuAssertTrue(tc, rc == DSM_RC_SUCCESSFUL);
 	CuAssertIntEquals(tc, qtable.qarray.size,
 			  chashtable_size(qtable.chashtable));
@@ -97,8 +97,8 @@ void test_qtable_sort_top(CuTest *tc)
 			qra_data_b.restoreOrderExt.top ? bTrue : bFalse;
 	}
 
-	CuAssertIntEquals_Msg(tc, "sorting queries in ascending order",
-			      order_correct, bTrue);
+	CuAssertIntEquals_Msg(tc, "queries are sorted by restore order in "
+			      "ascending order", order_correct, bTrue);
 
 	destroy_qtable(&qtable);
 	CuAssertIntEquals(tc, 0, qtable.qarray.size);
@@ -131,7 +131,7 @@ void test_qtable_sort_all(CuTest *tc)
 		CuAssertTrue(tc, rc == DSM_RC_SUCCESSFUL);
 	}
 
-	rc = create_array(&qtable, bTrue);
+	rc = create_array(&qtable, SORT_RESTORE_ORDER);
 	CuAssertTrue(tc, rc == DSM_RC_SUCCESSFUL);
 	CuAssertIntEquals(tc, qtable.qarray.size,
 			  chashtable_size(qtable.chashtable));
@@ -287,6 +287,218 @@ void test_qtable_multiple_init_destroy(CuTest *tc)
 	}
 }
 
+void test_qtable_sort_date_ascending(CuTest *tc)
+{
+	dsInt16_t rc;
+	struct qtable_t qtable;
+	bzero(&qtable, sizeof(struct qtable_t));
+	rc = init_qtable(&qtable);
+	CuAssertTrue(tc, rc == DSM_RC_SUCCESSFUL);
+	qtable.multiple = bTrue;
+
+	const uint32_t N = 4187;
+	qryRespArchiveData qra_data;
+	srand(time(NULL));
+
+	for (uint32_t n = 0; n < N; n++) {
+		bzero(&qra_data, sizeof(qra_data));
+		qra_data.insDate.year = rand() % N;
+		qra_data.insDate.month = rand() % 12;
+		qra_data.insDate.hour = rand() % 24;
+		qra_data.insDate.minute = rand() % 60;
+		qra_data.insDate.second = rand() % 60;
+		rc = insert_qtable(&qtable, &qra_data);
+		CuAssertTrue(tc, rc == DSM_RC_SUCCESSFUL);
+	}
+	CuAssertIntEquals(tc, N, chashtable_size(qtable.chashtable));
+	rc = create_array(&qtable, SORT_DATE_ASCENDING);
+	CuAssertTrue(tc, rc == DSM_RC_SUCCESSFUL);
+	CuAssertIntEquals(tc, qtable.qarray.size,
+			  chashtable_size(qtable.chashtable));
+
+	dsBool_t order_correct = bTrue;
+	for (uint32_t n = 0; n < N-1 && order_correct; n++) {
+		qryRespArchiveData qra_data_a;
+		rc = get_qra(&qtable, &qra_data_a, n);
+		CuAssertTrue(tc, rc == DSM_RC_SUCCESSFUL);
+
+		qryRespArchiveData qra_data_b;
+		rc = get_qra(&qtable, &qra_data_b, n + 1);
+		CuAssertTrue(tc, rc == DSM_RC_SUCCESSFUL);
+
+		/* Verify objects are sorting in ascending date order
+		   (low to high). */
+		order_correct = date_in_sec(&qra_data_a.insDate) <=
+			date_in_sec(&qra_data_b.insDate) ? bTrue : bFalse;
+	}
+
+	CuAssertIntEquals_Msg(tc, "queries are sorted by date in ascending "
+			      "order", order_correct, bTrue);
+
+	destroy_qtable(&qtable);
+	CuAssertIntEquals(tc, 0, qtable.qarray.size);
+	CuAssertPtrEquals(tc, NULL, qtable.chashtable);
+	CuAssertPtrEquals(tc, NULL, qtable.qarray.data);
+
+	/* No multiples */
+	rc = init_qtable(&qtable);
+	CuAssertTrue(tc, rc == DSM_RC_SUCCESSFUL);
+	qtable.multiple = bFalse;
+
+	srand(time(NULL));
+
+	sprintf(qra_data.objName.fs, "%s", "fstest:");
+	sprintf(qra_data.objName.hl, "%s", "/hltest/");
+
+	for (uint32_t n = 0; n < N; n++) {
+		bzero(&qra_data, sizeof(qra_data));
+		qra_data.insDate.year = rand() % N;
+		qra_data.insDate.month = rand() % 12;
+		qra_data.insDate.hour = rand() % 24;
+		qra_data.insDate.minute = rand() % 60;
+		qra_data.insDate.second = rand() % 60;
+		sprintf(qra_data.objName.ll, "%s%d", "/lltest", n);
+		rc = insert_qtable(&qtable, &qra_data);
+		CuAssertTrue(tc, rc == DSM_RC_SUCCESSFUL);
+	}
+	CuAssertIntEquals(tc, N, chashtable_size(qtable.chashtable));
+	rc = create_array(&qtable, SORT_DATE_ASCENDING);
+	CuAssertTrue(tc, rc == DSM_RC_SUCCESSFUL);
+	CuAssertIntEquals(tc, qtable.qarray.size,
+			  chashtable_size(qtable.chashtable));
+
+	order_correct = bTrue;
+	for (uint32_t n = 0; n < N-1 && order_correct; n++) {
+		qryRespArchiveData qra_data_a;
+		rc = get_qra(&qtable, &qra_data_a, n);
+		CuAssertTrue(tc, rc == DSM_RC_SUCCESSFUL);
+
+		qryRespArchiveData qra_data_b;
+		rc = get_qra(&qtable, &qra_data_b, n + 1);
+		CuAssertTrue(tc, rc == DSM_RC_SUCCESSFUL);
+
+		/* Verify objects are sorting in ascending date order
+		   (low to high). */
+		order_correct = date_in_sec(&qra_data_a.insDate) <=
+			date_in_sec(&qra_data_b.insDate) ? bTrue : bFalse;
+	}
+
+	CuAssertIntEquals_Msg(tc, "queries are sorted by date in ascending order",
+			      order_correct, bTrue);
+
+	destroy_qtable(&qtable);
+	CuAssertIntEquals(tc, 0, qtable.qarray.size);
+	CuAssertPtrEquals(tc, NULL, qtable.chashtable);
+	CuAssertPtrEquals(tc, NULL, qtable.qarray.data);
+
+}
+
+void test_qtable_sort_date_descending(CuTest *tc)
+{
+	dsInt16_t rc;
+	struct qtable_t qtable;
+	bzero(&qtable, sizeof(struct qtable_t));
+	rc = init_qtable(&qtable);
+	CuAssertTrue(tc, rc == DSM_RC_SUCCESSFUL);
+	qtable.multiple = bTrue;
+
+	const uint32_t N = 4187;
+	qryRespArchiveData qra_data;
+	srand(time(NULL));
+
+	for (uint32_t n = 0; n < N; n++) {
+		bzero(&qra_data, sizeof(qra_data));
+		qra_data.insDate.year = rand() % N;
+		qra_data.insDate.month = rand() % 12;
+		qra_data.insDate.hour = rand() % 24;
+		qra_data.insDate.minute = rand() % 60;
+		qra_data.insDate.second = rand() % 60;
+		rc = insert_qtable(&qtable, &qra_data);
+		CuAssertTrue(tc, rc == DSM_RC_SUCCESSFUL);
+	}
+	CuAssertIntEquals(tc, N, chashtable_size(qtable.chashtable));
+	rc = create_array(&qtable, SORT_DATE_DESCENDING);
+	CuAssertTrue(tc, rc == DSM_RC_SUCCESSFUL);
+	CuAssertIntEquals(tc, qtable.qarray.size,
+			  chashtable_size(qtable.chashtable));
+
+	dsBool_t order_correct = bTrue;
+	for (uint32_t n = 0; n < N-1 && order_correct; n++) {
+		qryRespArchiveData qra_data_a;
+		rc = get_qra(&qtable, &qra_data_a, n);
+		CuAssertTrue(tc, rc == DSM_RC_SUCCESSFUL);
+
+		qryRespArchiveData qra_data_b;
+		rc = get_qra(&qtable, &qra_data_b, n + 1);
+		CuAssertTrue(tc, rc == DSM_RC_SUCCESSFUL);
+
+		/* Verify objects are sorting in descending date order
+		   (low to high). */
+		order_correct = date_in_sec(&qra_data_a.insDate) >=
+			date_in_sec(&qra_data_b.insDate) ? bTrue : bFalse;
+	}
+
+	CuAssertIntEquals_Msg(tc, "queries are sorted by date in descending "
+			      "order", order_correct, bTrue);
+
+	destroy_qtable(&qtable);
+	CuAssertIntEquals(tc, 0, qtable.qarray.size);
+	CuAssertPtrEquals(tc, NULL, qtable.chashtable);
+	CuAssertPtrEquals(tc, NULL, qtable.qarray.data);
+
+	/* No multiples */
+	rc = init_qtable(&qtable);
+	CuAssertTrue(tc, rc == DSM_RC_SUCCESSFUL);
+	qtable.multiple = bFalse;
+
+	srand(time(NULL));
+
+	sprintf(qra_data.objName.fs, "%s", "fstest:");
+	sprintf(qra_data.objName.hl, "%s", "/hltest/");
+
+	for (uint32_t n = 0; n < N; n++) {
+		bzero(&qra_data, sizeof(qra_data));
+		qra_data.insDate.year = rand() % N;
+		qra_data.insDate.month = rand() % 12;
+		qra_data.insDate.hour = rand() % 24;
+		qra_data.insDate.minute = rand() % 60;
+		qra_data.insDate.second = rand() % 60;
+		sprintf(qra_data.objName.ll, "%s%d", "/lltest", n);
+		rc = insert_qtable(&qtable, &qra_data);
+		CuAssertTrue(tc, rc == DSM_RC_SUCCESSFUL);
+	}
+	CuAssertIntEquals(tc, N, chashtable_size(qtable.chashtable));
+	rc = create_array(&qtable, SORT_DATE_DESCENDING);
+	CuAssertTrue(tc, rc == DSM_RC_SUCCESSFUL);
+	CuAssertIntEquals(tc, qtable.qarray.size,
+			  chashtable_size(qtable.chashtable));
+
+	order_correct = bTrue;
+	for (uint32_t n = 0; n < N-1 && order_correct; n++) {
+		qryRespArchiveData qra_data_a;
+		rc = get_qra(&qtable, &qra_data_a, n);
+		CuAssertTrue(tc, rc == DSM_RC_SUCCESSFUL);
+
+		qryRespArchiveData qra_data_b;
+		rc = get_qra(&qtable, &qra_data_b, n + 1);
+		CuAssertTrue(tc, rc == DSM_RC_SUCCESSFUL);
+
+		/* Verify objects are sorting in descending date order
+		   (low to high). */
+		order_correct = date_in_sec(&qra_data_a.insDate) >=
+			date_in_sec(&qra_data_b.insDate) ? bTrue : bFalse;
+	}
+
+	CuAssertIntEquals_Msg(tc, "queries are sorted by date in descending order",
+			      order_correct, bTrue);
+
+	destroy_qtable(&qtable);
+	CuAssertIntEquals(tc, 0, qtable.qarray.size);
+	CuAssertPtrEquals(tc, NULL, qtable.chashtable);
+	CuAssertPtrEquals(tc, NULL, qtable.qarray.data);
+
+}
+
 CuSuite* qtable_get_suite()
 {
     CuSuite* suite = CuSuiteNew();
@@ -296,6 +508,8 @@ CuSuite* qtable_get_suite()
     SUITE_ADD_TEST(suite, test_qtable_replace_older1);
     SUITE_ADD_TEST(suite, test_qtable_replace_older2);
     SUITE_ADD_TEST(suite, test_qtable_multiple_init_destroy);
+    SUITE_ADD_TEST(suite, test_qtable_sort_date_ascending);
+    SUITE_ADD_TEST(suite, test_qtable_sort_date_descending);
 
     return suite;
 }

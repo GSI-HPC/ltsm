@@ -34,6 +34,7 @@ struct options {
 	int o_latest;
 	int o_recursive;
 	int o_checksum;
+	int o_sort;
 	char o_servername[DSM_MAX_SERVERNAME_LENGTH + 1];
 	char o_node[DSM_MAX_NODE_LENGTH + 1];
 	char o_owner[DSM_MAX_OWNER_LENGTH + 1];
@@ -53,6 +54,7 @@ struct options opt = {
 	.o_fstype = {0},
 	.o_desc = {0},
 	.o_checksum = 0,
+	.o_sort = SORT_NONE
 };
 
 static void usage(const char *cmd_name, const int rc)
@@ -68,6 +70,7 @@ static void usage(const char *cmd_name, const int rc)
 		"\t-l, --latest [retrieve object with latest timestamp when multiple exists]\n"
 		"\t-x, --prefix [retrieve prefix directory]\n"
 		"\t-r, --recursive [archive directory and all sub-directories]\n"
+		"\t-t, --sort={ascending, descending, restore} [sort query in date or restore order]\n"
 		"\t-f, --fsname <string> [default: '/']\n"
 		"\t-d, --description <string>\n"
 		"\t-n, --node <string>\n"
@@ -134,27 +137,28 @@ static void sanity_arg_check(const char *argv)
 static int parseopts(int argc, char *argv[])
 {
 	struct option long_opts[] = {
-		{"archive",           no_argument, &opt.o_archive,     1},
-		{"retrieve",          no_argument, &opt.o_retrieve,    1},
-		{"query",             no_argument, &opt.o_query,       1},
-		{"delete",            no_argument, &opt.o_delete,      1},
-		{"latest",            no_argument, 0,                'l'},
-		{"recursive",         no_argument, 0,                'r'},
-		{"fsname",      required_argument, 0,                'f'},
-		{"description", required_argument, 0,                'd'},
-		{"node",        required_argument, 0,                'n'},
-		{"owner",       required_argument, 0,                'o'},
-		{"password",    required_argument, 0,                'p'},
-		{"servername",  required_argument, 0,                's'},
-		{"verbose",	required_argument, 0,                'v'},
-		{"prefix",	required_argument, 0,                'x'},
-		{"checksum",          no_argument, 0,	             'c'},
-		{"help",              no_argument, 0,	             'h'},
+		{"archive",	      no_argument, &opt.o_archive,     1},
+		{"retrieve",	      no_argument, &opt.o_retrieve,    1},
+		{"query",	      no_argument, &opt.o_query,       1},
+		{"delete",	      no_argument, &opt.o_delete,      1},
+		{"latest",	      no_argument, 0,		     'l'},
+		{"recursive",	      no_argument, 0,		     'r'},
+		{"sort",	required_argument, 0,		     't'},
+		{"fsname",	required_argument, 0,		     'f'},
+		{"description", required_argument, 0,		     'd'},
+		{"node",	required_argument, 0,		     'n'},
+		{"owner",	required_argument, 0,		     'o'},
+		{"password",	required_argument, 0,		     'p'},
+		{"servername",	required_argument, 0,		     's'},
+		{"verbose",	required_argument, 0,		     'v'},
+		{"prefix",	required_argument, 0,		     'x'},
+		{"checksum",	      no_argument, 0,		     'c'},
+		{"help",	      no_argument, 0,		     'h'},
 		{0, 0, 0, 0}
 	};
 
 	int c;
-	while ((c = getopt_long(argc, argv, "lrf:d:n:o:p:s:v:x:ch",
+	while ((c = getopt_long(argc, argv, "lrt:f:d:n:o:p:s:v:x:ch",
 				long_opts, NULL)) != -1) {
 		switch (c) {
 		case 'l': {
@@ -164,6 +168,22 @@ static int parseopts(int argc, char *argv[])
 		case 'r': {
 			opt.o_recursive = 1;
 			set_recursive(bTrue);
+			break;
+		}
+		case 't': {
+			if (OPTNCMP("none", optarg))
+				opt.o_sort = SORT_NONE;
+			else if (OPTNCMP("ascending", optarg))
+				opt.o_sort = SORT_DATE_ASCENDING;
+			else if (OPTNCMP("descending", optarg))
+				opt.o_sort = SORT_DATE_DESCENDING;
+			else if (OPTNCMP("restore", optarg))
+				opt.o_sort = SORT_RESTORE_ORDER;
+			else {
+				fprintf(stdout, "wrong argument for -t, "
+					"--sort '%s'\n", optarg);
+				usage(argv[0], 1);
+			}
 			break;
 		}
 		case 'f': {
@@ -331,6 +351,7 @@ int main(int argc, char *argv[])
 	struct session_t session;
 	bzero(&session, sizeof(session));
 	session.qtable.multiple = opt.o_latest == 1 ? bFalse : bTrue;
+	session.qtable.sort_by = opt.o_sort;
 
 	rc = tsm_init(DSM_SINGLETHREAD);
 	if (rc)

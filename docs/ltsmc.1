@@ -27,11 +27,11 @@
 ltsmc is a console client for archiving, retrieving, deleting and querying files and directories on a TSM server
 
 .SH SYNOPSIS
-ltsmc MODE OPTION... PATH
+ltsmc ACTION OPTION... PATH
 
 .SH DESCRIPTION
 .SS
-.BR MODES:
+.BR ACTIONS:
 .TP
 .BR \-\-archive
 Archive files and directories on TSM server.
@@ -70,6 +70,9 @@ The directory prefix is the directory where all retrieved files and sub-director
 .TP
 .BR \-r ", " \-\-recursive
 Archive directory recursively by also processing each sub-directory.
+.TP
+.BR \-t ", " \-\-sort =\fIascending\fR|\fIdescending\fR|\fIrestore\fR
+Query action will list archived objects sorted by date in \fIascending\fR or \fIdescending\fR order, or in optimal \fIrestore\fR order.
 .TP
 .BR \-l ", " \-\-latest
 Query, restore and delete action will only select the latest version of the stored objects.
@@ -112,6 +115,7 @@ PATH='/home/*/files/??.txt'
 hl='/home/*/files' and ll='/??.txt' \- matches all files with two characters and ending with '.txt' in all paths matching '/home/*/files'.
 .PP
 When in archive mode a path to an existing file or directory is required which should be stored on the tsm server. If path points to an directory all files in it will be archived. See additional options to store directories recursivly.
+Note, the PATH parameter must be in quotation marks, when wildcard character '*' is provided, otherwise the expression is shell expanded.
 
 .SH FILES
 File 'dsm.sys' contains information to look up the tsm server. By default it is located at '/opt/tivoli/tsm/client/api/bin64/dsm.sys'.

@@ -1123,7 +1123,7 @@ dsInt16_t tsm_delete_fpath(const char *fs, const char *fpath,
 		CT_ERROR(EFAILED, "tsm_query_hl_ll failed");
 		goto cleanup;
 	}
-	rc = create_array(&session->qtable, bFalse);
+	rc = create_array(&session->qtable, SORT_NONE);
 	if (rc) {
 		CT_ERROR(EFAILED, "create_array failed");
 		goto cleanup;
@@ -1164,7 +1164,7 @@ dsInt16_t tsm_query_fpath(const char *fs, const char *fpath, const char *desc,
 		CT_ERROR(EFAILED, "tsm_query_hl_ll failed");
 		goto cleanup;
 	}
-	rc = create_array(&session->qtable, bFalse);
+	rc = create_array(&session->qtable, session->qtable.sort_by);
 	if (rc) {
 		CT_ERROR(EFAILED, "create_array failed");
 		goto cleanup;
@@ -1347,7 +1347,7 @@ dsInt16_t tsm_retrieve_fpath(const char *fs, const char *fpath,
 		goto cleanup;
 	}
 
-	rc = create_array(&session->qtable, bFalse);
+	rc = create_array(&session->qtable, SORT_RESTORE_ORDER);
 	if (rc) {
 		CT_ERROR(EFAILED, "create_array failed");
 		goto cleanup;

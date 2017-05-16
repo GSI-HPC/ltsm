@@ -25,7 +25,7 @@ dsInt16_t init_qtable(struct qtable_t *qtable);
 void destroy_qtable(struct qtable_t *qtable);
 dsInt16_t insert_qtable(struct qtable_t *qtable,
 		  const qryRespArchiveData *qra_data);
-dsInt16_t create_array(struct qtable_t *qtable, const dsmBool_t sorted);
+dsInt16_t create_array(struct qtable_t *qtable, enum sort_by_t sort_by);
 dsInt16_t get_qra(const struct qtable_t *qtable,
 		  qryRespArchiveData *qra_data, const uint32_t n);
 
