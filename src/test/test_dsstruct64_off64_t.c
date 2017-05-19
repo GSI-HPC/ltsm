@@ -24,31 +24,31 @@
 
 void test_dsstruct64_off64_t(CuTest *tc)
 {
-    off64_t size_off64_t;
-    dsStruct64_t size_ds_struct64_t;
-    off64_t size_off64_t_res;
+	off64_t size_off64_t;
+	dsStruct64_t size_ds_struct64_t;
+	off64_t size_off64_t_res;
 
-    unsigned char shift = 0;
+	unsigned char shift = 0;
 
-    while (shift < 64) {
+	while (shift < 64) {
 
-	size_off64_t = 1ULL << shift;
-	size_ds_struct64_t = to_dsStruct64_t(size_off64_t); /* Convert off64_t to dsStruct64_t */
-	size_off64_t_res = to_off64_t(size_ds_struct64_t);   /* Convert dsStruct64_t to off64_t */
-	printf("size_off64_t: %20jd, size_off64_t(dsStruct64_t): %20jd\n", size_off64_t, size_off64_t_res);
-	CuAssertIntEquals_Msg(tc, "off64_t -> dsStruct64_t -> off64_t", size_off64_t, size_off64_t_res);
+		size_off64_t = 1ULL << shift;
+		size_ds_struct64_t = to_dsStruct64_t(size_off64_t); /* Convert off64_t to dsStruct64_t */
+		size_off64_t_res = to_off64_t(size_ds_struct64_t);   /* Convert dsStruct64_t to off64_t */
+		printf("size_off64_t: %20jd, size_off64_t(dsStruct64_t): %20jd\n", size_off64_t, size_off64_t_res);
+		CuAssertIntEquals_Msg(tc, "off64_t -> dsStruct64_t -> off64_t", size_off64_t, size_off64_t_res);
 
-	size_off64_t_res = to_off64_t(size_ds_struct64_t);
-	CuAssertIntEquals_Msg(tc, "dsStruct64_t -> off64_t", size_off64_t, size_off64_t_res);
+		size_off64_t_res = to_off64_t(size_ds_struct64_t);
+		CuAssertIntEquals_Msg(tc, "dsStruct64_t -> off64_t", size_off64_t, size_off64_t_res);
 
-	shift += 2;
-    }
+		shift += 2;
+	}
 }
 
 CuSuite* dsstruct64_off64_t_get_suite()
 {
-    CuSuite* suite = CuSuiteNew();
-    SUITE_ADD_TEST(suite, test_dsstruct64_off64_t);
+	CuSuite* suite = CuSuiteNew();
+	SUITE_ADD_TEST(suite, test_dsstruct64_off64_t);
 
-    return suite;
+	return suite;
 }

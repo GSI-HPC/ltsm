@@ -7,7 +7,7 @@ env:
         - CONFIGURE_ARGS="--with-lustre=/opt/lustre-release/" LDFLAGS='-L/usr/lib'
         -
 
-script: ./autogen.sh && ./configure $CONFIGURE_ARGS && make && ./src/test/test_tsmapi
+script: ./autogen.sh && ./configure $CONFIGURE_ARGS && make && ./src/test/test_cds
 
 install:
   - sudo add-apt-repository ppa:dns/gnu --yes
