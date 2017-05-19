@@ -1993,7 +1993,6 @@ static int tsm_fopen_write(struct session_t *session)
 	if (rc)
 		goto cleanup_transaction;
 
-
 	rc = dsmSendObj(session->handle, stArchive, &arch_data,
 			&session->tsm_file->archive_info.obj_name,
 			&session->tsm_file->obj_attr,
@@ -2044,6 +2043,10 @@ static int tsm_fclose_write(struct session_t *session)
 				  &session->tsm_file->archive_info,
 				  session->tsm_file->archive_info.obj_info.crc32,
 				  session);
+	CT_DEBUG("[rc:%d] tsm_obj_update_crc32, crc32: 0x%08x (%010u)", rc,
+		 session->tsm_file->archive_info.obj_info.crc32,
+		 session->tsm_file->archive_info.obj_info.crc32);
+
 	if (rc)
 		CT_ERROR(EFAILED, "tsm_obj_update_crc32");
 

@@ -21,7 +21,7 @@
 .\" <http://www.gnu.org/licenses/>.
 .\" %%%LICENSE_END
 
-.TH "ltsmc" "1" "12. May 2017" "Thomas Stibor <t.stibor@gsi.de>, Jörg Behrendt <j.behrendt@gsi.de>" "version 0.4.0"
+.TH "ltsmc" "1" "19. May 2017" "Thomas Stibor <t.stibor@gsi.de>, Jörg Behrendt <j.behrendt@gsi.de>" "version 0.4.1"
 
 .SH NAME
 ltsmc is a console client for archiving, retrieving, deleting and querying files and directories on a TSM server
@@ -44,6 +44,9 @@ Query TSM server for files and directories, and retrieve matched files and direc
 .TP
 .BR \-\-delete
 Query TSM server for files and directories, and delete matched files and directories on the TSM server.
+.TP
+.BR \-\-pipe
+Archive data coming from a pipe, e.g. echo "archive me" | ltsmc --pipe <OPTIONS> /archive.me
 .TP
 .BR \-c ", " \-\-checksum
 Calculate crc32 checksum of local files, for verifying that e.g. local and archives files

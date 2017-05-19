@@ -30,6 +30,7 @@ struct options {
 	int o_retrieve;
 	int o_query;
 	int o_delete;
+	int o_pipe;
 	int o_verbose;
 	int o_latest;
 	int o_recursive;
@@ -67,6 +68,7 @@ static void usage(const char *cmd_name, const int rc)
 		"\t--retrieve\n"
 		"\t--query\n"
 		"\t--delete\n"
+		"\t--pipe\n"
 		"\t-l, --latest [retrieve object with latest timestamp when multiple exists]\n"
 		"\t-x, --prefix [retrieve prefix directory]\n"
 		"\t-r, --recursive [archive directory and all sub-directories]\n"
@@ -101,14 +103,15 @@ static void sanity_arg_check(const char *argv)
 	count = opt.o_delete   == 1 ? count + 1 : count;
 	count = opt.o_query    == 1 ? count + 1 : count;
 	count = opt.o_checksum == 1 ? count + 1 : count;
+	count = opt.o_pipe     == 1 ? count + 1 : count;
 
 	if (count == 0) {
 		fprintf(stdout, "missing argument --archive, --retrieve,"
-			" --query, --delete or --checksum\n\n");
+			" --query, --delete, --pipe or --checksum\n\n");
 		usage(argv, 1);
 	} else if (count != 1) {
 		printf("multiple incompatible arguments"
-		       " --archive, --retrieve, --query, --delete or "
+		       " --archive, --retrieve, --query, --delete, --pipe or "
 		       "--checksum\n\n");
 		usage(argv, 1);
 	}
@@ -141,6 +144,7 @@ static int parseopts(int argc, char *argv[])
 		{"retrieve",	      no_argument, &opt.o_retrieve,    1},
 		{"query",	      no_argument, &opt.o_query,       1},
 		{"delete",	      no_argument, &opt.o_delete,      1},
+		{"pipe",              no_argument, &opt.o_pipe,        1},
 		{"latest",	      no_argument, 0,		     'l'},
 		{"recursive",	      no_argument, 0,		     'r'},
 		{"sort",	required_argument, 0,		     't'},
@@ -350,12 +354,48 @@ int main(int argc, char *argv[])
 
 	struct session_t session;
 	bzero(&session, sizeof(session));
+
 	session.qtable.multiple = opt.o_latest == 1 ? bFalse : bTrue;
 	session.qtable.sort_by = opt.o_sort;
 
 	rc = tsm_init(DSM_SINGLETHREAD);
 	if (rc)
 		goto cleanup_tsm;
+
+	if (opt.o_pipe) {
+		if (num_files_dirs == 0) {
+			fprintf(stdout, "missing argument <files>\n");
+			usage(argv[0], 1);
+		} else if (num_files_dirs > 1) {
+			fprintf(stdout, "too many arguments <files>\n");
+			usage(argv[0], 1);
+		}
+
+		rc = tsm_fopen(opt.o_fsname, files_dirs_arg[0], opt.o_desc,
+			       &login, &session);
+		if (rc) {
+			tsm_cleanup(DSM_SINGLETHREAD);
+			goto cleanup;
+		}
+
+		char buf[TSM_BUF_LENGTH] = {0};
+		size_t size;
+		while (1) {
+			size = fread(buf, 1, TSM_BUF_LENGTH, stdin);
+			if (size == 0)
+				break;
+			rc = tsm_fwrite(buf, 1, size, &session);
+			if (rc == -1) {
+				rc = errno;
+				CT_ERROR(rc, "tsm_fwrite failed");
+				break;
+			}
+		}
+
+		rc = tsm_fclose(&session);
+		tsm_cleanup(DSM_SINGLETHREAD);
+		goto cleanup;
+	}
 
 	rc = tsm_connect(&login, &session);
 	if (rc)
