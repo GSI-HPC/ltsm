@@ -128,14 +128,23 @@ struct progress_size_t {
 	ssize_t total;
 };
 
+struct tsm_file_t {
+	ObjAttr obj_attr;
+	struct archive_info_t archive_info;
+	off64_t bytes_processed;
+};
+
 struct session_t {
 	dsUint32_t handle;
 	struct qtable_t qtable;
+
 	struct hsm_action_item *hai;
 	struct hsm_copyaction_private *hcp;
 	long hal_flags;
 	int (*progress)(struct progress_size_t *data,
 			struct session_t *session);
+
+	struct tsm_file_t *tsm_file;
 };
 
 void set_recursive(const dsBool_t recursive);
@@ -177,4 +186,11 @@ int xattr_get_lov(const int fd, struct lustre_info_t *lustre_info,
 int xattr_set_lov(int fd, const struct lustre_info_t *lustre_info,
 		  const char *fpath);
 #endif
+
+int tsm_fopen(const char *fs, const char *fpath, const char *desc,
+	      struct login_t *login, struct session_t *session);
+ssize_t tsm_fwrite(const void *ptr, size_t size, size_t nmemb,
+		   struct session_t *session);
+int tsm_fclose(struct session_t *session);
+
 #endif /* TSMAPI_H */

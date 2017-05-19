@@ -1023,6 +1023,13 @@ static dsInt16_t tsm_obj_update_crc32(ObjAttr *obj_attr,
 
 	memcpy(&obj_info, (char *)obj_attr->objInfo, obj_attr->objInfoLength);
 	obj_info.crc32 = crc32;
+
+	if (session->tsm_file) {
+		obj_attr->sizeEstimate = to_dsStruct64_t(
+			session->tsm_file->bytes_processed);
+		obj_info.size = obj_attr->sizeEstimate;
+	}
+
 	memcpy(obj_attr->objInfo, (char *)&(obj_info), obj_attr->objInfoLength);
 
 	rc = dsmUpdateObj(session->handle, stArchive, NULL,
@@ -1945,6 +1952,220 @@ dsInt16_t tsm_check_free_mountp(const char *fs, struct session_t *session)
 	}
 	else
 		CT_INFO("passed mount point check");
+
+	return rc;
+}
+
+static int tsm_fopen_write(struct session_t *session)
+{
+	int rc;
+	mcBindKey mc_bind_key;
+	sndArchiveData arch_data;
+	dsUint16_t err_reason;
+
+	rc = dsmBeginTxn(session->handle);
+	if (rc) {
+		TSM_ERROR(session, rc, "dsmBeginTxn");
+		return rc;
+	}
+
+	mc_bind_key.stVersion = mcBindKeyVersion;
+	rc = dsmBindMC(session->handle,
+		       &session->tsm_file->archive_info.obj_name, stArchive, &mc_bind_key);
+	TSM_DEBUG(session, rc,	"dsmBindMC");
+	if (rc) {
+		TSM_ERROR(session, rc, "dsmBindMC");
+		goto cleanup_transaction;
+	}
+
+	arch_data.stVersion = sndArchiveDataVersion;
+	if (strlen(session->tsm_file->archive_info.desc) <= DSM_MAX_DESCR_LENGTH)
+		arch_data.descr = (char *)session->tsm_file->archive_info.desc;
+	else
+		arch_data.descr[0] = '\0';
+
+	/* The size is not known a priori, thus set it to maximum. */
+	session->tsm_file->archive_info.obj_info.size.hi = ~((dsUint32_t)0);
+	session->tsm_file->archive_info.obj_info.size.lo = ~((dsUint32_t)0);
+
+	rc = obj_attr_prepare(&session->tsm_file->obj_attr,
+			      &session->tsm_file->archive_info);
+	if (rc)
+		goto cleanup_transaction;
+
+
+	rc = dsmSendObj(session->handle, stArchive, &arch_data,
+			&session->tsm_file->archive_info.obj_name,
+			&session->tsm_file->obj_attr,
+			NULL);
+	TSM_DEBUG(session, rc,	"dsmSendObj");
+	if (rc) {
+		TSM_ERROR(session, rc, "dsmSendObj");
+		goto cleanup_transaction;
+	}
+
+	return rc;
+
+cleanup_transaction:
+	rc = dsmEndTxn(session->handle, DSM_VOTE_ABORT, &err_reason);
+	TSM_DEBUG(session, rc,	"dsmEndTxn");
+	if (rc || err_reason) {
+		TSM_ERROR(session, rc, "dsmEndTxn");
+		TSM_ERROR(session, err_reason, "dsmEndTxn reason");
+	}
+
+	if (session->tsm_file->obj_attr.objInfo)
+		free(session->tsm_file->obj_attr.objInfo);
+
+	return rc;
+}
+
+static int tsm_fclose_write(struct session_t *session)
+{
+	int rc;
+	dsUint8_t vote_txn = DSM_VOTE_COMMIT;
+	dsUint16_t err_reason;
+
+	rc = dsmEndSendObj(session->handle);
+	TSM_DEBUG(session, rc,  "dsmEndSendObj");
+	if (rc) {
+		TSM_ERROR(session, rc, "dsmEndSendObj");
+		vote_txn = DSM_VOTE_ABORT;
+	}
+
+	rc = dsmEndTxn(session->handle, vote_txn, &err_reason);
+	TSM_DEBUG(session, rc,  "dsmEndTxn");
+	if (rc || err_reason) {
+		TSM_ERROR(session, rc, "dsmEndTxn");
+		TSM_ERROR(session, err_reason, "dsmEndTxn reason");
+	}
+
+	rc = tsm_obj_update_crc32(&session->tsm_file->obj_attr,
+				  &session->tsm_file->archive_info,
+				  session->tsm_file->archive_info.obj_info.crc32,
+				  session);
+	if (rc)
+		CT_ERROR(EFAILED, "tsm_obj_update_crc32");
+
+	if (session->tsm_file->obj_attr.objInfo)
+		free(session->tsm_file->obj_attr.objInfo);
+
+	if (session->tsm_file)
+		free(session->tsm_file);
+
+	return rc;
+}
+
+int tsm_fopen(const char *fs, const char *fpath, const char *desc,
+	      struct login_t *login, struct session_t *session)
+{
+	int rc;
+
+	rc = tsm_connect(login, session);
+	if (rc)
+		goto cleanup;
+
+	rc = tsm_query_session(session);
+	if (rc)
+		goto cleanup;
+
+	if (session->tsm_file) {
+		rc = EFAULT;
+		CT_ERROR(rc, "session->tsm_file already allocated");
+		goto cleanup;
+	}
+	session->tsm_file = calloc(1, sizeof(struct tsm_file_t));
+	if (!session->tsm_file) {
+		rc = errno;
+		CT_ERROR(rc, "calloc");
+		goto cleanup;
+	}
+
+	session->tsm_file->archive_info.obj_info.magic = MAGIC_ID_V1;
+	session->tsm_file->archive_info.obj_name.objType = DSM_OBJ_FILE;
+	session->tsm_file->archive_info.obj_info.crc32 = 0;
+	session->tsm_file->archive_info.obj_info.st_mode =
+		S_IREAD | S_IWRITE | S_IRGRP | S_IROTH; /* 644 */
+
+	rc = extract_hl_ll(fpath, fs,
+			   session->tsm_file->archive_info.obj_name.hl,
+			   session->tsm_file->archive_info.obj_name.ll);
+	CT_DEBUG("[rc:%d] extract_hl_ll:\n"
+		 "fpath: %s\n"
+		 "fs   : %s\n"
+		 "hl: %s\n"
+		 "ll: %s\n", rc, fpath, fs,
+		 session->tsm_file->archive_info.obj_name.hl,
+		 session->tsm_file->archive_info.obj_name.ll);
+	if (rc) {
+		CT_ERROR(rc, "extract_hl_ll failed, resolved_path: %s, "
+			 "hl: %s, ll: %s", fpath,
+			 session->tsm_file->archive_info.obj_name.hl,
+			 session->tsm_file->archive_info.obj_name.ll);
+		rc = DSM_RC_UNSUCCESSFUL;
+		goto cleanup;
+	}
+	strncpy(session->tsm_file->archive_info.obj_name.fs, fs,
+		DSM_MAX_FSNAME_LENGTH);
+
+	if (desc == NULL)
+		session->tsm_file->archive_info.desc[0] = '\0';
+	else
+		strncpy(session->tsm_file->archive_info.desc, desc,
+			DSM_MAX_DESCR_LENGTH);
+
+	rc = tsm_fopen_write(session);
+	if (rc)
+		goto cleanup;
+
+	return rc;
+
+cleanup:
+	if (session->tsm_file)
+		free(session->tsm_file);
+
+	tsm_disconnect(session);
+
+	return rc;
+}
+
+ssize_t tsm_fwrite(const void *ptr, size_t size, size_t nmemb,
+		   struct session_t *session)
+{
+	int rc;
+	DataBlk data_blk;
+
+	data_blk.bufferLen = size * nmemb;
+	data_blk.bufferPtr = (void *)ptr;
+	data_blk.stVersion = DataBlkVersion;
+	rc = dsmSendData(session->handle, &data_blk);
+	TSM_DEBUG(session, rc, "dsmSendData");
+	if (rc) {
+		TSM_ERROR(session, rc, "dsmSendData");
+		errno = EIO;
+	}
+	else {
+		session->tsm_file->bytes_processed += data_blk.numBytes;
+		session->tsm_file->archive_info.obj_info.crc32 = crc32(
+			session->tsm_file->archive_info.obj_info.crc32,
+			(const unsigned char *)ptr,
+			data_blk.numBytes);
+	}
+
+	return rc == 0 ? data_blk.numBytes : -1;
+}
+
+int tsm_fclose(struct session_t *session)
+{
+	int rc;
+
+	rc = tsm_fclose_write(session);
+	if (rc) {
+		rc = EFAILED;
+		CT_ERROR(rc, "tsm_fclose_write");
+	}
+
+	tsm_disconnect(session);
 
 	return rc;
 }
