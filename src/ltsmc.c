@@ -380,19 +380,26 @@ int main(int argc, char *argv[])
 
 		char buf[TSM_BUF_LENGTH] = {0};
 		size_t size;
-		while (1) {
+		do {
 			size = fread(buf, 1, TSM_BUF_LENGTH, stdin);
+			if (ferror(stdin)) {
+				session.tsm_file->err = EIO;
+				CT_ERROR(EIO, "fread failed");
+				break;
+			}
 			if (size == 0)
 				break;
 			rc = tsm_fwrite(buf, 1, size, &session);
-			if (rc == -1) {
-				rc = errno;
-				CT_ERROR(rc, "tsm_fwrite failed");
+			if (rc < 0) {
+				CT_ERROR(errno, "tsm_fwrite failed");
 				break;
 			}
-		}
+		} while (!feof(stdin));
 
 		rc = tsm_fclose(&session);
+		if (rc)
+			CT_ERROR(errno, "tsm_fclose failed");
+
 		tsm_cleanup(DSM_SINGLETHREAD);
 		goto cleanup;
 	}

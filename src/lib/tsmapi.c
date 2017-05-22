@@ -1964,6 +1964,7 @@ static int tsm_fopen_write(struct session_t *session)
 	dsUint16_t err_reason;
 
 	rc = dsmBeginTxn(session->handle);
+	TSM_DEBUG(session, rc,	"dsmBeginTxn");
 	if (rc) {
 		TSM_ERROR(session, rc, "dsmBeginTxn");
 		return rc;
@@ -2022,7 +2023,8 @@ cleanup_transaction:
 static int tsm_fclose_write(struct session_t *session)
 {
 	int rc;
-	dsUint8_t vote_txn = DSM_VOTE_COMMIT;
+	dsUint8_t vote_txn = session->tsm_file->err == 0 ?
+		DSM_VOTE_COMMIT : DSM_VOTE_ABORT;
 	dsUint16_t err_reason;
 
 	rc = dsmEndSendObj(session->handle);
@@ -2039,16 +2041,20 @@ static int tsm_fclose_write(struct session_t *session)
 		TSM_ERROR(session, err_reason, "dsmEndTxn reason");
 	}
 
-	rc = tsm_obj_update_crc32(&session->tsm_file->obj_attr,
-				  &session->tsm_file->archive_info,
-				  session->tsm_file->archive_info.obj_info.crc32,
-				  session);
-	CT_DEBUG("[rc:%d] tsm_obj_update_crc32, crc32: 0x%08x (%010u)", rc,
-		 session->tsm_file->archive_info.obj_info.crc32,
-		 session->tsm_file->archive_info.obj_info.crc32);
+	if (vote_txn == DSM_VOTE_COMMIT) {
+		rc = tsm_obj_update_crc32(&session->tsm_file->obj_attr,
+					  &session->tsm_file->archive_info,
+					  session->tsm_file->
+					  archive_info.obj_info.crc32,
+					  session);
+		CT_DEBUG("[rc:%d] tsm_obj_update_crc32, crc32: 0x%08x (%010u)",
+			 rc,
+			 session->tsm_file->archive_info.obj_info.crc32,
+			 session->tsm_file->archive_info.obj_info.crc32);
 
-	if (rc)
-		CT_ERROR(EFAILED, "tsm_obj_update_crc32");
+		if (rc)
+			CT_ERROR(EFAILED, "tsm_obj_update_crc32");
+	}
 
 	if (session->tsm_file->obj_attr.objInfo)
 		free(session->tsm_file->obj_attr.objInfo);
@@ -2164,8 +2170,9 @@ int tsm_fclose(struct session_t *session)
 
 	rc = tsm_fclose_write(session);
 	if (rc) {
-		rc = EFAILED;
-		CT_ERROR(rc, "tsm_fclose_write");
+		rc = -1;
+		errno = EFAILED;
+		CT_ERROR(errno, "tsm_fclose_write");
 	}
 
 	tsm_disconnect(session);

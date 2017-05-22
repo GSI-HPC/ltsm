@@ -132,6 +132,7 @@ struct tsm_file_t {
 	ObjAttr obj_attr;
 	struct archive_info_t archive_info;
 	off64_t bytes_processed;
+	int err;
 };
 
 struct session_t {
