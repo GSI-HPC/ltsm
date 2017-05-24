@@ -1545,13 +1545,13 @@ cleanup_transaction:
 				archive_info->obj_name.ll,
 				archive_info->desc);
 		}
+		rc = tsm_obj_update_crc32(&obj_attr, archive_info, crc32sum,
+					  session);
+		CT_DEBUG("[rc:%d] tsm_obj_update_crc32, crc32: 0x%08x (%010u)",
+			 rc, crc32sum, crc32sum);
+		if (rc)
+			CT_ERROR(EFAILED, "tsm_obj_update_crc32");
 	}
-
-	rc = tsm_obj_update_crc32(&obj_attr, archive_info, crc32sum, session);
-	CT_DEBUG("[rc:%d] tsm_obj_update_crc32, crc32: 0x%08x (%010u)", rc,
-		 crc32sum, crc32sum);
-	if (rc)
-		CT_ERROR(EFAILED, "tsm_obj_update_crc32");
 
 cleanup:
 	if (obj_attr.objInfo)
