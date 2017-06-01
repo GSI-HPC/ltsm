@@ -285,7 +285,7 @@ static int progress_callback(struct progress_size_t *pg_size,
 	rc = llapi_hsm_action_progress(session->hcp, &session->hai->hai_extent,
 				       pg_size->total, 0);
 	if (rc)
-		CT_ERROR(rc, "llapi_hsm_action_progress failed");
+		CT_ERROR(rc, "llapi_hsm_action_progress");
 
 	return rc;
 }
@@ -555,6 +555,9 @@ static int ct_process_item(struct session_t *session)
 	case HSMA_REMOVE:
 		rc = ct_remove(session);
 		break;
+	case HSMA_CANCEL:
+		session->cancel_op = true;
+		break;
 	default:
 		rc = -EINVAL;
 		CT_ERROR(rc, "unknown action %d, on '%s'", session->hai->hai_action,
@@ -562,6 +565,7 @@ static int ct_process_item(struct session_t *session)
 		err_minor++;
 		ct_hsm_action_end(session, rc, NULL);
 	}
+	session->cancel_op = false;
 	free(session->hai);
 
 	return 0;

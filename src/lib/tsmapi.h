@@ -34,6 +34,7 @@
 #endif
 
 #include <stdint.h>
+#include <stdbool.h>
 #include <sys/types.h>
 #include "dsmapitd.h"
 #include "dsmapifp.h"
@@ -139,6 +140,7 @@ struct session_t {
 	dsUint32_t handle;
 	struct qtable_t qtable;
 
+	bool cancel_op;
 	struct hsm_action_item *hai;
 	struct hsm_copyaction_private *hcp;
 	long hal_flags;
