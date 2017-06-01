@@ -430,11 +430,6 @@ More documentation and detail is provided in the manual pages [ltsmc.1](https://
 Klick on the screenshot to see the full screencast which demonstrates the usage and functionality of this project.
 <a href="http://web-docs.gsi.de/~tstibor/tsm/ltsm-screencast-2.mp4" rel="screencast">![screencast](http://web-docs.gsi.de/~tstibor/tsm/ltsm-screenshot.png)</a>
 
-## Work in Progress
-* Implement multiple objects per transaction, currently a single object is processed per transaction.
-* Extend test suite for larger code coverage.
-* ~~Thread handling and cleanup when archiving/retrieving/deleting is in progress, but shutdown is triggered.~~
- 
 ## References
 A thorough description and code examples of IBM's low-level TSM API/library can be found in the open document [Using the Application Programming Interface](http://web-docs.gsi.de/~tstibor/tsm/doc/using_the_programming_application_interface.pdf), Fourth edition (September 2015).
 
