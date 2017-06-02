@@ -279,18 +279,28 @@ static dsInt16_t mkdir_subpath(const char *path, const mode_t st_mode)
 }
 
 #ifdef HAVE_LUSTRE
+/**
+ * @brief Get Lustre LOV attribute containing stripe information.
+ *
+ * Get Lustre LOV extended file attribute and extract stripe count
+ * and stripe size, as well as pool name information. Store these information
+ * in struct lustre_info_t.
+ *
+ * @param[in]  fd File descriptor.
+ * @param[out] lustre_info Contains stripe information.
+ * @param[in]  fpath File path for log message.
+ * @return 0 on success, otherwise -1 and errno is set appropriately.
+ */
 int xattr_get_lov(const int fd, struct lustre_info_t *lustre_info,
 		  const char *fpath)
 {
-	int rc = 0;
 	char lov_buf[XATTR_SIZE_MAX] = {0};
 	ssize_t xattr_size;
 
 	xattr_size = fgetxattr(fd, XATTR_LUSTRE_LOV, lov_buf, sizeof(lov_buf));
 	if (xattr_size < 0) {
-		rc = errno;
-		CT_ERROR(rc, "fgetxattr failed on '%s'", fpath);
-		return rc;
+		CT_ERROR(errno, "fgetxattr failed on '%s'", fpath);
+		return -1;
 	}
 
 #ifdef LOV_MAGIC_V3
@@ -310,9 +320,22 @@ int xattr_get_lov(const int fd, struct lustre_info_t *lustre_info,
 		LOV_MAXPOOLNAME + 1);
 #endif
 
-	return rc;
+	return 0;
 }
 
+/**
+ * @brief Set Lustre LOV attribute containing stripe information.
+ *
+ * Set Lustre LOV extended file attribute, stripe count, stripe size
+ * and pool name. Note: Before calling this function, make sure
+ * file descriptor fd is opened with flags O_LOV_DELAY_CREATE. Also
+ * make sure to call this function before writing data to fd.
+ *
+ * @param[in] fd File descriptor.
+ * @param[in] lustre_info Contains stripe information.
+ * @param[in] fpath File path for log message.
+ * @return 0 on success, otherwise -1 and errno is set appropriately.
+ */
 int xattr_set_lov(int fd, const struct lustre_info_t *lustre_info,
 		  const char *fpath)
 {
@@ -337,13 +360,9 @@ int xattr_set_lov(int fd, const struct lustre_info_t *lustre_info,
 #endif
 
 	memcpy(lov_buf, (char *)&lum, sizeof(struct lov_user_md));
-	rc = fsetxattr(fd, XATTR_LUSTRE_LOV, lov_buf, sizeof(lov_buf),
-		       0);
-	if (rc < 0) {
-		rc = errno;
-		CT_ERROR(rc, "fsetxattr failed on '%s'", fpath);
-		return rc;
-	}
+	rc = fsetxattr(fd, XATTR_LUSTRE_LOV, lov_buf, sizeof(lov_buf), 0);
+	if (rc < 0)
+		CT_ERROR(errno, "fsetxattr failed on '%s'", fpath);
 
 	return rc;
 }
@@ -930,7 +949,6 @@ static dsInt16_t tsm_query_hl_ll(const char *fs, const char *hl, const char *ll,
 cleanup:
 	return rc;
 }
-
 
 /**
  * @brief Extract hl and ll pathname.
