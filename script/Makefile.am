@@ -1,2 +1,1 @@
-bin_SCRIPTS = sanity0.sh sanity1.sh maxnummp.sh
-
+bin_SCRIPTS = sanity.ltsmc.0.sh sanity.lhsmtool_tsm.0.sh maxnummp.sh

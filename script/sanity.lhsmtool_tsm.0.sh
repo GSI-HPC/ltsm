@@ -1,26 +1,10 @@
 #!/bin/bash
 
+source $(dirname $(readlink -f $0))/include.sh
+
 # Exit on error.
 set -e
 VERBOSE=1
-
-__check_bin() {
-    [[ ! -f "${1}" ]] && { echo "[ERROR]: Cannot find '${1}' binary"; exit 1; }
-
-    return 0
-}
-
-__log() {
-    [[ ${VERBOSE} -eq 1 ]] && echo "$@"
-
-    return 0
-}
-
-__rnd_string()
-{
-    L=${1}
-    cat /dev/urandom | tr -dc 'a-zA-Z0-9' | fold -w ${1:-${L}} | head -n 1
-}
 
 __rnd_files()
 {
@@ -94,7 +78,6 @@ LHSMTOOL_TSM_BIN="src/lhsmtool_tsm"
 LHSMTOOL_TSM_NODE=${TSM_NAME}
 LHSMTOOL_TSM_PASSWORD=${TSM_NAME}
 LHSMTOOL_TSM_SERVERNAME=${2-polaris-kvm-tsm-server}
-export DSMI_CONFIG=`pwd`/dsmopt/dsm.sys
 
 PATH_LUSTRE_MOUNTPOINT='/lustre'
 PATH_DIR=${PATH_LUSTRE_MOUNTPOINT}`mktemp -d`
