@@ -424,7 +424,7 @@ descr: *
 [MESSAGE] 1488455280.603089 [28900] tsmapi.c:732 query has no match
 ```
 
-More documentation and detail is provided in the manual pages [ltsmc.1](https://github.com/tstibor/ltsm/blob/master/docs/ltsmc.1) and [lhsmtool_tsm.1](https://github.com/tstibor/ltsm/blob/master/docs/lhsmtool_tsm.1).
+More documentation and detail is provided in the manual pages [ltsmc.1](https://github.com/tstibor/ltsm/blob/master/doc/ltsmc.1) and [lhsmtool_tsm.1](https://github.com/tstibor/ltsm/blob/master/doc/lhsmtool_tsm.1).
 
 ## Screenshot and Screencast
 Klick on the screenshot to see the full screencast which demonstrates the usage and functionality of this project.
