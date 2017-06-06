@@ -81,7 +81,7 @@ Query action will list archived objects sorted by date in \fIascending\fR or \fI
 Query, restore and delete action will only select the latest version of the stored objects.
 .TP
 .BR \-f ", " \-\-fsname =\fIPATH\fR
-TSM filespace name used for archiving, retrieving, querying and deleting, default is '/'. Note the filespace name must start with character '/'.
+Name of a file system, disk drive, or any other high-level qualifier that groups related data together, e.g. '/lustre'. The TSM filespace name is used for archiving, retrieving, querying and deleting and has default value '/'. Note the filespace name must start with character '/'.
 .TP
 .BR \-d ", " \-\-description =\fISTRING\fR
 If in archive mode the description will be stored in association with the TSM objects onto the TSM server. By default an empty string is used.

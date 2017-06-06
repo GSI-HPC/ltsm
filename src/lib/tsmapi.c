@@ -76,20 +76,35 @@ do {									\
 	CT_DEBUG("%s: handle: %d %s", func, session->handle, rcmsg);	\
 } while (0)
 
+/**
+ * @brief Fill login structure with required login information.
+ *
+ * @param[out] login Structure to be filled.
+ * @param[in] servername TSM servername to connect to.
+ * @param[in] node Name of the TSM node which is registered on the TSM server.
+ * @param[in] password Password of the TSM node which is registered on the
+ *                     TSM server.
+ * @param[in] owner Name of owner accessing TSM objects.
+ * @param[in] platform Name of used platform, e.g. 'GNU/Linux'
+ * @param[in] fsname Name of a file system, disk drive, or any other high-level
+ *                   qualifier that groups related data together, e.g. '/lustre'.
+ * @param[in] fstype File space type is a character string that the application
+ *                   client sets, e.g. 'ltsm'.
+ */
 void login_fill(struct login_t *login, const char *servername,
 		const char *node, const char *password,
 		const char *owner, const char *platform,
 		const char *fsname, const char *fstype)
 {
 	memset(login, 0, sizeof(*login));
-	strcpy(login->node, node);
-	strcpy(login->password, password);
-	strcpy(login->owner, owner);
-	strcpy(login->platform, platform);
-	strcpy(login->fsname, fsname);
-	strcpy(login->fstype, fstype);
+	strncpy(login->node, node, DSM_MAX_NODE_LENGTH + 1);
+	strncpy(login->password, password, DSM_MAX_VERIFIER_LENGTH + 1);
+	strncpy(login->owner, owner, DSM_MAX_OWNER_LENGTH + 1);
+	strncpy(login->platform, platform, DSM_MAX_PLATFORM_LENGTH + 1);
+	strncpy(login->fsname, fsname, DSM_MAX_FSNAME_LENGTH + 1);
+	strncpy(login->fstype, fstype, DSM_MAX_FSTYPE_LENGTH + 1);
 
-	const unsigned short s_arg_len = 1 + strlen(servername) +
+	const uint16_t s_arg_len = 1 + strlen(servername) +
 		strlen("-se=");
 	if (s_arg_len < MAX_OPTIONS_LENGTH)
 		snprintf(login->options, s_arg_len, "-se=%s", servername);
@@ -100,7 +115,7 @@ void login_fill(struct login_t *login, const char *servername,
 }
 
 /**
- * @brief Set internal boolean variable recursive to flag recursive archiving.
+ * @brief Set internal boolean variable to flag recursive archiving.
  *
  * @param[in] recursive Boolean variable flags whether to archive recursively.
  */
