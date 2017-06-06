@@ -9,7 +9,7 @@ ltsmc_LDADD = $(top_srcdir)/src/lib/libtsmapi.a
 if HAVE_LUSTRE
     ltsmc_CFLAGS += -I@LUSTRE_SRC_DIR@/lustre/include
     lhsmtool_tsm_CFLAGS = -I@LUSTRE_SRC_DIR@/libcfs/include -I@LUSTRE_SRC_DIR@/lustre/include -I@LUSTRE_SRC_DIR@/lnet/include -I@TSM_SRC_DIR@/ -I$(top_srcdir)/src/lib
-    bin_PROGRAMS += lhsmtool_tsm
+    sbin_PROGRAMS = lhsmtool_tsm
     lhsmtool_tsm_SOURCES = lhsmtool_tsm.c
     lhsmtool_tsm_LDADD = $(top_srcdir)/src/lib/libtsmapi.a
 endif
