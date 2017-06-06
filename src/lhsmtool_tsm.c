@@ -88,13 +88,13 @@ static pthread_cond_t	queue_cond;
 static queue_t		queue;
 
 /* Session */
-static struct session_t			*sessions;
-static char 				fs_name[MAX_OBD_NAME + 1] = {0};
-static struct hsm_copytool_private	*ctdata;
+static struct session_t	*sessions;
+static char lustre_fsname[MAX_OBD_NAME + 1] = {0};
+static struct hsm_copytool_private *ctdata;
 
 /* Error handling */
-static int 	err_major;
-static int	err_minor;
+static int err_major;
+static int err_minor;
 
 static void usage(const char *cmd_name, const int rc)
 {
@@ -114,8 +114,6 @@ static void usage(const char *cmd_name, const int rc)
 		"\t\t""owner of tsm node\n"
 		"\t-s, --servername <string>\n"
 		"\t\t""hostname of tsm server\n"
-		"\t-f, --fsname <string>\n"
-		"\t\t""filespace name on tsm server [default: '/']\n"
 		"\t-v, --verbose {error, warn, message, info, debug}"
 		" [default: message]\n"
 		"\t\t""produce more verbose output\n"
@@ -154,8 +152,6 @@ static void sanity_arg_check(const struct options *opts, const char *argv)
 		fprintf(stdout, "missing argument -s, --servername "
 			"<string>\n\n");
 		usage(argv, 1);
-	} else if (!strlen(opt.o_fsname)) {
-		strncpy(opt.o_fsname, DEFAULT_FSNAME, strlen(DEFAULT_FSNAME));
 	}
 }
 
@@ -170,7 +166,6 @@ static int ct_parseopts(int argc, char *argv[])
 		{"password",       required_argument, 0,                   'p'},
 		{"owner",          required_argument, 0,                   'o'},
 		{"servername",     required_argument, 0,                   's'},
-		{"fsname",         required_argument, 0,                   'f'},
 		{"verbose",        required_argument, 0,                   'v'},
 		{"dry-run",	   no_argument,	      &opt.o_dry_run,        1},
 		{"restore-stripe", no_argument,	      &opt.o_restore_stripe, 1},
@@ -181,7 +176,7 @@ static int ct_parseopts(int argc, char *argv[])
 	int c, rc;
 	optind = 0;
 
-	while ((c = getopt_long(argc, argv, "a:t:n:p:o:s:f:v:h",
+	while ((c = getopt_long(argc, argv, "a:t:n:p:o:s:v:h",
 				long_opts, NULL)) != -1) {
 		switch (c) {
 		case 'a': {
@@ -216,10 +211,6 @@ static int ct_parseopts(int argc, char *argv[])
 		case 's': {
 			strncpy(opt.o_servername, optarg,
 				DSM_MAX_SERVERNAME_LENGTH);
-			break;
-		}
-		case 'f': {
-			strncpy(opt.o_fsname, optarg, DSM_MAX_FSNAME_LENGTH);
 			break;
 		}
 		case 'v': {
@@ -263,6 +254,13 @@ static int ct_parseopts(int argc, char *argv[])
 
 	opt.o_mnt = argv[optind];
 	opt.o_mnt_fd = -1;
+
+	/* Filespace name is set to Lustre mount point. */
+	strncpy(opt.o_fsname, opt.o_mnt, DSM_MAX_FSNAME_LENGTH);
+	const size_t len_fsname = strlen(opt.o_fsname);
+	if (len_fsname > 2 && opt.o_fsname[len_fsname - 1] == '/')
+		opt.o_fsname[len_fsname - 1] = '\0';
+	CT_DEBUG("using TSM filespace name '%s'", opt.o_fsname);
 
 	return 0;
 }
@@ -682,10 +680,10 @@ static int ct_run(void)
 				sem_trywait(&queue_sem);
 		}
 
-		if (strcmp(hal->hal_fsname, fs_name) != 0) {
+		if (strcmp(hal->hal_fsname, lustre_fsname) != 0) {
 			rc = -EINVAL;
 			CT_ERROR(rc, "'%s' invalid fs name, expecting: %s",
-				 hal->hal_fsname, fs_name);
+				 hal->hal_fsname, lustre_fsname);
 			err_major++;
 			if (opt.o_abort_on_err)
 				break;
@@ -915,7 +913,7 @@ static int ct_setup(void)
 {
 	int rc;
 
-	rc = llapi_search_fsname(opt.o_mnt, fs_name);
+	rc = llapi_search_fsname(opt.o_mnt, lustre_fsname);
 	if (rc < 0) {
 		CT_ERROR(rc, "cannot find a Lustre filesystem mounted at '%s'",
 			 opt.o_mnt);
