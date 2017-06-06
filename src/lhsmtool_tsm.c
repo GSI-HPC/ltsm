@@ -81,7 +81,7 @@ static uint16_t		nthreads = 1;
 static pthread_t	*threads;
 
 /* Work queue */
-#define QUEUE_MAX_ITEMS	(2 * nthreads) /* TODO: raise for txn file batching */
+#define QUEUE_MAX_ITEMS	(2 * nthreads)
 static sem_t		queue_sem;
 static pthread_mutex_t	queue_mutex;
 static pthread_cond_t	queue_cond;
@@ -201,33 +201,25 @@ static int ct_parseopts(int argc, char *argv[])
 			break;
 		}
 		case 'n': {
-			strncpy(opt.o_node, optarg,
-				strlen(optarg) < DSM_MAX_NODE_LENGTH ?
-				strlen(optarg) : DSM_MAX_NODE_LENGTH);
+			strncpy(opt.o_node, optarg, DSM_MAX_NODE_LENGTH);
 			break;
 		}
 		case 'p': {
 			strncpy(opt.o_password, optarg,
-				strlen(optarg) < DSM_MAX_VERIFIER_LENGTH ?
-				strlen(optarg) : DSM_MAX_VERIFIER_LENGTH);
+				DSM_MAX_VERIFIER_LENGTH);
 			break;
 		}
 		case 'o': {
-			strncpy(opt.o_owner, optarg,
-				strlen(optarg) < DSM_MAX_OWNER_LENGTH ?
-				strlen(optarg) : DSM_MAX_OWNER_LENGTH);
+			strncpy(opt.o_owner, optarg, DSM_MAX_OWNER_LENGTH);
 			break;
 		}
 		case 's': {
 			strncpy(opt.o_servername, optarg,
-				strlen(optarg) < DSM_MAX_SERVERNAME_LENGTH ?
-				strlen(optarg) : DSM_MAX_SERVERNAME_LENGTH);
+				DSM_MAX_SERVERNAME_LENGTH);
 			break;
 		}
 		case 'f': {
-			strncpy(opt.o_fsname, optarg,
-				strlen(optarg) < DSM_MAX_FSNAME_LENGTH ?
-				strlen(optarg) : DSM_MAX_FSNAME_LENGTH);
+			strncpy(opt.o_fsname, optarg, DSM_MAX_FSNAME_LENGTH);
 			break;
 		}
 		case 'v': {
