@@ -122,7 +122,8 @@ AC_CHECK_FUNCS([bzero gettimeofday memmove memset mkdir realpath strerror atexit
 AC_CONFIG_FILES([Makefile
                  src/Makefile
                  src/lib/Makefile
-		 src/test/Makefile])
+		 src/test/Makefile
+		 man/Makefile])
 
 # Remove unneeded libraries.
 LDFLAGS="$LDFLAGS -Wl,--as-needed"
