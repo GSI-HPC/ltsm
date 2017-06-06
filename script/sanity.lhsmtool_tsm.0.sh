@@ -81,9 +81,9 @@ LHSMTOOL_TSM_SERVERNAME=${2-polaris-kvm-tsm-server}
 
 PATH_LUSTRE_MOUNTPOINT='/lustre'
 PATH_DIR=${PATH_LUSTRE_MOUNTPOINT}`mktemp -d`
-NUM_FILES=20
+NUM_FILES=30
 MIN_KB_SIZE=1
-MAX_KB_SIZE=1024
+MAX_KB_SIZE=8196
 
 [ ${PWD##*/} == "script" ] && { LHSMTOOL_TSM_BIN="../${LHSMTOOL_TSM_BIN}"; }
 __check_bin "${LHSMTOOL_TSM_BIN}"
@@ -99,8 +99,9 @@ echo "Total number of files            : `find ${PATH_DIR} -type f | wc -l`"
 echo "Total number of empty files      : `find ${PATH_DIR} -type f -empty | wc -l`"
 echo "Total number of bytes            : `ls -FaGl ${PATH_DIR} | awk '{ total += $4; }; END { print total }'`"
 
-MD5_ORIG="/tmp/md5orig.txt"
-MD5_RETR="/tmp/md5retr.txt"
+MD5_SUFFIX_NAME=`mktemp -u --tmpdir=. | awk -F "." '{print $3}'`
+MD5_ORIG="/tmp/md5orig.${MD5_SUFFIX_NAME}"
+MD5_RETR="/tmp/md5retr.${MD5_SUFFIX_NAME}"
 rm -rf ${MD5_ORIG} ${MD5_RETR}
 
 echo "Creating MD5 sum file of original data: ${MD5_ORIG}"
@@ -153,6 +154,7 @@ if [[ ${ARE_EQUAL} -eq 0 ]] ; then
     rm -rf ${MD5_ORIG} ${MD5_RETR} ${PATH_DIR}
 else
     echo "Sanity failed, archived and retrieved data does not match."
+    echo "See MD5 checksum files '${MD5_ORIG}' and '${MD5_RETR}'"
     rm -rf ${PATH_DIR} # Keep the md5sum files to figure out what is going on.
 fi
 
