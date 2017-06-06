@@ -17,27 +17,28 @@ LTSM_SERVERNAME=${2-polaris-kvm-tsm-server}
 LTSM_VERBOSE=${3-message}
 LTSM_FS=${4-/}
 
-MAX_NUM_FILES=35
-MAX_NESTED_DIRS=16
-MAX_DIR_LEN=6
-
 [ ${PWD##*/} == "script" ] && { LTSM_BIN="../${LTSM_BIN}"; }
 __check_bin "${LTSM_BIN}"
 
+PATH_PREFIX=${LTSM_FS}${PATH_PREFIX}
 echo "Creating sanity data in ${PATH_PREFIX} please wait ..."
 
 ##########################################################
 # Create directories and files
 ##########################################################
+MAX_NUM_FILES=35
+MAX_NESTED_DIRS=16
+MAX_DIR_LEN=6
 for r in $(seq 1 5); do
     __rnd_files ${MAX_NUM_FILES} ${MAX_NESTED_DIRS} ${MAX_DIR_LEN}
 done
 
-MAX_NESTED_DIRS=5
-MAX_DIR_LEN=7
 ##########################################################
 # Create directories with empty files
 ##########################################################
+MAX_NUM_FILES=10
+MAX_NESTED_DIRS=5
+MAX_DIR_LEN=7
 MAX_DIRS=4
 for r in $(seq 1 ${MAX_DIRS}); do
     DIR=$(__rnd_dirs ${MAX_NESTED_DIRS} ${MAX_DIR_LEN})
