@@ -13,7 +13,7 @@
  */
 
 /*
- * Copyright (c) 2016, Thomas Stibor <t.stibor@gsi.de>
+ * Copyright (c) 2016, GSI Helmholtz Centre for Heavy Ion Research
  */
 
 #ifndef LOG_H

@@ -13,7 +13,7 @@
  */
 
 /*
- * Copyright (c) 2017 Thomas Stibor <t.stibor@gsi.de>
+ * Copyright (c) 2017, GSI Helmholtz Centre for Heavy Ion Research
  */
 
 #include <stdio.h>

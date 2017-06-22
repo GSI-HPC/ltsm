@@ -13,7 +13,7 @@
  */
 
 /*
- * Copyright (c) 2016, 2017, Thomas Stibor <t.stibor@gsi.de>
+ * Copyright (c) 2016, 2017, GSI Helmholtz Centre for Heavy Ion Research
  */
 
 #ifndef _GNU_SOURCE
@@ -129,8 +129,7 @@ static void usage(const char *cmd_name, const int rc)
 		"\t\t""show this help\n"
 		"\nIBM API library version: %d.%d.%d.%d, "
 		"IBM API application client version: %d.%d.%d.%d\n"
-		"version: %s © 2017 by Thomas Stibor <t.stibor@gsi.de>,"
-		" Jörg Behrendt <j.behrendt@gsi.de>\n",
+		"version: %s © 2017 by GSI Helmholtz Centre for Heavy Ion Research\n",
 		cmd_name,
 		libapi_ver.version, libapi_ver.release, libapi_ver.level,
 		libapi_ver.subLevel,

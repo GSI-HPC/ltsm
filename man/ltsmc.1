@@ -1,33 +1,10 @@
-.\" Copyright (c) 2017, Jörg Behrendt
-.\"
-.\" %%%LICENSE_START(GPLv2+_DOC_FULL)
-.\" This is free documentation; you can redistribute it and/or
-.\" modify it under the terms of the GNU General Public License as
-.\" published by the Free Software Foundation; either version 2 of
-.\" the License, or (at your option) any later version.
-.\"
-.\" The GNU General Public License's references to "object code"
-.\" and "executables" are to be interpreted as the output of any
-.\" document formatting or typesetting system, including
-.\" intermediate and printed output.
-.\"
-.\" This manual is distributed in the hope that it will be useful,
-.\" but WITHOUT ANY WARRANTY; without even the implied warranty of
-.\" MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-.\" GNU General Public License for more details.
-.\"
-.\" You should have received a copy of the GNU General Public
-.\" License along with this manual; if not, see
-.\" <http://www.gnu.org/licenses/>.
-.\" %%%LICENSE_END
-
-.TH "ltsmc" "1" "6. June 2017" "Thomas Stibor <t.stibor@gsi.de>, Jörg Behrendt <j.behrendt@gsi.de>" "version 0.5.1"
+.TH "ltsmc" "1" "June 2017" "version 0.5.1"
 
 .SH NAME
 ltsmc is a console client for archiving, retrieving, deleting and querying files and directories on a TSM server
 
 .SH SYNOPSIS
-ltsmc ACTION OPTION... PATH
+ltsmc \fIACTION\fR [\fIOPTION\fR]... PATH
 
 .SH DESCRIPTION
 .SS
@@ -124,8 +101,16 @@ Note, the PATH parameter must be in quotation marks, when wildcard character '*'
 File 'dsm.sys' contains information to look up the tsm server. By default it is located at '/opt/tivoli/tsm/client/api/bin64/dsm.sys'.
 It should contain at least the required options SERVERNAME, NODENAME and TCPSERVERADDRESS.
 
-.SH BUGS
+.SH REPORTING BUGS
 Please report bugs to <http://github.com/tstibor/ltsm/issues>
+
+.SH COPYRIGHT
+Copyright \(co 2017 GSI Helmholtz Centre for Heavy Ion Research
+.br
+License GPLv2: GNU GPL version 2 <https://www.gnu.org/licenses/>.
+.br
+This is free software: you are free to change and redistribute it.
+There is NO WARRANTY, to the extent permitted by law.
 
 .SH SEE ALSO
 Github project at <http://github.com/tstibor/ltsm>
