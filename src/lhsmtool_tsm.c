@@ -953,11 +953,11 @@ static int ct_setup(void)
 	return rc;
 }
 
-static int ct_cleanup(void)
+static void ct_cleanup(void)
 {
-	int rc;
-
 	if (opt.o_mnt_fd >= 0) {
+		int rc;
+
 		rc = close(opt.o_mnt_fd);
 		if (rc < 0) {
 			rc = -errno;
@@ -971,14 +971,16 @@ static int ct_cleanup(void)
 	for (int n = 0; n < nthreads && sessions && threads; n++)
 		tsm_disconnect(&sessions[n]);
 
-	if (sessions)
+	if (sessions) {
 		free(sessions);
-	if (threads)
+		sessions = NULL;
+	}
+	if (threads) {
 		free(threads);
+		threads = NULL;
+	}
 
 	tsm_cleanup(DSM_MULTITHREAD);
-
-	return rc;
 }
 
 static void atexit_unregister(void)
