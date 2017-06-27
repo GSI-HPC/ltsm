@@ -2062,8 +2062,10 @@ cleanup_transaction:
 		TSM_ERROR(session, err_reason, "dsmEndTxn reason");
 	}
 
-	if (session->tsm_file->obj_attr.objInfo)
+	if (session->tsm_file->obj_attr.objInfo) {
 		free(session->tsm_file->obj_attr.objInfo);
+		session->tsm_file->obj_attr.objInfo = NULL;
+	}
 
 	return rc;
 }
@@ -2104,11 +2106,15 @@ static int tsm_fclose_write(struct session_t *session)
 			CT_ERROR(EFAILED, "tsm_obj_update_crc32");
 	}
 
-	if (session->tsm_file->obj_attr.objInfo)
+	if (session->tsm_file->obj_attr.objInfo) {
 		free(session->tsm_file->obj_attr.objInfo);
+		session->tsm_file->obj_attr.objInfo = NULL;
+	}
 
-	if (session->tsm_file)
+	if (session->tsm_file) {
 		free(session->tsm_file);
+		session->tsm_file = NULL;
+	}
 
 	return rc;
 }
@@ -2178,8 +2184,10 @@ int tsm_fopen(const char *fs, const char *fpath, const char *desc,
 	return rc;
 
 cleanup:
-	if (session->tsm_file)
+	if (session->tsm_file) {
 		free(session->tsm_file);
+		session->tsm_file = NULL;
+	}
 
 	tsm_disconnect(session);
 
