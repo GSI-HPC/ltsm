@@ -887,9 +887,9 @@ static dsInt16_t tsm_query_hl_ll(const char *fs, const char *hl, const char *ll,
 	dsmObjName obj_name;
 	dsInt16_t rc;
 
-	strcpy(obj_name.fs, fs);
-	strcpy(obj_name.hl, hl);
-	strcpy(obj_name.ll, ll);
+	strncpy(obj_name.fs, fs, DSM_MAX_FSNAME_LENGTH);
+	strncpy(obj_name.hl, hl, DSM_MAX_HL_LENGTH);
+	strncpy(obj_name.ll, ll, DSM_MAX_LL_LENGTH);
 	obj_name.objType = DSM_OBJ_ANY_TYPE;
 
 	/* Fill up query structure. */
@@ -1936,10 +1936,10 @@ dsInt16_t tsm_check_free_mountp(const char *fs, struct session_t *session)
 					      .obj_name = {.objType =
 							   DSM_OBJ_DIRECTORY}};
 
-	strcpy(archive_info.fpath, fpath);
-	strcpy(archive_info.obj_name.fs, fs);
-	strcpy(archive_info.obj_name.hl, hl);
-	strcpy(archive_info.obj_name.ll, ll);
+	strncpy(archive_info.fpath, fpath, PATH_MAX);
+	strncpy(archive_info.obj_name.fs, fs, DSM_MAX_FSNAME_LENGTH);
+	strncpy(archive_info.obj_name.hl, hl, DSM_MAX_HL_LENGTH);
+	strncpy(archive_info.obj_name.ll, ll, DSM_MAX_LL_LENGTH);
 
 	/* Check if we have free mountpoints left for the node. */
 	dsUint8_t vote_txn = DSM_VOTE_COMMIT;
