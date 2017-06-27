@@ -16,9 +16,8 @@
  * Copyright (c) 2017, GSI Helmholtz Centre for Heavy Ion Research
  */
 
-#include <stdint.h>
 #include "CuTest.h"
-#include "tsmapi.h"
+#include "tsmapi.c"
 
 #define SERVERNAME	"polaris-kvm-tsm-server"
 #define NODE		"polaris"
@@ -46,8 +45,8 @@ void test_fwrite(CuTest *tc)
 	CuAssertIntEquals(tc, DSM_RC_SUCCESSFUL, rc);
 
 	char buf[65536 * 2] = {0};
-	ssize_t len;
 	for (uint16_t i = 1; i <= 256; i *= 2) {
+		ssize_t len;
 		memset(buf, i, sizeof(buf));
 		len = tsm_fwrite(buf, 1, sizeof(buf), &session);
 		CuAssertIntEquals(tc, sizeof(buf), len);
@@ -59,10 +58,27 @@ void test_fwrite(CuTest *tc)
 	tsm_cleanup(DSM_SINGLETHREAD);
 }
 
-CuSuite* fcalls_get_suite()
+void test_extract_hl_ll(CuTest *tc)
+{
+	const char *fpath = "/fs/hl/ll";
+	const char *fs = "/fs";
+	char hl[DSM_MAX_HL_LENGTH + 1] = {0};
+	char ll[DSM_MAX_LL_LENGTH + 1] = {0};
+
+	dsInt16_t rc;
+	rc = extract_hl_ll(fpath, fs, hl, ll);
+	CuAssertIntEquals(tc, DSM_RC_SUCCESSFUL, rc);
+	CuAssertStrEquals(tc, "/hl", hl);
+	CuAssertStrEquals(tc, "/ll", ll);
+}
+
+CuSuite* tsmapi_get_suite()
 {
     CuSuite* suite = CuSuiteNew();
+#if TEST_F_OPEN_WRITE_CLOSE
     SUITE_ADD_TEST(suite, test_fwrite);
+#endif
+    SUITE_ADD_TEST(suite, test_extract_hl_ll);
 
     return suite;
 }
@@ -71,16 +87,16 @@ void run_all_tests(void)
 {
 	CuString *output = CuStringNew();
 	CuSuite *suite = CuSuiteNew();
-	CuSuite *fcalls_suite = fcalls_get_suite();
+	CuSuite *tsmapi_suite = tsmapi_get_suite();
 
-	CuSuiteAddSuite(suite, fcalls_suite);
+	CuSuiteAddSuite(suite, tsmapi_suite);
 
 	CuSuiteRun(suite);
 	CuSuiteSummary(suite, output);
 	CuSuiteDetails(suite, output);
 	printf("%s\n", output->buffer);
 
-	CuSuiteDelete(fcalls_suite);
+	CuSuiteDelete(tsmapi_suite);
 
 	free(suite);
 	CuStringDelete(output);
