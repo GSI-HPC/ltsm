@@ -96,12 +96,12 @@ void login_fill(struct login_t *login, const char *servername,
 		const char *fsname, const char *fstype)
 {
 	memset(login, 0, sizeof(*login));
-	strncpy(login->node, node, DSM_MAX_NODE_LENGTH + 1);
-	strncpy(login->password, password, DSM_MAX_VERIFIER_LENGTH + 1);
-	strncpy(login->owner, owner, DSM_MAX_OWNER_LENGTH + 1);
-	strncpy(login->platform, platform, DSM_MAX_PLATFORM_LENGTH + 1);
-	strncpy(login->fsname, fsname, DSM_MAX_FSNAME_LENGTH + 1);
-	strncpy(login->fstype, fstype, DSM_MAX_FSTYPE_LENGTH + 1);
+	strncpy(login->node, node, DSM_MAX_NODE_LENGTH);
+	strncpy(login->password, password, DSM_MAX_VERIFIER_LENGTH);
+	strncpy(login->owner, owner, DSM_MAX_OWNER_LENGTH);
+	strncpy(login->platform, platform, DSM_MAX_PLATFORM_LENGTH);
+	strncpy(login->fsname, fsname, DSM_MAX_FSNAME_LENGTH);
+	strncpy(login->fstype, fstype, DSM_MAX_FSTYPE_LENGTH);
 
 	const uint16_t s_arg_len = 1 + strlen(servername) +
 		strlen("-se=");
@@ -1710,8 +1710,8 @@ static dsInt16_t tsm_archive_recursive(struct archive_info_t *archive_info,
 	int rc;
         DIR *dir;
         struct dirent *entry = NULL;
-        char path[PATH_MAX] = {0};
-	char dpath[PATH_MAX] = {0};
+        char path[PATH_MAX + 1] = {0};
+	char dpath[PATH_MAX + 1] = {0};
         int path_len;
 	int old_errno;
 
