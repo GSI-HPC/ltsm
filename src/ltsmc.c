@@ -130,9 +130,8 @@ static void sanity_arg_check(const char *argv)
 		fprintf(stdout, "missing argument -s, --servername "
 			"<string>\n\n");
 		usage(argv, 1);
-	} else if (!strlen(opt.o_fsname)) {
-		strncpy(opt.o_fsname, DEFAULT_FSNAME, strlen(DEFAULT_FSNAME));
-	}
+	} else if (!strlen(opt.o_fsname))
+		strncpy(opt.o_fsname, DEFAULT_FSNAME, DSM_MAX_FSNAME_LENGTH);
 }
 
 static int parseopts(int argc, char *argv[])
