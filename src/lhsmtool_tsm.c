@@ -631,17 +631,26 @@ static int ct_run(void)
 		struct hsm_action_list *hal;
 		struct hsm_action_item *hai;
 		int msgsize;
-		const struct timespec sem_wait_time = { .tv_sec = 1, .tv_nsec = 0 };
+		const struct timespec sem_wait_time = { .tv_sec = 1,
+							.tv_nsec = 0 };
 
 		int i = 0;
 
 		CT_DEBUG("waiting for message from kernel");
 
+		bool already_shown = false;
 		/* Check if work queue is already full */
 		while (-1 == sem_timedwait(&queue_sem, &sem_wait_time)) {
 			if (proc_state != RUNNING)
 				break;
-			CT_MESSAGE("Waiting for free spots in work queue");
+
+			/* Just show the message once,
+			   while waiting for a free spot. */
+			if (!already_shown) {
+				CT_MESSAGE("waiting for free spots in "
+					   "work queue");
+				already_shown = true;
+			}
 		}
 
 		/* Wait for new items from Lustre HSM */
