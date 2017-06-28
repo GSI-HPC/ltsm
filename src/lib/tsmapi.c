@@ -1457,8 +1457,10 @@ static dsInt16_t tsm_archive_generic(struct archive_info_t *archive_info,
 	arch_data.stVersion = sndArchiveDataVersion;
 	if (strlen(archive_info->desc) <= DSM_MAX_DESCR_LENGTH)
 		arch_data.descr = (char *)archive_info->desc;
-	else
-		arch_data.descr[0] = '\0';
+	else {
+		char desc[2] = {'*', '\0'};
+		arch_data.descr = desc;
+	}
 
 	rc = obj_attr_prepare(&obj_attr, archive_info);
 	if (rc)
@@ -2030,8 +2032,10 @@ static int tsm_fopen_write(struct session_t *session)
 	arch_data.stVersion = sndArchiveDataVersion;
 	if (strlen(session->tsm_file->archive_info.desc) <= DSM_MAX_DESCR_LENGTH)
 		arch_data.descr = (char *)session->tsm_file->archive_info.desc;
-	else
-		arch_data.descr[0] = '\0';
+	else {
+		char desc[2] = {'*', '\0'};
+		arch_data.descr = desc;
+	}
 
 	/* The size is not known a priori, thus set it to maximum. */
 	session->tsm_file->archive_info.obj_info.size.hi = ~((dsUint32_t)0);
