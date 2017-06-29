@@ -31,14 +31,14 @@ struct msrt {
 	struct timespec start, end;
 };
 
-#define MSRT_DECLARE(s) struct msrt msrt_##s##_t = {.name = #s};
+#define MSRT_DECLARE(s) struct msrt msrt_##s##_t = {.name = #s}
 
-#define MSRT_START(s) msrt_##s##_t.data_processed = 0;		\
-	clock_gettime(CLOCK_MONOTONIC, &msrt_##s##_t.start);
+#define MSRT_START(s) msrt_##s##_t.data_processed = 0;			\
+		clock_gettime(CLOCK_MONOTONIC, &msrt_##s##_t.start)
 
-#define MSRT_STOP(s) clock_gettime(CLOCK_MONOTONIC, &msrt_##s##_t.end);
+#define MSRT_STOP(s) clock_gettime(CLOCK_MONOTONIC, &msrt_##s##_t.end)
 
-#define MSRT_DATA(s, d) msrt_##s##_t.data_processed += d;
+#define MSRT_DATA(s, d) msrt_##s##_t.data_processed += d
 
 #define MSRT_DISPLAY_RESULT(s)						\
 do {									\
