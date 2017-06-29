@@ -1574,8 +1574,10 @@ cleanup_transaction:
 		success = bFalse;
 	}
 	if (success) {
+		total_read = archive_info->obj_name.objType == DSM_OBJ_DIRECTORY
+			? to_off64_t(archive_info->obj_info.size) : total_read;
 		if (api_msg_get_level() == API_MSG_NORMAL) {
-			fprintf(stdout, "%s %20s %14zu, fs:%s hl:%s "
+			fprintf(stdout, "%s %20s %14zd, fs:%s hl:%s "
 				"ll:%s\n",
 				"[archive] ",
 				OBJ_TYPE(archive_info->obj_name.objType),
