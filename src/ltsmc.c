@@ -23,6 +23,10 @@
 #include <sys/stat.h>
 #include <zlib.h>
 #include "tsmapi.h"
+#include "measurement.h"
+
+MSRT_DECLARE(tsm_archive_fpath);
+MSRT_DECLARE(tsm_retrieve_fpath);
 
 struct options {
 	int o_archive;
@@ -294,6 +298,14 @@ static int calc_crc32sum(const char *filename, uint32_t *crc32result)
 	*crc32result = crc32sum;
 	return rc;
 }
+static int progress_callback(struct progress_size_t *pg_size,
+			      struct session_t *session)
+{
+	MSRT_DATA(tsm_archive_fpath, pg_size->cur);
+	MSRT_DATA(tsm_retrieve_fpath, pg_size->cur);
+
+	return 0;
+}
 
 int main(int argc, char *argv[])
 {
@@ -401,6 +413,8 @@ int main(int argc, char *argv[])
 		goto cleanup;
 	}
 
+	session.progress = progress_callback;
+
 	rc = tsm_connect(&login, &session);
 	if (rc)
 		goto cleanup_tsm;
@@ -415,16 +429,24 @@ int main(int argc, char *argv[])
 		if (opt.o_query)
 			rc = tsm_query_fpath(opt.o_fsname, files_dirs_arg[i],
 					     opt.o_desc, &session);
-		else if (opt.o_retrieve)
+		else if (opt.o_retrieve) {
+			MSRT_START(tsm_retrieve_fpath);
 			rc = tsm_retrieve_fpath(opt.o_fsname, files_dirs_arg[i],
 						opt.o_desc, -1, &session);
+			MSRT_STOP(tsm_retrieve_fpath);
+			MSRT_DISPLAY_RESULT(tsm_retrieve_fpath);
+		}
 		else if (opt.o_delete)
 			rc = tsm_delete_fpath(opt.o_fsname, files_dirs_arg[i],
 					      &session);
-		else if (opt.o_archive)
+		else if (opt.o_archive) {
+			MSRT_START(tsm_archive_fpath);
 			rc = tsm_archive_fpath(opt.o_fsname,
 					       files_dirs_arg[i],
 					       opt.o_desc, -1, NULL, &session);
+			MSRT_STOP(tsm_archive_fpath);
+			MSRT_DISPLAY_RESULT(tsm_archive_fpath);
+		}
 		if (rc)
 			goto cleanup_tsm;
 	}
