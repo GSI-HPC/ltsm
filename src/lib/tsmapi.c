@@ -75,6 +75,43 @@ do {									\
 	CT_DEBUG("%s: handle: %d %s", func, session->handle, rcmsg);	\
 } while (0)
 
+static const char *archive_delperm_flag(const dsUint8_t flag)
+{
+	switch (flag) {
+	case ARCHDEL_YES:
+		return "client can delete archived objects";
+	case ARCHDEL_NO:
+		return "client cannot delete archived objects";
+	}
+	return "unknown archive delete state";
+}
+
+static const char *compression_flag(const dsUint8_t flag)
+{
+	switch (flag) {
+	case COMPRESS_YES:
+		return "on";
+	case COMPRESS_NO:
+		return "off";
+	case COMPRESS_CD:
+		return "client determined";
+	}
+	return "unknown compress state";
+}
+
+static const char *replfail_flag(const dsmFailOvrCfgType type)
+{
+	switch (type) {
+	case failOvrNotConfigured:
+		return "not configured";
+	case failOvrConfigured:
+		return "configured";
+	case failOvrConnectedToReplServer:
+		return "connected to replication server";
+	}
+	return "unknown fail over state";
+}
+
 /**
  * @brief Fill login structure with required login information.
  *
@@ -813,15 +850,15 @@ dsInt16_t tsm_query_session(struct session_t *session)
 		return rc;
 	}
 
-	CT_INFO("\nDSMI_DIR \t: %s\n"
-		 "DSMI_CONFIG \t: %s\n"
-		 "serverName \t: %s\n"
-		 "commMethod \t: %d\n"
-		 "serverAddress \t: %s\n"
-		 "nodeName \t: %s\n"
-		 "compress \t: %d\n"
-		 "compressalways \t: %d\n"
-		 "passwordAccess \t: %d",
+	CT_INFO("\nDSMI_DIR      : %s\n"
+		 "DSMI_CONFIG    : %s\n"
+		 "serverName     : %s\n"
+		 "commMethod     : %d\n"
+		 "serverAddress  : %s\n"
+		 "nodeName       : %s\n"
+		 "compress       : %d\n"
+		 "compressalways : %d\n"
+		 "passwordAccess : %d",
 		 dsmOpt.dsmiDir, dsmOpt.dsmiConfig,
 		 dsmOpt.serverName, dsmOpt.commMethod,
 		 dsmOpt.serverAddress, dsmOpt.nodeName,
@@ -838,19 +875,72 @@ dsInt16_t tsm_query_session(struct session_t *session)
 		return rc;
 	}
 
-	CT_INFO("\n"
-		 "Server's ver.rel.lev       : %d.%d.%d.%d\n"
-		 "ArchiveRetentionProtection : %s\n",
-		 dsmSessInfo.serverVer, dsmSessInfo.serverRel,
-		 dsmSessInfo.serverLev, dsmSessInfo.serverSubLev,
-		 dsmSessInfo.archiveRetentionProtection ? "Yes" : "No");
-	CT_INFO("\n"
-		 "Max number of multiple objects per transaction: %d\n"
-		 "Max number of Bytes per transaction: %u\n"
-		 "dsmSessInfo.fsdelim: %c\ndsmSessInfo.hldelim: %c\n",
-		 dsmSessInfo.maxObjPerTxn,
-		 dsmSessInfo.maxBytesPerTxn,
-		 dsmSessInfo.fsdelim, dsmSessInfo.hldelim);
+	char date_str[128] = {0};
+	date_to_str(date_str, &dsmSessInfo.serverDate);
+	CT_INFO("\n *** server information ***\n"
+		"server's ver.rel.lev       : %d.%d.%d.%d\n"
+		"server name                : %s\n"
+		"server port                : %d\n"
+		"server's date/time         : %s\n"
+		"server type                : %s\n",
+		dsmSessInfo.serverVer, dsmSessInfo.serverRel,
+		dsmSessInfo.serverLev, dsmSessInfo.serverSubLev,
+		dsmSessInfo.serverHost, dsmSessInfo.serverPort,
+		date_str,
+		dsmSessInfo.serverType);
+	CT_INFO("\n *** client information ***\n"
+		"node/application type            : %s\n"
+		"max num of multiple objs per txn : %d\n"
+		"file space delimiter             : %c\n"
+                "delimiter betw highlev & lowlev  : %c\n"
+		"compression flag                 : %s\n"
+		"archive delete permission        : %s\n",
+		dsmSessInfo.nodeType,
+		dsmSessInfo.maxObjPerTxn,
+		dsmSessInfo.fsdelim,
+		dsmSessInfo.hldelim,
+		compression_flag(dsmSessInfo.compression),
+		archive_delperm_flag(dsmSessInfo.archDel));
+	CT_INFO("\n *** session information ***\n"
+		"sign-in id node name     : %s\n"
+		"owner                    : %s\n"
+		"name of appl config file : %s\n",
+		dsmSessInfo.id, dsmSessInfo.owner, dsmSessInfo.confFile);
+	bzero(&date_str, sizeof(date_str));
+	date_to_str(date_str, &dsmSessInfo.polActDate);
+	CT_INFO("\n *** policy data ***\n"
+		"domain name                           : %s\n"
+		"active policy set name                : %s\n"
+		"policy activation date                : %s\n"
+		"default mgmt class                    : %s\n"
+		"grace-period archive retention (days) : %d\n"
+		"adsm server name                      : %s\n"
+		"retention protection enabled          : %s\n"
+		"lan free option is set                : %s\n"
+		"deduplication                         : %s\n"
+		"access node                           : %s\n",
+		dsmSessInfo.domainName,
+		dsmSessInfo.policySetName,
+		date_str,
+		dsmSessInfo.dfltMCName,
+		dsmSessInfo.gpArchRetn,
+		dsmSessInfo.adsmServerName,
+		dsmSessInfo.archiveRetentionProtection ? "yes" : "no",
+		dsmSessInfo.lanFreeEnabled ? "yes" : "no",
+		dsmSessInfo.dedupType ==  dedupClientOrServer ?
+		"client or server" : "server only",
+		dsmSessInfo.accessNode);
+	CT_INFO("\n *** replication and fail over ***\n"
+		"fail over conf type             : %s\n"
+		"repl server name                : %s\n"
+		"home server name                : %s\n"
+		"network host name of DSM server : %s\n"
+		"server comm port on host        : %d\n",
+		replfail_flag(dsmSessInfo.failOverCfgType),
+		dsmSessInfo.replServerName,
+		dsmSessInfo.homeServerName,
+		dsmSessInfo.replServerHost,
+		dsmSessInfo.replServerPort);
 
 	dsmApiVersionEx libapi_ver_t = get_libapi_ver();
 	dsmAppVersion appapi_ver_t = get_appapi_ver();
