@@ -1,0 +1,18 @@
+Source: ltsm
+Section: utils
+Priority: optional
+Maintainer: Thomas Stibor <t.stibor@gsi.de>
+Build-Depends: debhelper (>= 9), autotools-dev
+Standards-Version: 3.9.5
+Homepage: https://github.com/tstibor/ltsm
+Vcs-Git: git://github.com/tstibor/ltsm.git
+
+Package: ltsm
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}, tivsm-api64 (>= 7.1.0)
+Description: Lustre TSM copytool and TSM console client 
+ Lustre TSM copytool for seamlessly archiving and retrieving data in Lustre
+ mount points. In addition a TSM console client is provided for archiving,
+ retrieving, deleting and querying data. This is especially useful when
+ a Lustre storage deployment is decommissioned and the archived data still
+ needs to be retrieved afterwards.
