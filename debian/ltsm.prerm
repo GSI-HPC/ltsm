@@ -1,0 +1,10 @@
+# Automatically added by dh_systemd_start
+if [ -d /run/systemd/system ]; then
+	deb-systemd-invoke stop lhsmtool_tsm.service >/dev/null
+fi
+# End automatically added section
+# Automatically added by dh_installinit
+if [ -x "/etc/init.d/lhsmtool_tsm" ]; then
+	invoke-rc.d lhsmtool_tsm stop || exit $?
+fi
+# End automatically added section

@@ -1,0 +1,10 @@
+[Unit]
+Description=Lustre TSM Copytool
+After=network.target
+
+[Service]
+EnvironmentFile=-/etc/default/lhsmtool_tsm
+ExecStart=/usr/sbin/lhsmtool_tsm $LHSMTOOL_TSM_OPTS
+
+[Install]
+WantedBy=multi-user.target
