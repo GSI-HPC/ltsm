@@ -11,17 +11,19 @@ AC_INIT([ltsm], [GIT_VERSION_STRING], [t.stibor@gsi.de], [], [https://github.com
 
 m4_include([m4/ax_pthread.m4])
 m4_include([m4/ax_check_zlib.m4])
-AC_CONFIG_SRCDIR([src/ltsmc.c])
 AM_INIT_AUTOMAKE
 
+AC_CONFIG_SRCDIR([src/ltsmc.c])
 AC_CONFIG_HEADERS([config.h])
 
 # Checks for programs.
 AC_PROG_AWK
 AC_PROG_CC
 AC_PROG_CC_STDC
+AC_PROG_CPP
+AC_PROG_INSTALL
+AC_PROG_LN_S
 AC_PROG_MAKE_SET
-AC_PROG_CXX
 AC_PROG_RANLIB
 
 # Use the C language and compiler for the following checks.
@@ -115,9 +117,7 @@ AC_TYPE_UINT8_T
 
 # Checks for library functions.
 AC_FUNC_LSTAT_FOLLOWS_SLASHED_SYMLINK
-AC_FUNC_MALLOC
-AC_FUNC_REALLOC
-AC_CHECK_FUNCS([bzero gettimeofday memmove memset mkdir realpath strerror atexit sqrt])
+AC_CHECK_FUNCS([malloc realloc atexit bzero clock_gettime gettimeofday memmove memset mkdir realpath sqrt strerror])
 
 AC_CONFIG_FILES([Makefile
                  src/Makefile
