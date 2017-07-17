@@ -557,7 +557,7 @@ static int ct_process_item(struct session_t *session)
 	session->cancel_op = false;
 	free(session->hai);
 
-	return 0;
+	return rc;
 }
 
 static void *ct_thread(void *data)
@@ -597,7 +597,9 @@ static void *ct_thread(void *data)
 				 (uintmax_t)session->hai->hai_cookie,
 				 PFID(&session->hai->hai_fid));
 
-		ct_process_item(session);
+		rc = ct_process_item(session);
+		if (rc)
+			CT_ERROR(rc, "ct_process_item failed");
 	}
 
 thread_exit:

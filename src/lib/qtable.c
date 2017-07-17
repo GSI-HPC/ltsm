@@ -83,7 +83,7 @@ static int remove_older_obj(struct qtable_t *qtable,
 				       newobj, (void **)&oldobj);
 		if (rc == RC_SUCCESS) {
 			free(oldobj);
-			rc = DSM_RC_SUCCESSFUL;
+			return DSM_RC_SUCCESSFUL;
 		} else
 			return DSM_RC_UNSUCCESSFUL;
 	}
