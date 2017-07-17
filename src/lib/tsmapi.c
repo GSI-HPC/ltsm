@@ -530,12 +530,6 @@ static dsInt16_t retrieve_obj(qryRespArchiveData *query_data,
 
 	while (!done) {
 
-		if (session->cancel_op) {
-			CT_MESSAGE("cancel retrieving '%s'", fpath);
-			rc_minor = DSM_RC_UNSUCCESSFUL;
-			goto cleanup;
-		}
-
 		if (!(rc == DSM_RC_MORE_DATA || rc == DSM_RC_FINISHED)) {
 			TSM_ERROR(session, rc, "dsmGetObj or dsmGetData");
 			rc_minor = rc;
@@ -564,8 +558,17 @@ static dsInt16_t retrieve_obj(qryRespArchiveData *query_data,
 			rc_minor = session->progress(&progress_size,
 						     session);
 			if (rc_minor) {
-				CT_ERROR(rc_minor, "progress function"
-					 " callback failed");
+				if (rc_minor == -ECANCELED)
+					CT_WARN("progress "
+						"operation "
+						"canceled");
+				else
+					CT_ERROR(rc_minor,
+						 "progress "
+						 "function "
+						 "callback "
+						 "failed");
+
 				goto cleanup;
 			}
 		}
@@ -1577,13 +1580,6 @@ static dsInt16_t tsm_archive_generic(struct archive_info_t *archive_info,
 
 		while (!done) {
 
-			if (session->cancel_op) {
-				CT_MESSAGE("cancel archiving '%s'", archive_info->fpath);
-				rc_minor = DSM_RC_UNSUCCESSFUL;
-				success = bFalse;
-				goto cleanup_transaction;
-			}
-
 			cur_read = read(fd, data_blk.bufferPtr, TSM_BUF_LENGTH);
 			if (cur_read < 0) {
 				CT_ERROR(errno, "read");
@@ -1628,9 +1624,16 @@ static dsInt16_t tsm_archive_generic(struct archive_info_t *archive_info,
 					rc_minor = session->progress(
 						&progress_size, session);
 					if (rc_minor) {
-						CT_ERROR(rc_minor,
-							 "progress function"
-							 " callback failed");
+						if (rc_minor == -ECANCELED)
+							CT_WARN("progress "
+								"operation "
+								"canceled");
+						else
+							CT_ERROR(rc_minor,
+								 "progress "
+								 "function "
+								 "callback "
+								 "failed");
 
 	 					goto cleanup_transaction;
 	 				}

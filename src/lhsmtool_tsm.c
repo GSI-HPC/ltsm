@@ -273,7 +273,10 @@ static int progress_callback(struct progress_size_t *pg_size,
 	session->hai->hai_extent.offset = pg_size->cur_total - pg_size->cur;
 	rc = llapi_hsm_action_progress(session->hcp, &session->hai->hai_extent,
 				       pg_size->total, 0);
-	if (rc)
+	if (rc == -ECANCELED)
+		CT_WARN("[rc=%d] llapi_hsm_action_progress operation canceled",
+			rc);
+	else if (rc)
 		CT_ERROR(rc, "llapi_hsm_action_progress");
 
 	return rc;
@@ -545,16 +548,17 @@ static int ct_process_item(struct session_t *session)
 		rc = ct_remove(session);
 		break;
 	case HSMA_CANCEL:
-		session->cancel_op = true;
+		/* Cancel operation is handle by llapi_hsm_action_progress,
+		   however catch it here as a known action. */
 		break;
 	default:
 		rc = -EINVAL;
-		CT_ERROR(rc, "unknown action %d, on '%s'", session->hai->hai_action,
+		CT_ERROR(rc, "unknown action %d, on '%s'",
+			 session->hai->hai_action,
 			 opt.o_mnt);
 		err_minor++;
 		ct_hsm_action_end(session, rc, NULL);
 	}
-	session->cancel_op = false;
 	free(session->hai);
 
 	return rc;

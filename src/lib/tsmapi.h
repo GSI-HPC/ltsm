@@ -140,7 +140,6 @@ struct session_t {
 	dsUint32_t handle;
 	struct qtable_t qtable;
 
-	bool cancel_op;
 	struct hsm_action_item *hai;
 	struct hsm_copyaction_private *hcp;
 	long hal_flags;
