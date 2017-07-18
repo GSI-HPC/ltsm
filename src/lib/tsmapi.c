@@ -2043,23 +2043,28 @@ dsInt16_t tsm_check_free_mountp(const char *fs, struct session_t *session)
 	dsUint16_t err_reason = 0;
 	mcBindKey mc_bind_key = {.stVersion =  mcBindKeyVersion};
 	ObjAttr obj_attr;
+	obj_attr.objInfo = NULL;
+
 	rc = obj_attr_prepare(&obj_attr, &archive_info);
 	if (rc) {
 		TSM_ERROR(session, rc, "obj_attr_prepare");
-		return ECONNABORTED;
+		rc = ECONNABORTED;
+		goto cleanup;
 	}
 
 	rc = dsmBeginTxn(session->handle);
 	if (rc) {
 		TSM_ERROR(session, rc, "dsmBeginTxn");
-		return ECONNABORTED;
+		rc = ECONNABORTED;
+		goto cleanup;
 	}
 
 	rc = dsmBindMC(session->handle, &(archive_info.obj_name), stArchive,
 		       &mc_bind_key);
 	if (rc) {
 		TSM_ERROR(session, rc, "dsmBindMC");
-		return ECONNABORTED;
+		rc = ECONNABORTED;
+		goto cleanup;
 	}
 
 	sndArchiveData arch_data = {
@@ -2070,22 +2075,25 @@ dsInt16_t tsm_check_free_mountp(const char *fs, struct session_t *session)
 			&(archive_info.obj_name), &obj_attr, NULL);
 	if (rc) {
 		TSM_ERROR(session, rc, "dsmSendObj");
-		return ECONNABORTED;
+		rc = ECONNABORTED;
+		goto cleanup;
 	}
 
 	rc = dsmEndSendObj(session->handle);
 	if (rc) {
 		TSM_ERROR(session, rc, "dsmEndSendObj");
-		return ECONNABORTED;
+		rc = ECONNABORTED;
+		goto cleanup;
 	}
 
 	rc = dsmEndTxn(session->handle, vote_txn, &err_reason);
 	if (rc) {
 		TSM_DEBUG(session, err_reason, "dsmEndTxn reason");
 		if (err_reason == DSM_RS_ABORT_EXCEED_MAX_MP)
-			return ECONNREFUSED;
+			rc = ECONNREFUSED;
 		else
-			return ECONNABORTED;
+			rc = ECONNABORTED;
+		goto cleanup;
 	}
 
 	/* Delete dummy DSM_OBJ_DIRECTORY. */
@@ -2097,6 +2105,12 @@ dsInt16_t tsm_check_free_mountp(const char *fs, struct session_t *session)
 	}
 	else
 		CT_INFO("passed mount point check");
+
+cleanup:
+	if (obj_attr.objInfo) {
+		free(obj_attr.objInfo);
+		obj_attr.objInfo = NULL;
+	}
 
 	return rc;
 }
