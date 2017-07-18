@@ -424,7 +424,7 @@ descr: *
 [MESSAGE] 1488455280.603089 [28900] tsmapi.c:732 query has no match
 ```
 
-More documentation and detail is provided in the manual pages [ltsmc.1](https://github.com/tstibor/ltsm/blob/master/doc/ltsmc.1) and [lhsmtool_tsm.1](https://github.com/tstibor/ltsm/blob/master/doc/lhsmtool_tsm.1).
+More documentation and detail is provided in the manual pages [ltsmc.1](https://github.com/tstibor/ltsm/blob/master/man/ltsmc.1) and [lhsmtool_tsm.1](https://github.com/tstibor/ltsm/blob/master/man/lhsmtool_tsm.1).
 
 ## Screenshot and Screencast
 Klick on the screenshot to see the full screencast which demonstrates the usage and functionality of this project.
@@ -435,7 +435,7 @@ A thorough description and code examples of IBM's low-level TSM API/library can 
 
 ## License
 This project itself is licensed under the [GPL-2 license](http://www.gnu.org/licenses/old-licenses/gpl-2.0.en.html). The code however, depends on IBM's low-level TSM API/libraries which are distributed 
-under different licenses and thus are not provided in the repository. See [IBM Tivoli Storage Manager Server](http://ftp.software.ibm.com/storage/tivoli-storage-management/maintenance/server/v7r1/Linux/7.1.5.000/README.htm).
+under different licenses and thus are not provided in the repository. See [IBM Tivoli Storage Manager Server](http://ftp.software.ibm.com/storage/tivoli-storage-management/maintenance/server/v7r1/Linux/7.1.7.000/README.htm).
 
 ## Warranty
 Note, this project is still under development and in a beta development state. It is however ready to be tested.
