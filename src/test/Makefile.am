@@ -1,5 +1,6 @@
 test_cds_CFLAGS = -m64 -DLINUX_CLIENT -D_FILE_OFFSET_BITS=64 -D_LARGEFILE64_SOURCE -I$(top_srcdir)/src/lib -I@TSM_SRC_DIR@/ -I@LUSTRE_SRC_DIR@/lustre/include
 
+noinst_HEADERS = CuTest.h
 bin_PROGRAMS = test_cds
 test_cds_SOURCES = test_cds.c CuTest.c test_dsstruct64_off64_t.c test_list.c test_chashtable.c test_qtable.c
 test_cds_LDADD = $(top_srcdir)/src/lib/libtsmapi.a
