@@ -4,13 +4,12 @@
 AC_PREREQ([2.69])
 
 # Obtain git version.
-m4_define([GIT_VERSION_STRING], m4_esyscmd([git describe --always | tr -d '\n']))
+m4_define([GIT_VERSION_STRING], m4_esyscmd([git describe --tags | sed 's/\(.*\)-.*/\1/' | tr -d '\n']))
 
 # Define package information.
 AC_INIT([ltsm], [GIT_VERSION_STRING], [t.stibor@gsi.de], [], [https://github.com/tstibor/ltsm])
 
 m4_include([m4/ax_pthread.m4])
-m4_include([m4/ax_check_zlib.m4])
 AM_INIT_AUTOMAKE
 
 AC_CONFIG_SRCDIR([src/ltsmc.c])
@@ -50,7 +49,7 @@ AS_IF([test -x "$with_lustre"],
 		 [AC_MSG_ERROR([cannot find Lustre API library lustreapi, fix it by providing library path e.g. ./configure LDFLAGS='-L/<PATH_TO_LIB>'])]
         )
 	# Check for required xattr library, otherwise we cannot get Lustre stripe information.
-	AC_CHECK_LIB([attr], [fgetxattr], [], [AC_MSG_ERROR([libattr is required and could not be found!])])
+	AC_CHECK_LIB([attr], [fgetxattr], [], [AC_MSG_ERROR([cannot find library libattr, install libattr package or provide library path e.g. ./configure LDFLAGS='-L/<PATH_TO_LIB>'])])
 	#
 	AC_DEFINE([HAVE_LUSTRE], [1], [define to 1 if Lustre source is available])
 	AM_CONDITIONAL([HAVE_LUSTRE], [true])
@@ -72,7 +71,7 @@ AC_CHECK_LIB([m],[ceil])
 AC_CHECK_LIB([ApiTSM64], [dsmInitEx], [], [AC_MSG_ERROR([cannot find proprietary IBM library ApiTSM64, provide library path e.g. ./configure LDFLAGS='-L/<PATH_TO_LIB>'])])
 
 # Check for required zlib library.
-AX_CHECK_ZLIB(, AC_MSG_ERROR([zlib is required and could not be found!]))
+AC_CHECK_LIB([z], [crc32], [], [AC_MSG_ERROR([cannot find library zlib, install zlib package or provide library path e.g. ./configure LDFLAGS='-L/<PATH_TO_LIB>'])])
 
 # Checks for header files.
 AC_CHECK_HEADERS([fcntl.h stdint.h stdlib.h string.h strings.h sys/param.h sys/time.h unistd.h pthread.h float.h attr/xattr.h])
