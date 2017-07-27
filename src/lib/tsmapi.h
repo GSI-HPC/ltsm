@@ -138,6 +138,7 @@ struct tsm_file_t {
 
 struct session_t {
 	dsUint32_t handle;
+	char owner[DSM_MAX_OWNER_LENGTH + 1];
 	struct qtable_t qtable;
 
 	struct hsm_action_item *hai;

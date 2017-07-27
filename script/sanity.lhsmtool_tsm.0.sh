@@ -75,9 +75,6 @@ __hsm_match_and_wait()
 ##########################################################
 TSM_NAME=${1-polaris}
 LHSMTOOL_TSM_BIN="src/lhsmtool_tsm"
-LHSMTOOL_TSM_NODE=${TSM_NAME}
-LHSMTOOL_TSM_PASSWORD=${TSM_NAME}
-LHSMTOOL_TSM_SERVERNAME=${2-polaris-kvm-tsm-server}
 
 PATH_LUSTRE_MOUNTPOINT='/lustre'
 PATH_DIR=${PATH_LUSTRE_MOUNTPOINT}`mktemp -d`

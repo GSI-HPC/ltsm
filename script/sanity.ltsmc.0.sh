@@ -15,7 +15,8 @@ LTSM_NODE=${TSM_NAME}
 LTSM_PASSWORD=${TSM_NAME}
 LTSM_SERVERNAME=${2-polaris-kvm-tsm-server}
 LTSM_VERBOSE=${3-message}
-LTSM_FS=${4-/}
+LTSM_FS=${4-/tmp}
+LTSM_OWNER=${5-testowner}
 
 [ ${PWD##*/} == "script" ] && { LTSM_BIN="../${LTSM_BIN}"; }
 __check_bin "${LTSM_BIN}"
@@ -77,13 +78,13 @@ find ${PATH_PREFIX} -exec md5sum -b '{}' \; &> ${MD5_ORIG}
 ##########################################################
 # Archive data
 echo "Archiving data please wait ..."
-${LTSM_BIN} --verbose ${LTSM_VERBOSE} --archive -r -f ${LTSM_FS} -n ${LTSM_NODE} -p ${LTSM_PASSWORD} -s ${LTSM_SERVERNAME} "${PATH_PREFIX}"
+${LTSM_BIN} --verbose ${LTSM_VERBOSE} --archive -r -f ${LTSM_FS} -n ${LTSM_NODE} -p ${LTSM_PASSWORD} -o ${LTSM_OWNER} -s ${LTSM_SERVERNAME} "${PATH_PREFIX}"
 [ $? -eq 0 ] && { echo -e "done\n"; }
 
 # First remove data locally, second retrieve data from TSM storage.
 echo "Deleting data locally in ${PATH_PREFIX} and retrieving data from TSM storage"
 rm -rf ${PATH_PREFIX}
-${LTSM_BIN} --verbose ${LTSM_VERBOSE} --retrieve -f ${LTSM_FS} -n ${LTSM_NODE} -p ${LTSM_PASSWORD} -s ${LTSM_SERVERNAME} "${PATH_PREFIX}*/*"
+${LTSM_BIN} --verbose ${LTSM_VERBOSE} --retrieve -f ${LTSM_FS} -n ${LTSM_NODE} -p ${LTSM_PASSWORD} -o ${LTSM_OWNER} -s ${LTSM_SERVERNAME} "${PATH_PREFIX}*/*"
 [ $? -eq 0 ] && { echo -e "done\n"; }
 
 echo "Creating MD5 sum file of retrieved data: ${MD5_RETR}"
@@ -91,7 +92,7 @@ find ${PATH_PREFIX} -exec md5sum -b '{}' \; &> ${MD5_RETR}
 
 # Finally remove data locally and also from TSM storage.
 rm -rf ${PATH_PREFIX}
-${LTSM_BIN} --verbose ${LTSM_VERBOSE} --delete -f ${LTSM_FS} -n ${LTSM_NODE} -p ${LTSM_PASSWORD} -s ${LTSM_SERVERNAME} "${PATH_PREFIX}*/*"
+${LTSM_BIN} --verbose ${LTSM_VERBOSE} --delete -f ${LTSM_FS} -n ${LTSM_NODE} -p ${LTSM_PASSWORD} -o ${LTSM_OWNER} -s ${LTSM_SERVERNAME} "${PATH_PREFIX}*/*"
 [ $? -eq 0 ] && { echo -e "done\n"; }
 
 # Check for equality

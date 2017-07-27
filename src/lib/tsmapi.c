@@ -754,6 +754,7 @@ dsInt16_t tsm_connect(struct login_t *login, struct session_t *session)
 	dsmAppVersion appapi_ver;
 	dsInt16_t rc;
 
+	memset(session->owner, 0, DSM_MAX_OWNER_LENGTH + 1);
 	memset(&init_in, 0, sizeof(dsmInitExIn_t));
 	memset(&init_out, 0, sizeof(dsmInitExOut_t));
 
@@ -778,6 +779,8 @@ dsInt16_t tsm_connect(struct login_t *login, struct session_t *session)
 		TSM_ERROR(session, rc, "dsmInitEx");
 		return rc;
 	}
+
+	strncpy(session->owner, login->owner, DSM_MAX_OWNER_LENGTH);
 
 	regFSData reg_fs_data;
 	memset(&reg_fs_data, 0, sizeof(reg_fs_data));
@@ -992,7 +995,7 @@ static dsInt16_t tsm_query_hl_ll(const char *fs, const char *hl, const char *ll,
 	qry_ar_data.expDateLowerBound.year = DATE_MINUS_INFINITE;
 	qry_ar_data.expDateUpperBound.year = DATE_PLUS_INFINITE;
 	qry_ar_data.descr = desc == NULL || strlen(desc) == 0 ? "*" : (char *)desc;
-	qry_ar_data.owner = "";  /* Omit owner. */
+	qry_ar_data.owner = strlen(session->owner) == 0 ? "" : (char *)session->owner;
 	qry_ar_data.objName = &obj_name;
 
 	CT_INFO("query structure\n"

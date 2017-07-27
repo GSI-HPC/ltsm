@@ -23,6 +23,7 @@ LTSM_PASSWORD=${TSM_NAME}
 LTSM_SERVERNAME=${2-polaris-kvm-tsm-server}
 LTSM_VERBOSE=${3-message}
 LTSM_FS=${4-/}
+LTSM_OWNER=${5-testowner}
 
 [ ${PWD##*/} == "script" ] && { LTSM_BIN="../${LTSM_BIN}"; }
 __check_bin "${LTSM_BIN}"
@@ -41,11 +42,11 @@ do
     CRC32_ORIG=`${LTSM_BIN} --checksum ${RND_STR} | awk '{print $2}'`
 
     cat ${RND_STR} | ${LTSM_BIN} --pipe --node ${LTSM_NODE} --password ${LTSM_PASSWORD} \
-    				 --servername ${LTSM_SERVERNAME} --verbose ${LTSM_VERBOSE} ${RND_STR}
+				 --servername ${LTSM_SERVERNAME} --owner ${LTSM_OWNER} --verbose ${LTSM_VERBOSE} ${RND_STR}
 
     __check_results $? "archive via pipe failed" ${RND_STR}
 
-    CRC32_ARCHIVED=`${LTSM_BIN} --delete --node ${LTSM_NODE} --password ${LTSM_PASSWORD} --servername ${LTSM_SERVERNAME} --verbose info ${RND_STR} 2>&1 | awk '/crc32/{print $3}'`
+    CRC32_ARCHIVED=`${LTSM_BIN} --delete --node ${LTSM_NODE} --password ${LTSM_PASSWORD} --servername ${LTSM_SERVERNAME} --owner ${LTSM_OWNER} --verbose info ${RND_STR} 2>&1 | awk '/crc32/{print $3}'`
 
     __check_results $? "query and delete failed" ${RND_STR}
 
