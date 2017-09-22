@@ -1392,10 +1392,9 @@ static dsInt16_t tsm_retrieve_generic(int fd, struct session_t *session)
 			       (char *)&(query_data.objInfo),
 			       query_data.objInfolen);
 
-			if (obj_info.magic != MAGIC_ID_V1) {
-				CT_WARN("skip object due magic mismatch with MAGIC_ID: %d\n", obj_info.magic);
-				continue;	/* Ignore this object and try next one. */
-			}
+			if (obj_info.magic != MAGIC_ID_V1)
+				CT_WARN("object magic mismatch MAGIC_ID: %d\n",
+					obj_info.magic);
 
 			display_qra(&query_data, c_iter, "[retrieve]");
 			switch (query_data.objName.objType) {
