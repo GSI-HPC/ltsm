@@ -16,19 +16,28 @@
  * Copyright (c) 2017, GSI Helmholtz Centre for Heavy Ion Research
  */
 
+#include <string.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <stdint.h>
+#include <time.h>
+#include <unistd.h>
 #include "CuTest.h"
 #include "tsmapi.c"
 
-#define SERVERNAME	"polaris-kvm-tsm-server"
+#define SERVERNAME	"lxltsm01-tsm-server"
 #define NODE		"polaris"
 #define PASSWORD	"polaris"
 #define OWNER           ""
 
-void test_fwrite(CuTest *tc)
+void test_fcalls(CuTest *tc)
 {
 	int rc;
 	struct login_t login;
-	const char *fpath = "/tmp/ltsm/testing/01.data";
+	const char *fpath[] = {"/tmp/01.data",
+			       "/tmp/02.data",
+			       "/tmp/03.data",
+			       "/tmp/04.data"};
 
 	login_fill(&login, SERVERNAME, NODE, PASSWORD,
 		   OWNER, LINUX_PLATFORM, DEFAULT_FSNAME,
@@ -40,21 +49,69 @@ void test_fwrite(CuTest *tc)
 	rc = tsm_init(DSM_SINGLETHREAD);
 	CuAssertIntEquals(tc, DSM_RC_SUCCESSFUL, rc);
 
-	rc = tsm_fopen(DEFAULT_FSNAME, fpath, "written by cutest",
-		       &login, &session);
+	rc = tsm_fconnect(&login, &session);
 	CuAssertIntEquals(tc, DSM_RC_SUCCESSFUL, rc);
 
-	char buf[65536 * 2] = {0};
-	for (uint16_t i = 1; i <= 256; i *= 2) {
-		ssize_t len;
-		memset(buf, i, sizeof(buf));
-		len = tsm_fwrite(buf, 1, sizeof(buf), &session);
-		CuAssertIntEquals(tc, sizeof(buf), len);
+	srand(time(NULL));
+	FILE *file = NULL;
+
+        for (uint8_t r = 0; r < sizeof(fpath)/sizeof(fpath[0]); r++) {
+
+		unlink(fpath[r]);
+
+                file = fopen(fpath[r], "w+");
+		CuAssertPtrNotNull(tc, file);
+
+		rc = tsm_fopen(DEFAULT_FSNAME, fpath[r], "written by cutest",
+			       &session);
+		CuAssertIntEquals(tc, DSM_RC_SUCCESSFUL, rc);
+
+                unsigned char *buf = NULL;
+                for (uint8_t b = 0; b < 16; b++) {
+			size_t buf_size = 1 + (rand() % 1048576); /* 2^20 = 1 MiB */
+			buf = calloc(buf_size, sizeof(unsigned char));
+			CuAssertPtrNotNull(tc, buf);
+
+			for (size_t r = 0; r < buf_size; r++)
+				buf[r] = rand() % 256;
+
+			size_t written = 0;
+			size_t total_written = 0;
+			size_t rand_nmemb;
+			size_t to_write = buf_size;
+
+			size_t written_tsm = 0;
+			size_t total_written_tsm = 0;
+			do {
+				rand_nmemb = 1 + (rand() % buf_size);
+				written = fwrite(buf, 1, rand_nmemb, file);
+				total_written += written;
+				written_tsm = tsm_fwrite(buf, 1, rand_nmemb, &session);
+				total_written_tsm += written_tsm;
+
+				buf_size -= rand_nmemb;
+			} while (buf_size != 0 || written == 0);
+
+			CuAssertIntEquals(tc, to_write, total_written);
+			CuAssertIntEquals(tc, to_write, total_written_tsm);
+			free(buf);
+		}
+
+		fclose(file);
+		file = NULL;
+
+		uint32_t crc32sum = 0;
+		rc = crc32file(fpath[r], &crc32sum);
+		CuAssertIntEquals(tc, 0, rc);
+
+		CuAssertIntEquals(tc, crc32sum ,
+				  session.tsm_file->archive_info.obj_info.crc32);
+
+		rc = tsm_fclose(&session);
+		CuAssertIntEquals(tc, DSM_RC_SUCCESSFUL, rc);
 	}
 
-	rc = tsm_fclose(&session);
-	CuAssertIntEquals(tc, DSM_RC_SUCCESSFUL, rc);
-
+	tsm_fdisconnect(&session);
 	tsm_cleanup(DSM_SINGLETHREAD);
 }
 
@@ -76,7 +133,7 @@ CuSuite* tsmapi_get_suite()
 {
     CuSuite* suite = CuSuiteNew();
 #if TEST_F_OPEN_WRITE_CLOSE
-    SUITE_ADD_TEST(suite, test_fwrite);
+    SUITE_ADD_TEST(suite, test_fcalls);
 #endif
     SUITE_ADD_TEST(suite, test_extract_hl_ll);
 

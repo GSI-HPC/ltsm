@@ -2235,17 +2235,9 @@ static int tsm_fclose_write(struct session_t *session)
 }
 
 int tsm_fopen(const char *fs, const char *fpath, const char *desc,
-	      struct login_t *login, struct session_t *session)
+	      struct session_t *session)
 {
 	int rc;
-
-	rc = tsm_connect(login, session);
-	if (rc)
-		goto cleanup;
-
-	rc = tsm_query_session(session);
-	if (rc)
-		goto cleanup;
 
 	if (session->tsm_file) {
 		rc = EFAULT;
@@ -2304,8 +2296,6 @@ cleanup:
 		session->tsm_file = NULL;
 	}
 
-	tsm_disconnect(session);
-
 	return rc;
 }
 
@@ -2341,12 +2331,67 @@ int tsm_fclose(struct session_t *session)
 
 	rc = tsm_fclose_write(session);
 	if (rc) {
-		rc = -1;
+		rc = EOF;
 		errno = EFAILED;
 		CT_ERROR(errno, "tsm_fclose_write");
 	}
 
-	tsm_disconnect(session);
+	return rc;
+}
 
+int tsm_fconnect(struct login_t *login, struct session_t *session)
+{
+	int rc;
+
+	rc = tsm_connect(login, session);
+	if (rc)
+		return rc;
+
+	rc = tsm_query_session(session);
+
+	return rc;
+}
+
+void tsm_fdisconnect(struct session_t *session)
+{
+	tsm_disconnect(session);
+}
+
+int crc32file(const char *filename, uint32_t *crc32result)
+{
+	int rc = 0;
+	FILE *file;
+	size_t cur_read;
+	uint32_t crc32sum = 0;
+	unsigned char buf[TSM_BUF_LENGTH] = {0};
+
+	file = fopen(filename, "r");
+	if (file == NULL) {
+		rc = errno;
+		CT_ERROR(rc, "fopen failed on '%s'", filename);
+		return rc;
+	}
+
+	do {
+		cur_read = fread(buf, 1, TSM_BUF_LENGTH, file);
+		if (ferror(file)) {
+			rc = EIO;
+			CT_ERROR(rc, "fread failed on '%s'", filename);
+			break;
+		}
+		crc32sum = crc32(crc32sum, (const unsigned char *)buf,
+				 cur_read);
+
+	} while (!feof(file));
+
+	int rc_minor;
+	rc_minor = fclose(file);
+	if (rc_minor) {
+		rc_minor = errno;
+		CT_ERROR(rc_minor, "fclose failed on '%s'", filename);
+		return rc_minor;
+	}
+
+	*crc32result = crc32sum;
 	return rc;
 }

@@ -261,43 +261,6 @@ static int parseopts(int argc, char *argv[])
 	return 0;
 }
 
-static int calc_crc32sum(const char *filename, uint32_t *crc32result)
-{
-	int rc;
-	FILE *file;
-	size_t cur_read;
-	uint32_t crc32sum = 0;
-	unsigned char buf[TSM_BUF_LENGTH] = {0};
-
-	file = fopen(filename, "r");
-	if (file == NULL) {
-		rc = errno;
-		CT_ERROR(rc, "fopen failed on '%s'", filename);
-		return rc;
-	}
-
-	do {
-		cur_read = fread(buf, 1, TSM_BUF_LENGTH, file);
-		if (ferror(file)) {
-			CT_ERROR(EIO, "fread failed on '%s'", filename);
-			break;
-		}
-		crc32sum = crc32(crc32sum, (const unsigned char *)buf,
-				 cur_read);
-
-	} while (!feof(file));
-
-
-	rc = fclose(file);
-	if (rc) {
-		rc = errno;
-		CT_ERROR(rc, "fclose failed on '%s'", filename);
-		return rc;
-	}
-
-	*crc32result = crc32sum;
-	return rc;
-}
 static int progress_callback(struct progress_size_t *pg_size,
 			      struct session_t *session)
 {
@@ -343,7 +306,7 @@ int main(int argc, char *argv[])
 		uint32_t crc32sum = 0;
 		for (size_t i = 0; i < num_files_dirs &&
 			     files_dirs_arg[i]; i++) {
-			rc = calc_crc32sum(files_dirs_arg[i], &crc32sum);
+			rc = crc32file(files_dirs_arg[i], &crc32sum);
 			if (rc)
 				CT_WARN("calculation of crc32 for '%s' failed",
 					files_dirs_arg[i]);
@@ -380,8 +343,12 @@ int main(int argc, char *argv[])
 			usage(argv[0], 1);
 		}
 
+		rc = tsm_fconnect(&login, &session);
+		if (rc)
+			goto cleanup;
+
 		rc = tsm_fopen(opt.o_fsname, files_dirs_arg[0], opt.o_desc,
-			       &login, &session);
+			       &session);
 		if (rc) {
 			tsm_cleanup(DSM_SINGLETHREAD);
 			goto cleanup;

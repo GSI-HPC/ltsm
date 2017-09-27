@@ -183,6 +183,8 @@ dsInt16_t tsm_retrieve_fpath(const char *fs, const char *fpath,
 			     const char *desc, int fd,
 			     struct session_t *session);
 
+int crc32file(const char *filename, uint32_t *crc32result);
+
 #ifdef HAVE_LUSTRE
 int xattr_get_lov(const int fd, struct lustre_info_t *lustre_info,
 		  const char *fpath);
@@ -190,8 +192,10 @@ int xattr_set_lov(int fd, const struct lustre_info_t *lustre_info,
 		  const char *fpath);
 #endif
 
+int tsm_fconnect(struct login_t *login, struct session_t *session);
+void tsm_fdisconnect(struct session_t *session);
 int tsm_fopen(const char *fs, const char *fpath, const char *desc,
-	      struct login_t *login, struct session_t *session);
+	      struct session_t *session);
 ssize_t tsm_fwrite(const void *ptr, size_t size, size_t nmemb,
 		   struct session_t *session);
 int tsm_fclose(struct session_t *session);
