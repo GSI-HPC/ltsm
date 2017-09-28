@@ -1,5 +1,5 @@
-ltsm (0.5.3-1) unstable; urgency=low
+ltsm (0.5.6-1) unstable; urgency=low
 
   * Initial Release.
 
- -- Thomas Stibor <t.stibor@gsi.de>  Wed, 12 Jul 2017 14:50:14 +0200
+ -- Thomas Stibor <t.stibor@gsi.de>  Thu, 28 Sep 2017 11:49:14 +0200
