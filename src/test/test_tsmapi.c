@@ -140,6 +140,41 @@ void test_extract_hl_ll(CuTest *tc)
 	CuAssertStrEquals(tc, "/ll", ll);
 }
 
+void test_login_fill(CuTest *tc)
+{
+	struct login_t login;
+	login_fill(&login, "servername", "node", "password",
+		   "owner", "platform", "fsname", "fstype");
+
+	CuAssertStrEquals(tc, "-se=servername", login.options);
+	CuAssertStrEquals(tc, "node", login.node);
+	CuAssertStrEquals(tc, "password", login.password);
+	CuAssertStrEquals(tc, "owner", login.owner);
+	CuAssertStrEquals(tc, "platform", login.platform);
+	CuAssertStrEquals(tc, "fsname", login.fsname);
+	CuAssertStrEquals(tc, "fstype", login.fstype);
+
+	login_fill(&login, NULL, "node", "",
+		   "owner", "platform", "", NULL);
+	CuAssertStrEquals(tc, "", login.options);
+	CuAssertStrEquals(tc, "node", login.node);
+	CuAssertStrEquals(tc, "", login.password);
+	CuAssertStrEquals(tc, "owner", login.owner);
+	CuAssertStrEquals(tc, "platform", login.platform);
+	CuAssertStrEquals(tc, "", login.fsname);
+	CuAssertStrEquals(tc, "", login.fstype);
+
+	login_fill(&login, NULL, NULL, NULL,
+		   NULL, NULL, NULL, NULL);
+	CuAssertStrEquals(tc, "", login.options);
+	CuAssertStrEquals(tc, "", login.node);
+	CuAssertStrEquals(tc, "", login.password);
+	CuAssertStrEquals(tc, "", login.owner);
+	CuAssertStrEquals(tc, "", login.platform);
+	CuAssertStrEquals(tc, "", login.fsname);
+	CuAssertStrEquals(tc, "", login.fstype);
+}
+
 CuSuite* tsmapi_get_suite()
 {
     CuSuite* suite = CuSuiteNew();
@@ -147,6 +182,7 @@ CuSuite* tsmapi_get_suite()
     SUITE_ADD_TEST(suite, test_fcalls);
 #endif
     SUITE_ADD_TEST(suite, test_extract_hl_ll);
+    SUITE_ADD_TEST(suite, test_login_fill);
 
     return suite;
 }

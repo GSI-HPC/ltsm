@@ -42,6 +42,8 @@
 #include <lustre/lustreapi.h>
 #endif
 
+#define STRNCPY(d, s, n) if ((d) && (s)) strncpy(d, s, n);
+
 #define OBJ_TYPE(type)							\
 	(DSM_OBJ_FILE == type ? "DSM_OBJ_FILE" :			\
 	(DSM_OBJ_DIRECTORY == type ? "DSM_OBJ_DIRECTORY" :		\
@@ -132,13 +134,19 @@ void login_fill(struct login_t *login, const char *servername,
 		const char *owner, const char *platform,
 		const char *fsname, const char *fstype)
 {
+	if (!login)
+		return;
+
 	memset(login, 0, sizeof(*login));
-	strncpy(login->node, node, DSM_MAX_NODE_LENGTH);
-	strncpy(login->password, password, DSM_MAX_VERIFIER_LENGTH);
-	strncpy(login->owner, owner, DSM_MAX_OWNER_LENGTH);
-	strncpy(login->platform, platform, DSM_MAX_PLATFORM_LENGTH);
-	strncpy(login->fsname, fsname, DSM_MAX_FSNAME_LENGTH);
-	strncpy(login->fstype, fstype, DSM_MAX_FSTYPE_LENGTH);
+	STRNCPY(login->node, node, DSM_MAX_NODE_LENGTH);
+	STRNCPY(login->password, password, DSM_MAX_VERIFIER_LENGTH);
+	STRNCPY(login->owner, owner, DSM_MAX_OWNER_LENGTH);
+	STRNCPY(login->platform, platform, DSM_MAX_PLATFORM_LENGTH);
+	STRNCPY(login->fsname, fsname, DSM_MAX_FSNAME_LENGTH);
+	STRNCPY(login->fstype, fstype, DSM_MAX_FSTYPE_LENGTH);
+
+	if (!servername)
+		return;
 
 	const uint16_t s_arg_len = 1 + strlen(servername) +
 		strlen("-se=");
@@ -874,6 +882,7 @@ dsInt16_t tsm_query_session(struct session_t *session)
 	ApiSessInfo dsmSessInfo;
 	memset(&dsmSessInfo, 0, sizeof(ApiSessInfo));
 
+	dsmSessInfo.stVersion = ApiSessInfoVersion;
 	rc = dsmQuerySessInfo(session->handle, &dsmSessInfo);
 	TSM_DEBUG(session, rc,  "dsmQuerySessInfo");
 	if (rc) {
