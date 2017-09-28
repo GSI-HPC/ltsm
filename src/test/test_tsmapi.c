@@ -24,20 +24,28 @@
 #include <unistd.h>
 #include "CuTest.h"
 #include "tsmapi.c"
+#include "test_utils.h"
 
 #define SERVERNAME	"lxltsm01-tsm-server"
 #define NODE		"polaris"
 #define PASSWORD	"polaris"
 #define OWNER           ""
+#define LEN_RND_STR     6
 
 void test_fcalls(CuTest *tc)
 {
 	int rc;
 	struct login_t login;
-	const char *fpath[] = {"/tmp/01.data",
-			       "/tmp/02.data",
-			       "/tmp/03.data",
-			       "/tmp/04.data"};
+	char fpath[][5 + LEN_RND_STR + 1] = {"/tmp/",
+					     "/tmp/",
+					     "/tmp/",
+					     "/tmp/"};
+
+	for (uint8_t r = 0; r < sizeof(fpath)/sizeof(fpath[0]); r++) {
+		char rnd_s[LEN_RND_STR + 1] = {0};
+		rnd_str(rnd_s, LEN_RND_STR);
+		snprintf(fpath[r] + 5, LEN_RND_STR + 1, "%s", rnd_s);
+	}
 
 	login_fill(&login, SERVERNAME, NODE, PASSWORD,
 		   OWNER, LINUX_PLATFORM, DEFAULT_FSNAME,
@@ -109,6 +117,9 @@ void test_fcalls(CuTest *tc)
 
 		rc = tsm_fclose(&session);
 		CuAssertIntEquals(tc, DSM_RC_SUCCESSFUL, rc);
+
+		rc = tsm_delete_fpath(DEFAULT_FSNAME, fpath[r], &session);
+		CuAssertIntEquals(tc, DSM_RC_SUCCESSFUL, rc);
 	}
 
 	tsm_fdisconnect(&session);
@@ -142,6 +153,8 @@ CuSuite* tsmapi_get_suite()
 
 void run_all_tests(void)
 {
+	api_msg_set_level(API_MSG_WARN);
+
 	CuString *output = CuStringNew();
 	CuSuite *suite = CuSuiteNew();
 	CuSuite *tsmapi_suite = tsmapi_get_suite();

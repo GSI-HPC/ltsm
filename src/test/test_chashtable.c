@@ -23,6 +23,8 @@
 #include <float.h>
 #include "chashtable.h"
 #include "CuTest.h"
+#include "test_utils.h"
+#include "log.h"
 
 #define KEYLEN 256
 
@@ -30,18 +32,6 @@ typedef struct {
 	char key[KEYLEN];
 	uint32_t data;
 } object_t ;
-
-static const char ALPHANUM[] =
-        "0123456789"
-        "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-        "abcdefghijklmnopqrstuvwxyz";
-
-void rnd_str(char *s, const uint16_t len)
-{
- 	for (uint16_t l = 0; l < len; l++)
-		s[l] = ALPHANUM[rand() % (sizeof(ALPHANUM) - 1)];
-	s[len] = 0;
-}
 
 void load_factor(CuTest *tc, const chashtable_t *chashtable, const char *hashf)
 {
@@ -56,8 +46,8 @@ void load_factor(CuTest *tc, const chashtable_t *chashtable, const char *hashf)
 	for (uint32_t b = 0; b < chashtable->buckets; b++) {
 		total_size += list_size(&chashtable->table[b]);
 #if 0
-		printf("list size: %lu in bucket: %d\n",
-		       list_size(&chashtable->table[b]), b);
+		CT_INFO("list size: %lu in bucket: %d\n",
+			list_size(&chashtable->table[b]), b);
 #endif
 		sd += (list_size(&chashtable->table[b]) - load_factor) *
 			(list_size(&chashtable->table[b]) - load_factor);
