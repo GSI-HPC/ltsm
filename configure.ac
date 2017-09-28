@@ -98,6 +98,11 @@ do {
   AC_MSG_RESULT(no)
 ])
 
+#  Default-disabled tests.
+AC_ARG_ENABLE([tests],
+    AS_HELP_STRING([--enable-tests], [Enable and compile tests]))
+AM_CONDITIONAL([TESTS], [test "x$enable_tests" = "xyes"])
+
 # Propage flags and dirs among final Makefiles.
 AC_SUBST([AM_CFLAGS])
 AC_SUBST([LUSTRE_SRC_DIR])

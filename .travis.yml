@@ -4,7 +4,7 @@ env:
     global:
         - CFLAGS='-g -DDEBUG -O0'
     matrix:
-        - CONFIGURE_ARGS="--with-lustre=/opt/lustre-release/" LDFLAGS='-L/usr/lib'
+        - CONFIGURE_ARGS="--with-lustre=/opt/lustre-release/" LDFLAGS='-L/usr/lib' --enable-tests
         -
 
 script: ./autogen.sh && ./configure $CONFIGURE_ARGS && make && ./src/test/test_cds && ./src/test/test_tsmapi

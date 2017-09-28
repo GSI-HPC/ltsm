@@ -1,4 +1,9 @@
-SUBDIRS = lib test
+SUBDIRS = lib
+
+if TESTS
+    SUBDIRS += test
+endif
+
 AUTOMAKE_OPTIONS = subdir-objects
 
 ltsmc_CFLAGS = -m64 -DLINUX_CLIENT -D_FILE_OFFSET_BITS=64 -D_LARGEFILE64_SOURCE -I$(top_srcdir)/src/lib -I@TSM_SRC_DIR@/
