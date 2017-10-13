@@ -38,7 +38,7 @@ struct msrt {
 
 #define MSRT_STOP(s) clock_gettime(CLOCK_MONOTONIC, &msrt_##s##_t.end)
 
-#define MSRT_DATA(s, d) msrt_##s##_t.data_processed += d
+#define MSRT_DATA(s, d) msrt_##s##_t.data_processed += (uint64_t)d
 
 #define MSRT_DISPLAY_RESULT(s)						\
 do {									\

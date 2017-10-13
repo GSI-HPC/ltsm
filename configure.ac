@@ -24,6 +24,7 @@ AC_PROG_INSTALL
 AC_PROG_LN_S
 AC_PROG_MAKE_SET
 AC_PROG_RANLIB
+AC_GNU_SOURCE
 
 # Use the C language and compiler for the following checks.
 AC_LANG([C])
@@ -100,8 +101,13 @@ do {
 
 #  Default-disabled tests.
 AC_ARG_ENABLE([tests],
-    AS_HELP_STRING([--enable-tests], [Enable and compile tests]))
+    AS_HELP_STRING([--enable-tests], [enable and compile tests]))
 AM_CONDITIONAL([TESTS], [test "x$enable_tests" = "xyes"])
+
+# Enable measurements when tests are enabled.
+if test "x$enable_tests" = "xyes"; then
+    AC_DEFINE([WITH_MEASUREMENT], [1], [define if enabling tests])
+fi
 
 # Propage flags and dirs among final Makefiles.
 AC_SUBST([AM_CFLAGS])
