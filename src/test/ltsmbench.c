@@ -29,12 +29,14 @@
 #define LEN_FILENAME_RND 32
 
 MSRT_DECLARE(tsm_archive_fpath);
+MSRT_DECLARE(tsm_retrieve_fpath);
 
 static char **fpaths = NULL;
 static struct session_t *sessions = NULL;
 static pthread_t *threads = NULL;
 static pthread_mutex_t mutex;
 static uint16_t next_idx = 0;
+static enum task_e {ARCHIVE, RETRIEVE} task;
 
 struct options {
 	int o_verbose;
@@ -186,7 +188,7 @@ static int parseopts(int argc, char *argv[])
 	return 0;
 }
 
-static void *perform_archive(void *thread_data)
+static void *perform_task(void *thread_data)
 {
 	struct session_t *session = (struct session_t *)thread_data;;
 	char _fpath[5 + LEN_FILENAME_RND + 1] = {0};
@@ -198,9 +200,14 @@ static void *perform_archive(void *thread_data)
 		strncpy(_fpath, fpaths[next_idx++], 5 + LEN_FILENAME_RND + 1);
 		pthread_mutex_unlock(&mutex);
 
-		rc = tsm_archive_fpath(DEFAULT_FSNAME, _fpath,
-				       NULL, -1, NULL,
-				       session);
+		if (task == ARCHIVE)
+			rc = tsm_archive_fpath(DEFAULT_FSNAME, _fpath,
+					       NULL, -1, NULL,
+					       session);
+		else
+			rc = tsm_retrieve_fpath(DEFAULT_FSNAME, _fpath,
+						NULL, -1, session);
+
 		if (rc)
 			pthread_exit((void *)&rc);
 	} while (next_idx < opt.o_nfiles);
@@ -310,7 +317,7 @@ static int remove_fnames(void)
 	return rc;
 }
 
-static int execute_threads(void)
+static int run_threads(void)
 {
 	int rc;
 	pthread_attr_t attr;
@@ -331,11 +338,8 @@ static int execute_threads(void)
 
 	pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
 
-	MSRT_START(tsm_archive_fpath);
-	MSRT_DATA(tsm_archive_fpath, opt.o_nfiles * opt.o_filesize);
-
 	for (int n = 0; n < opt.o_nthreads; n++) {
-		rc = pthread_create(&threads[n], &attr, perform_archive, &sessions[n]);
+		rc = pthread_create(&threads[n], &attr, perform_task, &sessions[n]);
 
 		if (rc)
 			CT_WARN("[rc=%d] pthread_create failed thread '%d'", rc, n);
@@ -355,9 +359,6 @@ static int execute_threads(void)
 		if (rc)
 			CT_WARN("[rc=%d] pthread_join failed thread '%d'", rc, n);
 	}
-
-	MSRT_STOP(tsm_archive_fpath);
-	MSRT_DISPLAY_RESULT(tsm_archive_fpath);
 
 	return rc;
 
@@ -417,11 +418,29 @@ int main(int argc, char *argv[])
 		if (rc)
 			goto cleanup;
 	}
+
 	pthread_mutex_init(&mutex, NULL);
 
-	rc = execute_threads();
+	task = ARCHIVE;
+	/* Run archive threads and measure threaded archive performance. */
+	MSRT_START(tsm_archive_fpath);
+	MSRT_DATA(tsm_archive_fpath, opt.o_nfiles * opt.o_filesize);
+	rc = run_threads();
 	if (rc)
 		goto cleanup;
+	MSRT_STOP(tsm_archive_fpath);
+	MSRT_DISPLAY_RESULT(tsm_archive_fpath);
+
+	next_idx = 0;
+	task = RETRIEVE;
+	/* Run retrieve threads and measure threaded retrieve performance. */
+	MSRT_START(tsm_retrieve_fpath);
+	MSRT_DATA(tsm_retrieve_fpath, opt.o_nfiles * opt.o_filesize);
+	rc = run_threads();
+	if (rc)
+		goto cleanup;
+	MSRT_STOP(tsm_retrieve_fpath);
+	MSRT_DISPLAY_RESULT(tsm_retrieve_fpath);
 
 cleanup:
 	pthread_mutex_destroy(&mutex);
