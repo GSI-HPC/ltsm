@@ -33,9 +33,7 @@ MSRT_DECLARE(tsm_archive_fpath);
 static char **fpaths = NULL;
 static struct session_t *sessions = NULL;
 static pthread_t *threads = NULL;
-static bool lock_state = false;
 static pthread_mutex_t mutex;
-static pthread_cond_t cond;
 static uint16_t next_idx = 0;
 
 struct options {
@@ -196,15 +194,9 @@ static void *perform_archive(void *thread_data)
 	int rc = 0;
 
 	do {
-		while (lock_state)
-			pthread_cond_wait(&cond, &mutex);
-
 		pthread_mutex_lock(&mutex);
-		lock_state = true;
 		strncpy(_fpath, fpaths[next_idx++], 5 + LEN_FILENAME_RND + 1);
-		lock_state = false;
 		pthread_mutex_unlock(&mutex);
-		pthread_cond_signal(&cond);
 
 		rc = tsm_archive_fpath(DEFAULT_FSNAME, _fpath,
 				       NULL, -1, NULL,
@@ -397,6 +389,12 @@ int main(int argc, char *argv[])
 	if (rc)
 		goto cleanup;
 
+	if (opt.o_nthreads > opt.o_nfiles) {
+		CT_WARN("number of threads > num of files, reduce number of"
+			"threads to '%d'", opt.o_nfiles);
+		opt.o_nthreads = opt.o_nfiles;
+	}
+
 	sessions = calloc(opt.o_nthreads, sizeof(struct session_t));
 	if (!sessions) {
 		rc = -ENOMEM;
@@ -419,9 +417,7 @@ int main(int argc, char *argv[])
 		if (rc)
 			goto cleanup;
 	}
-
 	pthread_mutex_init(&mutex, NULL);
-	pthread_cond_init(&cond, NULL);
 
 	rc = execute_threads();
 	if (rc)
@@ -429,7 +425,6 @@ int main(int argc, char *argv[])
 
 cleanup:
 	pthread_mutex_destroy(&mutex);
-	pthread_cond_destroy(&cond);
 
 	if (sessions) {
 		for (int n = 0; n < opt.o_nfiles; n++) {
