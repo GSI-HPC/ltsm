@@ -1,29 +1,98 @@
-LTSM - Lightweight TSM API, TSM Console Client and Lustre TSM Copytool for Archiving Data
+LTSM - Lightweight TSM API, Lustre TSM Copytool for Archiving Data and TSM Console Client
 ==============
 
 [![Build Status](https://travis-ci.org/tstibor/ltsm.svg?branch=master)](https://travis-ci.org/tstibor/ltsm)
 [![Tag Version](https://img.shields.io/github/tag/tstibor/ltsm.svg)](https://github.com/tstibor/ltsm/tags)
 [![License](http://img.shields.io/:license-gpl2-blue.svg)](http://www.gnu.org/licenses/gpl-2.0.html)
 
-A lightweight high-level TSM API/library (called *tsmapi*) supporting operations
-* *archiving*
-* *retrieving*
-* *deleting*
-* and *querying*.
+This project consists of *four* parts:
+1. Lightweight TSM API/library (called *tsmapi*) supporting operations (*archiving*, *retrieving*, *deleting*, *querying*).
+2. Lustre TSM Copytool.
+3. TSM console client.
+4. Benchmark and test suite.
 
-Moreover, a Lustre TSM Copytool (called *lhsmtool_tsm*) is provided which hooks into the Lustre framework and provides HSM functionality for Lustre and TSM storage backend.
-In addition a simple console client (called *ltsmc*) is provided which demonstrates the use of *tsmapi* and 
-can be used to retrieve data which was archived with the Lustre Copytool. This is especially useful when a Lustre storage deployment is decommissioned
-and the archived data still needs to be retrieved afterwards.
+# Introduction into Lustre HSM
+Lustre has since version 2.5 hierarchical storage management (HSM) capabilities, that is, data can be automatically
+*archived* to low-cost storage media such as tape storage systems and seamlessly *retrieved* when accessing the data on Lustre clients. The Lustre HSM capabilities can be illustrated by means of state diagrams and the related Lustre commands
+*lfs hsm_archive*, *lfs hsm_release*, *lfs hsm_restore* as depicted below.
+![Statediagram](http://web-docs.gsi.de/~tstibor/ltsm/state.diagram.png)
+The initial state is a *new file*. Once the file is archived, it
+changes into state *archived* and a identical copy exists on the HSM storage. If the archived file is modified, then the state
+changes to *dirty*. As a consequence, one has to re-archive the file to reobtain an identical copy on the Lustre side as well
+as the HSM storage. If the state changes to *released*, then the bulk data of the file is moved to the HSM storage and only the file skeleton
+is kept. If the file is accessed or the *lfs hsm_restore* command is executed, the file is restored and the state is changes back to *archived*.
 
-## Getting Started <a id="getting.started"></a>
+# Lustre HSM Framework
+The aim of the Lustre HSM framework is to provide an interface for seamlessly *archiving* data which is no
+longer used, and place them into a long term retrievable archive storage (such as tape drives).
+The meta information of the *archived* data such as the file name, user id, etc. is however still
+present in the Lustre file system, whereas the bulk data is placed on the retrievable storage.
+When the *archived* data is accessed, the bulk data is seamlessly copied from the retrievable storage back to the Lustre
+file system. In summary, the data is still available regardless of where it is actually stored.
+For providing such a functionality, the HSM framework is embedded in the main Lustre components and explained
+for the case of *retrieving* data in the Figure below.
+![HSMArchitecture](http://web-docs.gsi.de/~tstibor/ltsm/hsm.architecture.png)
+Triggered actions and data flows for retrieving data inside the Lustre HSM framework.
+The participating nodes (depicted as dashed frames) are: Client, MDS, OSS, Copytool, Storage. The Lustre client opens a file which is already archived, thus the bulk data is not available on any OST. The MDT node receives the open call, allocate objects on the OST and notifies the HSM coordinator to copy in data for file indentifier (short FID) of the corresponding file. The copytool receives from the HSM coordinator the event to copyin data of FID and notifies the internal data mover for retrieving the data stored on the storage node and copy it over to a OST. Once the copy process is completed, the data mover notifies the HSM agent with a copydone message and the HSM agent finalizes the process with a HSM copydone message back to the MDT node.
+
+# TSM Overview
+Tivoli Storage Manager (now renamed to IBM Spectrum Protect) (TSM) is a client/server product from IBM
+employed in heterogeneous distributed environments to *backup* and *archive* data.
+The difference between a backup and an archive can be summarized as follows:
+* Backup: A copy of the data is stored in the event the original becomes lost or damaged. Typically an incremental (forever) backup strategy is performed.
+* Archive: Remove from an on-line system those data no longer in day to day use, and place them into a long term retrievable storage (such as tape drives).
+
+The core capabilities and features of a TSM server are:
+* Compression: Compress data stream seamless either on client or server side.
+* Deduplication: Eliminating duplicate copies of repeating data.
+* Collocation: Store and pack data of a client in few number of tapes as much as possible to reduce the number of media mounts and for minimizing tape drive movements.
+* Storage hierarchies: Automatically move data from faster devices to slower devices based on characteristics such as file size or storage capacity.
+The last issue is a crucial feature for the Lustre HSM framework, as it enables effectively archiving and retrieving data to fast devices, rather than being tied up to slow but large and cheap devices.
+
+# Data Organized on TSM Server
+The TSM server is an object storage server and is developed for storing and retrieving named objects. Similar to Lustre, the TSM
+server has two main storage areas, database and data storage. The database contains the metadata of the objects such as unique
+identifiers, names and attributes, whereas the data storage contains the object data. Each object stored on the TSM server has a
+name associated with it that is determined by the client. The object name is composed of:
+* **fs**: File space name (mount point),
+* **hl**: High level name (directory name),
+* **ll**: Low level name (file name),
+
+and must be specified to identify the object for operations query, archive, retrieve and delete. In addition to determined TSM
+metadata information, user defined metadata can be stored on the TSM server of size up to 255 bytes. The user defined space is
+employed to store Lustre information as well as a CRC32 check-sum and a magic id (see Fig. below).
+![](http://web-docs.gsi.de/~tstibor/ltsm/object.meta.data.png)
+
+# Copytool
+As described above, a *copytool* is composed of a HSM proxy and data mover that runs on the same node. Loosely speaking, the
+copytool receives archive, retrieve and delete actions from MDT node and triggers data moving operations. In more detail it is a
+daemon process that requires a Lustre mount point for accessing Lustre files and processes actions *HSMA_ARCHIVE*, *HSMA_RESTORE*,
+*HSMA_REMOVE* and *HSMA_CANCEL* as depicted below.
+
+![](http://web-docs.gsi.de/~tstibor/ltsm/source.core.overview.png)
+
+The functions *ct_archive(session)*, *ct_restore(session)* and *ct_remove(session)* implement the core actions for accessing named objects and for transferring data between the Lustre mount point and the TSM storage.
+
+# Implementation Details
+For achieving high data throughput by means of parallelism the copytool employs the producer-consumer model. The data
+structure of the model is a concurrent queue. The producer is a single thread receiving HSM action items from the MDS’s and
+enqueues the items in the queue. There are multiple consumer threads, each having a session opened to the TSM server, which are
+dequeueing items and executing the HSM actions (see Fig. below).
+![](http://web-docs.gsi.de/~tstibor/ltsm/produce.consumer.model.png)
+
+Overview of a single-producer multiple-consumer model for a produce thread (P-Thread) and four consumer threads
+(C-Threads). Three C-Threads dequeued HSM action items and are executing the actions. The P-Thread received from the MDS
+a new HSM action item and enqueues the item into the concurrent queue. Once the enqueue operation is successful, C-Thread_4
+will be notified to dequeue and execute new HSM action.
+
+# Getting Started <a id="getting.started"></a>
 Before using LTSM a working access to a TSM server is required. One can install for testing purposes a fully working
 TSM server (e.g. inside a KVM) for a period of 30 days before the license expires. A complete installation and setup guide is provided
 at [TSM Server Installation Guide](http://web-docs.gsi.de/~tstibor/tsm/).
 Download and install the TSM API client provided at [7.1.X.Y-TIV-TSMBAC-LinuxX86_DEB.tar](http://ftp.software.ibm.com/storage/tivoli-storage-management/maintenance/client/v7r1/Linux/LinuxX86_DEB/BA/).
 Make sure to install `tivsm-api64.amd64.deb` where the header files `dapitype.h, dsmapips.h, ...` and the low-level library `libApiTSM64.so` are provided.
 
-### Compile *ltsmc* and *lhsmtool_tsm*
+### Compile *lhsmtool_tsm* and *ltsmc*
 
 Clone the git repository
 ```
@@ -31,7 +100,7 @@ git clone https://github.com/tstibor/ltsm
 ```
 and execute
 ```
-./autogen.sh && ./configure CFLAGS='-g -DDEBUG -O0' --with-lustre=<PATH-TO-LUSTRE-RELEASE> LDFLAGS='-L<PATH-TO-LUSTRE-RELEASE>/lustre/utils'
+./autogen.sh && ./configure CFLAGS='-g -DDEBUG -O0' --with-lustre=<PATH-TO-LUSTRE-RELEASE> LDFLAGS='-L<PATH-TO-LUSTRE-RELEASE>/lustre/utils' --enable-tests
 ```
 If Lustre in `<PATH-TO-LUSTRE-RELEASE>` is not found you will get the message
 ```
@@ -41,394 +110,196 @@ configure: WARNING: "cannot find Lustre source tree and Lustre library. Only TSM
 
 ```
 and the console client *ltsmc* is built only. For building also the Lustre Copytool thus make sure the Lustre sources (header files) are available
-as well as the Lustre library `liblustreapi.so`. If *required* TSM and *optional* Lustre header files and libraries are found the following executable files are provided
-  * `src/test/test_tsmapi` (Simple test suite)
+as well as the Lustre library `liblustreapi.so`. If *required* TSM and *optional* Lustre header files and libraries are found the following executable files are provided:
   * `src/lhsmtool_tsm` (Lustre TSM Copytool)
   * `src/ltsmc` (Console client)
+  * `src/test/test_cds` (Test suite for data structures (linked-list, queue, hashtable, etc.))
+  * `src/test/test_tsmapi` (Test suite for *tsmapi*)
+  * `src/test/ltsmbench` (Benchmark suite for measuring threaded archive/retrieve performance)
 
 ## Lustre Copytool
-Make sure to have enabled the HSM functionality on the MGS/MDS, e.g. `lctl set_param 'mdt.<LNAME>-MDT0000.hsm_control=enabled`
+Make sure you have enabled the HSM functionality on the MGS/MDS, e.g. `lctl set_param 'mdt.<LNAME>-MDT0000.hsm_control=enabled`
 and TSM server is running as well as `dsm.sys` contains the proper entries such as
 ```
 SErvername              polaris-kvm-tsm-server
    Nodename             polaris
    TCPServeraddress     192.168.254.102
 ```
-Start the Lustre TSM Copytool as follows: `# lhsmtool_tsm -n polaris -p polaris -s polaris-kvm-tsm-server -u polaris '/lustre'`
-where the parameters, *-n = nodename*, *-p = password* have to match with those setup on the TSM Server (see [TSM Server Installation Guide](http://web-docs.gsi.de/~tstibor/tsm/))
-and *-s = servername* with the entry in *dsm.sys*. If everything is correctly setup you should see the following information:
+If the compilation process is successful, then you should see the following information `./src/lhsmtool_tsm --help`
 ```
-DSMI_CONFIG="/opt/tivoli/tsm/client/api/bin64/dsm.sys" ./src/lhsmtool_tsm -n polaris -p polaris -s 'polaris-kvm-tsm-server' -t 1 -v debug /lustre 
-[DEBUG] 1488451355.713236 [26390] tsmapi.c:466 dsmSetUp: handle: 0 ANS0302I (RC0)    Successfully done.
-[MESSAGE] 1488451355.713294 [26390] lhsmtool_tsm.c:741 tsm_init: session: 1
-[DEBUG] 1488451355.817125 [26390] tsmapi.c:511 dsmInitEx: handle: 1 ANS0302I (RC0)    Successfully done.
-[DEBUG] 1488451355.820543 [26390] tsmapi.c:530 dsmRegisterFS: handle: 1 ANS0242W (RC2062) On dsmRegisterFS the filespace is already registered
-[DEBUG] 1488451355.820591 [26390] tsmapi.c:585 dsmQuerySessOptions: handle: 1 ANS0302I (RC0)    Successfully done.
-[INFO] 1488451355.820607 [26390] tsmapi.c:604 
-DSMI_DIR 	: /opt/tivoli/tsm/client/api/bin64
-DSMI_CONFIG 	: /opt/tivoli/tsm/client/api/bin64/dsm.sys
-serverName 	: POLARIS-KVM-TSM-SERVER
-commMethod 	: 1
-serverAddress 	: 192.168.254.101
-nodeName 	: POLARIS
-compress 	: 0
-compressalways 	: 1
-passwordAccess 	: 0
-[DEBUG] 1488451355.820762 [26390] tsmapi.c:610 dsmQuerySessInfo: handle: 1 ANS0302I (RC0)    Successfully done.
-[INFO] 1488451355.820775 [26390] tsmapi.c:621 
-Server's ver.rel.lev       : 7.1.3.0
-ArchiveRetentionProtection : No
+usage: ./src/lhsmtool_tsm [options] <lustre_mount_point>
+	-a, --archive-id <int> [default: 1]
+		archive id number
+	-t, --threads <int>
+		number of processing threads [default: 2]
+	-n, --node <string>
+		node name registered on tsm server
+	-p, --password <string>
+		password of tsm node/owner
+	-o, --owner <string>
+		owner of tsm node
+	-s, --servername <string>
+		hostname of tsm server
+	-v, --verbose {error, warn, message, info, debug} [default: message]
+		produce more verbose output
+	--abort-on-error
+		abort operation on major error
+	--daemon
+		daemon mode run in background
+	--dry-run
+		don't run, just show what would be done
+	--restore-stripe
+		restore stripe information
+	-h, --help
+		show this help
 
-[INFO] 1488451355.820806 [26390] tsmapi.c:628 
-Max number of multiple objects per transaction: 4096
-Max number of Bytes per transaction: 26214400
-dsmSessInfo.fsdelim: /
-dsmSessInfo.hldelim: /
-
-[INFO] 1488451355.820844 [26390] tsmapi.c:651 IBM API library version = 7.1.3.0
-
-[MESSAGE] 1488451355.821993 [26390] lhsmtool_tsm.c:620 waiting for message from kernel
-```
-The Lustre TSM Copytool is now ready to process HSM action items in a single thread.
-Processing HSM action items is implemented as a *single producer - multiple consumer* model.
-A single producer inserts HSM action items into a queue, the multiple
-consumers dequeue the items and execute the corresponding TSM actions such as *archive*, *retrieve*
-and *delete*. The number of consumer threads is specified by the option `--threads <NUM>`, default is 1. Note,
-it is necessary to set the same or even greater value on the TSM server with command:
-`update node <NODENAME> maxnummp=<NUM>`, otherwise the TSM server will reply with
-error message: `"This node has exceeded its maximum number of mount points"` and will fail
-in processing the HSM action items.
-
-## Console Client
-In the following sections you find a quick overview of the functionality of *ltsmc*.
-### Archiving data
-For demonstrating of how to archive files and directories we first create an *archive* directories and place there some data.
-```
-mkdir -p /tmp/archives && wget --directory-prefix /tmp/archives https://www.kernel.org/pub/linux/kernel/Historic/linux-0.01.tar.gz && ta
-r xvfz /tmp/archives/linux-0.01.tar.gz -C /tmp/archives && rm -rf /tmp/archives/linux-0.01.tar.gz
+IBM API library version: 7.1.6.0, IBM API application client version: 7.1.6.0
+version: 0.5.7-5 © 2017 by GSI Helmholtz Centre for Heavy Ion Research
 ```
 
-First we archive the single file `/tmp/archives/linux/Makefile`
+Starting the *copytool* with 4 threads and *archive_id=1* works as follows `./src/lhsmtool_tsm --restore-stripe -a 1 -v debug -n polaris -p polaris -s 'lxltsm01-tsm-server' -t 4 /lustre` where
+parameters, *-n = nodename*, *-p = password* and *-s = servername* have to match with those setup on the TSM Server (see [TSM Server Installation Guide](http://web-docs.gsi.de/~tstibor/tsm/)).
 ```
-./src/ltsmc -v debug --archive --fsname '/' -d 'Historic Linux Kernel Makefile' --node polaris --password polaris --servername polaris-kvm-tsm-server 
-/tmp/archives/linux/Makefile
-```
-One should see the following result:
-```
-[DEBUG] 1488452577.504628 [26983] tsmapi.c:466 dsmSetUp: handle: 0 ANS0302I (RC0)    Successfully done.
-[DEBUG] 1488452577.605622 [26983] tsmapi.c:511 dsmInitEx: handle: 1 ANS0302I (RC0)    Successfully done.
-[DEBUG] 1488452577.609448 [26983] tsmapi.c:530 dsmRegisterFS: handle: 1 ANS0242W (RC2062) On dsmRegisterFS the filespace is already registered
-[DEBUG] 1488452577.609482 [26983] tsmapi.c:585 dsmQuerySessOptions: handle: 1 ANS0302I (RC0)    Successfully done.
-[INFO] 1488452577.609488 [26983] tsmapi.c:604 
-DSMI_DIR 	: /opt/tivoli/tsm/client/api/bin64
-DSMI_CONFIG 	: /opt/tivoli/tsm/client/api/bin64/dsm.opt
-serverName 	: POLARIS-KVM-TSM-SERVER
-commMethod 	: 1
-serverAddress 	: 192.168.254.101
-nodeName 	: POLARIS
-compress 	: 0
-compressalways 	: 1
-passwordAccess 	: 0
-[DEBUG] 1488452577.609508 [26983] tsmapi.c:610 dsmQuerySessInfo: handle: 1 ANS0302I (RC0)    Successfully done.
-[INFO] 1488452577.609513 [26983] tsmapi.c:621 
-Server's ver.rel.lev       : 7.1.3.0
-ArchiveRetentionProtection : No
+[DEBUG] 1509708481.724705 [15063] lhsmtool_tsm.c:262 using TSM filespace name '/lustre'
+[DEBUG] 1509708481.743621 [15063] tsmapi.c:739 dsmSetUp: handle: 0 ANS0302I (RC0)    Successfully done.
+[MESSAGE] 1509708481.743642 [15063] lhsmtool_tsm.c:836 tsm_init: session: 1
+[DEBUG] 1509708481.927847 [15063] tsmapi.c:785 dsmInitEx: handle: 1 ANS0302I (RC0)    Successfully done.
+[DEBUG] 1509708481.936992 [15063] tsmapi.c:806 dsmRegisterFS: handle: 1 ANS0242W (RC2062) On dsmRegisterFS the filespace is already registered
+[DEBUG] 1509708482.241943 [15063] tsmapi.c:1262 [rc=0] extract_hl_ll
+fpath: '/lustre/.mount/.test-maxnummp'
+fs   : '/lustre'
+hl   : '/.mount'
+ll   : '/.test-maxnummp'
 
-[INFO] 1488452577.609519 [26983] tsmapi.c:628 
-Max number of multiple objects per transaction: 4096
-Max number of Bytes per transaction: 26214400
-dsmSessInfo.fsdelim: /
-dsmSessInfo.hldelim: /
-
-[INFO] 1488452577.609526 [26983] tsmapi.c:651 IBM API library version = 7.1.3.0
-
-[INFO] 1488452577.609531 [26983] tsmapi.c:1508 tsm_archive_fpath:
-fs: /, fpath: /tmp/archives/linux/Makefile, desc: Historic Linux Kernel Makefile, fd: -1, *lu_fid: (nil)
-[DEBUG] 1488452577.609805 [26983] tsmapi.c:1137 dsmBeginTxn: handle: 1 ANS0302I (RC0)    Successfully done.
-[DEBUG] 1488452577.609829 [26983] tsmapi.c:1145 dsmBindMC: handle: 1 ANS0302I (RC0)    Successfully done.
-[DEBUG] 1488452577.609863 [26983] tsmapi.c:1164 dsmSendObj: handle: 1 ANS0302I (RC0)    Successfully done.
-[DEBUG] 1488452577.609900 [26983] tsmapi.c:1194 dsmSendData: handle: 1 ANS0302I (RC0)    Successfully done.
-[INFO] 1488452577.609906 [26983] tsmapi.c:1201 cur_read: 2186, total_read: 2186, total_size: 2186
-[DEBUG] 1488452577.609917 [26983] tsmapi.c:1231 dsmEndSendObj: handle: 1 ANS0302I (RC0)    Successfully done.
-[DEBUG] 1488452577.713329 [26983] tsmapi.c:1242 dsmEndTxn: handle: 1 ANS0302I (RC0)    Successfully done.
-[INFO] 1488452577.713358 [26983] tsmapi.c:1259 
-*** successfully archived: DSM_OBJ_FILE /tmp/archives/linux/Makefile of size: 2186 bytes with settings ***
-fs: /
-hl: /tmp/archives/linux
-ll: /Makefile
-desc: Historic Linux Kernel Makefile
-```
-
-For archiving the complete `/tmp/archives/linux` directory (with all sub-directories) perform following command:
-```
-./src/ltsmc -v debug --archive --recursive --fsname '/' -d 'Complete Historic Linux Kernel' --node polaris --password polaris --servername polaris-kvm-tsm-server /tmp/archives/linux
-```
-One should see the following result:
-```
-[DEBUG] 1488452711.376449 [27062] tsmapi.c:466 dsmSetUp: handle: 0 ANS0302I (RC0)    Successfully done.
-[DEBUG] 1488452711.476296 [27062] tsmapi.c:511 dsmInitEx: handle: 1 ANS0302I (RC0)    Successfully done.
-[DEBUG] 1488452711.479322 [27062] tsmapi.c:530 dsmRegisterFS: handle: 1 ANS0242W (RC2062) On dsmRegisterFS the filespace is already registered
-[DEBUG] 1488452711.479359 [27062] tsmapi.c:585 dsmQuerySessOptions: handle: 1 ANS0302I (RC0)    Successfully done.
-[INFO] 1488452711.479370 [27062] tsmapi.c:604 
-DSMI_DIR 	: /opt/tivoli/tsm/client/api/bin64
-DSMI_CONFIG 	: /opt/tivoli/tsm/client/api/bin64/dsm.opt
-serverName 	: POLARIS-KVM-TSM-SERVER
-commMethod 	: 1
-serverAddress 	: 192.168.254.101
-nodeName 	: POLARIS
-compress 	: 0
-compressalways 	: 1
-passwordAccess 	: 0
-[DEBUG] 1488452711.479492 [27062] tsmapi.c:610 dsmQuerySessInfo: handle: 1 ANS0302I (RC0)    Successfully done.
-[INFO] 1488452711.479505 [27062] tsmapi.c:621 
-Server's ver.rel.lev       : 7.1.3.0
-ArchiveRetentionProtection : No
-
-[INFO] 1488452711.479533 [27062] tsmapi.c:628 
-Max number of multiple objects per transaction: 4096
-Max number of Bytes per transaction: 26214400
-dsmSessInfo.fsdelim: /
-dsmSessInfo.hldelim: /
-
-[INFO] 1488452711.479571 [27062] tsmapi.c:651 IBM API library version = 7.1.3.0
-
-[INFO] 1488452711.479585 [27062] tsmapi.c:1508 tsm_archive_fpath:
-fs: /, fpath: /tmp/archives/linux, desc: Complete Historic Linux Kernel, fd: -1, *lu_fid: (nil)
-[DEBUG] 1488452711.479885 [27062] tsmapi.c:1137 dsmBeginTxn: handle: 1 ANS0302I (RC0)    Successfully done.
-[DEBUG] 1488452711.479919 [27062] tsmapi.c:1145 dsmBindMC: handle: 1 ANS0302I (RC0)    Successfully done.
-[DEBUG] 1488452711.479966 [27062] tsmapi.c:1164 dsmSendObj: handle: 1 ANS0302I (RC0)    Successfully done.
-[DEBUG] 1488452711.479988 [27062] tsmapi.c:1231 dsmEndSendObj: handle: 1 ANS0302I (RC0)    Successfully done.
-[DEBUG] 1488452711.594322 [27062] tsmapi.c:1242 dsmEndTxn: handle: 1 ANS0302I (RC0)    Successfully done.
-[INFO] 1488452711.594350 [27062] tsmapi.c:1259 
-*** successfully archived: DSM_OBJ_DIRECTORY /tmp/archives/linux/init of size: 0 bytes with settings ***
-fs: /
-hl: /tmp/archives/linux
-ll: /init
-desc: Complete Historic Linux Kernel
-
-[DEBUG] 1488452711.594672 [27062] tsmapi.c:1137 dsmBeginTxn: handle: 1 ANS0302I (RC0)    Successfully done.
-[DEBUG] 1488452711.594700 [27062] tsmapi.c:1145 dsmBindMC: handle: 1 ANS0302I (RC0)    Successfully done.
-[DEBUG] 1488452711.594745 [27062] tsmapi.c:1164 dsmSendObj: handle: 1 ANS0302I (RC0)    Successfully done.
-[DEBUG] 1488452711.594810 [27062] tsmapi.c:1194 dsmSendData: handle: 1 ANS0302I (RC0)    Successfully done.
-[INFO] 1488452711.594818 [27062] tsmapi.c:1201 cur_read: 3601, total_read: 3601, total_size: 3601
-[DEBUG] 1488452711.594832 [27062] tsmapi.c:1231 dsmEndSendObj: handle: 1 ANS0302I (RC0)    Successfully done.
-[DEBUG] 1488452711.626108 [27062] tsmapi.c:1242 dsmEndTxn: handle: 1 ANS0302I (RC0)    Successfully done.
-[INFO] 1488452711.626136 [27062] tsmapi.c:1259 
-*** successfully archived: DSM_OBJ_FILE /tmp/archives/linux/init/main.c of size: 3601 bytes with settings ***
-fs: /
-hl: /tmp/archives/linux/init
-ll: /main.c
-desc: Complete Historic Linux Kernel
-...
-```
-### Querying Data
-For querying all data stored in directory `/tmp/archives/linux`
-```
-./src/ltsmc -v debug --query --fsname '/' --node polaris --password polaris --servername polaris-kvm-tsm-server '/tmp/archives/linux*/*'
-```
-One should see the following result:
-```
-...
-[INFO] 1488452910.950235 [27098] tsmapi.c:922 extract_hl_ll:
-fpath: /tmp/archives/linux*/*
-hl: /tmp/archives/linux*
-ll: /*
-
-[INFO] 1488452910.950241 [27098] tsmapi.c:689 query structure
-fs: /
-hl: /tmp/archives/linux*
-ll: /*
-owner: 
-descr: *
-[DEBUG] 1488452910.950517 [27098] tsmapi.c:692 dsmBeginQuery: handle: 1 ANS0302I (RC0)    Successfully done.
-[DEBUG] 1488452911.033557 [27098] tsmapi.c:709 dsmGetNextQObj: handle: 1 ANS0258I (RC2200) On dsmGetNextQObj or dsmGetData there is more available data
-[INFO] 1488452911.033588 [27098] tsmapi.c:438 object # 1
-fs: /, hl: /tmp/archives/linux, ll: /boot
-object id (hi,lo)                          : (0,32605)
-object info length                         : 32
-object info size (hi,lo)                   : (0,4096)
+[INFO] 1509708482.241976 [15063] tsmapi.c:1020 query structure
+fs   : '/lustre'
+hl   : '/.mount'
+ll   : '/.test-maxnummp'
+owner: ''
+descr: '*'
+[DEBUG] 1509708482.242415 [15063] tsmapi.c:1023 dsmBeginQuery: handle: 1 ANS0302I (RC0)    Successfully done.
+[DEBUG] 1509708482.276913 [15063] tsmapi.c:1039 dsmGetNextQObj: handle: 1 ANS0258I (RC2200) On dsmGetNextQObj or dsmGetData there is more available data
+[DEBUG] 1509708482.276953 [15063] tsmapi.c:1039 dsmGetNextQObj: handle: 1 ANS0272I (RC121)  The operation is finished
+[DEBUG] 1509708482.276963 [15063] tsmapi.c:1233 [rc:0] get_qra: 0
+[DEBUG] 1509708482.277211 [15063] tsmapi.c:1198 dsmBeginTxn: handle: 1 ANS0302I (RC0)    Successfully done.
+[DEBUG] 1509708482.277226 [15063] tsmapi.c:1208 dsmDeleteObj: handle: 1 ANS0302I (RC0)    Successfully done.
+[DEBUG] 1509708482.321404 [15063] tsmapi.c:1217 dsmEndTxn: handle: 1 ANS0302I (RC0)    Successfully done.
+[DEBUG] 1509708482.321415 [15063] tsmapi.c:1240 [rc:0] tsm_del_obj: 0
+[INFO] 1509708482.321424 [15063] tsmapi.c:705 [delete] object # 0
+fs: /lustre, hl: /.mount, ll: /.test-maxnummp
+object id (hi,lo)                          : (0,34772)
+object info length                         : 48
+object info size (hi,lo)                   : (0,1) (1 bytes)
 object type                                : DSM_OBJ_DIRECTORY
 object magic id                            : 71147
-archive description                        : Complete Historic Linux Kernel
+crc32                                      : 0x00000000 (0000000000)
+archive description                        : node mountpoint check
 owner                                      : 
-insert date                                : 2017/03/02 12:05:10
-expiration date                            : 2018/03/02 12:05:10
-restore order (top,hi_hi,hi_lo,lo_hi,lo_lo): (2,0,4831,0,0)
-estimated size (hi,lo)                     : (0,4096)
-
-[DEBUG] 1488452911.033691 [27098] tsmapi.c:709 dsmGetNextQObj: handle: 1 ANS0258I (RC2200) On dsmGetNextQObj or dsmGetData there is more available data
-[INFO] 1488452911.033705 [27098] tsmapi.c:438 object # 2
-fs: /, hl: /tmp/archives/linux, ll: /fs
-object id (hi,lo)                          : (0,32681)
-object info length                         : 32
-object info size (hi,lo)                   : (0,4096)
-object type                                : DSM_OBJ_DIRECTORY
-object magic id                            : 71147
-archive description                        : Complete Historic Linux Kernel
-owner                                      : 
-insert date                                : 2017/03/02 12:05:12
-expiration date                            : 2018/03/02 12:05:12
-restore order (top,hi_hi,hi_lo,lo_hi,lo_lo): (2,0,4907,0,0)
-estimated size (hi,lo)                     : (0,4096)
-```
-Querying the single file `/tmp/archives/linux/Makefile`
-```
-./src/ltsmc -v debug --query --fsname '/' --node polaris --password polaris --servername polaris-kvm-tsm-server '/tmp/archives/linux/Makefile'
-```
-One should see the following result:
-```
+insert date                                : 2017/11/03 12:28:01
+expiration date                            : 2018/11/03 12:28:01
+restore order (top,hi_hi,hi_lo,lo_hi,lo_lo): (2,0,11491,0,0)
+estimated size (hi,lo)                     : (0,1) (1 bytes)
+lustre fid                                 : [0:0x0:0x0]
+lustre stripe size                         : 0
+lustre stripe count                        : 0
 ...
-[INFO] 1488453027.105802 [27335] tsmapi.c:922 extract_hl_ll:
-fpath: /tmp/archives/linux/Makefile
-hl: /tmp/archives/linux
-ll: /Makefile
+...
+...
+[INFO] 1509708482.321437 [15063] tsmapi.c:2118 passed mount point check
+[DEBUG] 1509708482.321440 [15063] lhsmtool_tsm.c:871 Abort on error 0
+[DEBUG] 1509708482.322375 [15063] lhsmtool_tsm.c:645 waiting for message from kernel
+```
+Note, there is unfortunately no low-level TSM API call to query the [maximum number of mount points](https://www.ibm.com/support/knowledgecenter/en/SSS9C9_2.1.3/com.ibm.ia.doc_1.0/ic/t_coll_ssam_set_max_mount_points.html) (that is parallel sessions).
+This number is an upper limit of the number of parallel threads of the copytool. To determine the maximum number of mount points and thus set the number of threads appropriately, 
+one can apply a trick and send *dummy* transactions to the TSM server until one receives a certain error code. That is the reason why at start you see (in debug mode) the output of *node mountpoint check*.
 
-[INFO] 1488453027.105836 [27335] tsmapi.c:689 query structure
-fs: /
-hl: /tmp/archives/linux
-ll: /Makefile
-owner: 
-descr: *
-[DEBUG] 1488453027.106126 [27335] tsmapi.c:692 dsmBeginQuery: handle: 1 ANS0302I (RC0)    Successfully done.
-[DEBUG] 1488453027.133116 [27335] tsmapi.c:709 dsmGetNextQObj: handle: 1 ANS0258I (RC2200) On dsmGetNextQObj or dsmGetData there is more available data
-[INFO] 1488453027.133145 [27335] tsmapi.c:438 object # 1
-fs: /, hl: /tmp/archives/linux, ll: /Makefile
-object id (hi,lo)                          : (0,32601)
-object info length                         : 32
-object info size (hi,lo)                   : (0,2186)
+Once the copytool is started one can run the Lustre commands *lfs hsm_archive*, *lfs hsm_release*, *lfs hsm_restore* as depicted in the state diagram.
+
+In the following example we archive the Lustre wiki website:
+`wget -O - -o /dev/null http://wiki.lustre.org > /lustre/wiki.lustre.org && sudo lfs hsm_archive /lustre/wiki.lustre.org`.
+If the command was successful you should see:
+```
+[MESSAGE] 1509710509.205682 [16973] lhsmtool_tsm.c:680 copytool fs=ldomov archive#=1 item_count=1
+[MESSAGE] 1509710509.205705 [16973] lhsmtool_tsm.c:735 enqueue action 'ARCHIVE' cookie=0x59f9b6f9, FID=[0x200000401:0x17:0x0]
+[DEBUG] 1509710509.205717 [16973] lhsmtool_tsm.c:645 waiting for message from kernel
+[DEBUG] 1509710509.205803 [16976] lhsmtool_tsm.c:596 dequeue action 'ARCHIVE' cookie=0x59f9b6f9, FID=[0x200000401:0x17:0x0]
+[MESSAGE] 1509710509.205823 [16976] lhsmtool_tsm.c:532 '[0x200000401:0x17:0x0]' action ARCHIVE reclen 72, cookie=0x59f9b6f9
+[DEBUG] 1509710509.207877 [16976] lhsmtool_tsm.c:361 [rc=0] ct_hsm_action_begin on '/lustre/wiki.lustre.org'
+[MESSAGE] 1509710509.207901 [16976] lhsmtool_tsm.c:366 archiving '/lustre/wiki.lustre.org' to TSM storage
+[DEBUG] 1509710509.208148 [16976] lhsmtool_tsm.c:376 [fd=10] llapi_hsm_action_get_fd()
+[DEBUG] 1509710509.208196 [16976] lhsmtool_tsm.c:389 [rc=0,fd=10] xattr_get_lov '/lustre/wiki.lustre.org'
+[INFO] 1509710509.208201 [16976] tsmapi.c:1964 tsm_archive_fpath:
+fs: /lustre, fpath: /lustre/wiki.lustre.org, desc: (null), fd: 10, *lustre_info: 0x7fd54c7bad70
+[DEBUG] 1509710509.208534 [16976] tsmapi.c:1792 [rc:0] extract_hl_ll:
+fpath: /lustre/wiki.lustre.org
+fs   : /lustre
+hl   : /
+ll   : /wiki.lustre.org
+
+[DEBUG] 1509710509.208938 [16976] tsmapi.c:1547 dsmBeginTxn: handle: 1 ANS0302I (RC0)    Successfully done.
+[DEBUG] 1509710509.208958 [16976] tsmapi.c:1555 dsmBindMC: handle: 1 ANS0302I (RC0)    Successfully done.
+[DEBUG] 1509710509.208993 [16976] tsmapi.c:1576 dsmSendObj: handle: 1 ANS0302I (RC0)    Successfully done.
+[DEBUG] 1509710509.209499 [16976] tsmapi.c:1608 dsmSendData: handle: 1 ANS0302I (RC0)    Successfully done.
+[INFO] 1509710509.209510 [16976] tsmapi.c:1615 cur_read: 20313, total_read: 20313, total_size: 20313
+[DEBUG] 1509710509.209747 [16976] tsmapi.c:1663 dsmEndSendObj: handle: 1 ANS0302I (RC0)    Successfully done.
+[DEBUG] 1509710509.394623 [16976] tsmapi.c:1674 dsmEndTxn: handle: 1 ANS0302I (RC0)    Successfully done.
+[INFO] 1509710509.394646 [16976] tsmapi.c:1702 
+*** successfully archived: DSM_OBJ_FILE /lustre/wiki.lustre.org of size: 20313 bytes with settings ***
+fs: /lustre
+hl: /
+ll: /wiki.lustre.org
+desc: 
+
+[DEBUG] 1509710509.440357 [16976] tsmapi.c:1707 [rc:0] tsm_obj_update_crc32, crc32: 0x7d0db330 (2098049840)
+[MESSAGE] 1509710509.440370 [16976] lhsmtool_tsm.c:402 archiving '/lustre/wiki.lustre.org' to TSM storage done
+[MESSAGE] 1509710509.440681 [16976] lhsmtool_tsm.c:325 action completed, notifying coordinator cookie=0x59f9b6f9, FID=[0x200000401:0x17:0x0], err=0
+[DEBUG] 1509710509.441332 [16976] lhsmtool_tsm.c:338 [rc=0] llapi_hsm_action_end on '/lustre/wiki.lustre.org' ok
+```
+
+Let us use our *ltsmc* to query (for fun) some TSM object information of */lustre/wiki.lustre.org*.
+```
+>src/ltsmc -f /lustre --query -v debug -n polaris -p polaris -s 'polaris-kvm-tsm-server' /lustre/wiki.lustre.org
+...
+...
+[DEBUG] 1509712134.421465 [18010] tsmapi.c:1303 [rc:0] extract_hl_ll:
+fpath: /lustre/wiki.lustre.org
+fs   : /lustre
+hl: /
+ll: /wiki.lustre.org
+
+[INFO] 1509712134.421487 [18010] tsmapi.c:1020 query structure
+fs   : '/lustre'
+hl   : '/'
+ll   : '/wiki.lustre.org'
+owner: ''
+descr: '*'
+[DEBUG] 1509712134.421833 [18010] tsmapi.c:1023 dsmBeginQuery: handle: 1 ANS0302I (RC0)    Successfully done.
+[DEBUG] 1509712134.455811 [18010] tsmapi.c:1039 dsmGetNextQObj: handle: 1 ANS0258I (RC2200) On dsmGetNextQObj or dsmGetData there is more available data
+[DEBUG] 1509712134.455866 [18010] tsmapi.c:1039 dsmGetNextQObj: handle: 1 ANS0258I (RC2200) On dsmGetNextQObj or dsmGetData there is more available data
+[DEBUG] 1509712134.455927 [18010] tsmapi.c:1039 dsmGetNextQObj: handle: 1 ANS0272I (RC121)  The operation is finished
+[INFO] 1509712134.455945 [18010] tsmapi.c:705 [query] object # 0
+fs: /lustre, hl: /, ll: /wiki.lustre.org
+object id (hi,lo)                          : (0,34778)
+object info length                         : 48
+object info size (hi,lo)                   : (0,20313) (20313 bytes)
 object type                                : DSM_OBJ_FILE
 object magic id                            : 71147
-archive description                        : Historic Linux Kernel Makefile
+crc32                                      : 0x7d0db330 (2098049840)
+archive description                        : 
 owner                                      : 
-insert date                                : 2017/03/02 12:02:56
-expiration date                            : 2018/03/02 12:02:56
-restore order (top,hi_hi,hi_lo,lo_hi,lo_lo): (2,0,4827,0,0)
-estimated size (hi,lo)                     : (0,2186)
+insert date                                : 2017/11/03 13:01:49
+expiration date                            : 2018/11/03 13:01:49
+restore order (top,hi_hi,hi_lo,lo_hi,lo_lo): (2,0,11497,0,0)
+estimated size (hi,lo)                     : (0,20313) (20313 bytes)
+lustre fid                                 : [0x200000401:0x17:0x0]
+lustre stripe size                         : 1048576
+lustre stripe count                        : 1
 
-[DEBUG] 1488453027.133207 [27335] tsmapi.c:709 dsmGetNextQObj: handle: 1 ANS0258I (RC2200) On dsmGetNextQObj or dsmGetData there is more available data
-[INFO] 1488453027.133217 [27335] tsmapi.c:438 object # 2
-fs: /, hl: /tmp/archives/linux, ll: /Makefile
-object id (hi,lo)                          : (0,32604)
-object info length                         : 32
-object info size (hi,lo)                   : (0,2186)
-object type                                : DSM_OBJ_FILE
-object magic id                            : 71147
-archive description                        : Complete Historic Linux Kernel
-owner                                      : 
-insert date                                : 2017/03/02 12:05:10
-expiration date                            : 2018/03/02 12:05:10
-restore order (top,hi_hi,hi_lo,lo_hi,lo_lo): (2,0,4830,0,0)
-estimated size (hi,lo)                     : (0,2186)
-
-[DEBUG] 1488453027.133267 [27335] tsmapi.c:709 dsmGetNextQObj: handle: 1 ANS0272I (RC121)  The operation is finished
-```
-Note, when archiving the same file multiple times *t*, the file is stored on the TSM server *t* times, however, each file as a unique object identifier as well as a different timestamp.
-### Retrieving Data
-We first delete all data in `/tmp/archives/linux` and the restore the data to that directory:
-```
-rm -rf /tmp/archives/linux && ./src/ltsmc -v info --retrieve --fsname '/' --node polaris --password polaris --servername polaris-kvm-tsm-server '/tmp/archives/linux*/*'
-```
-One should see the following result:
-```
-...
-[INFO] 1488454996.574687 [28773] tsmapi.c:689 query structure
-fs: /
-hl: /tmp/archives/linux*
-ll: /*
-owner: 
-descr: *
-[INFO] 1488454996.729380 [28773] tsmapi.c:986 get_query: 0, rc: 0
-[INFO] 1488454996.729413 [28773] tsmapi.c:986 get_query: 1, rc: 0
-...
-...
-[INFO] 1488454996.730529 [28773] tsmapi.c:438 object # 0
-fs: /, hl: /tmp/archives/linux, ll: /Makefile
-object id (hi,lo)                          : (0,33205)
-object info length                         : 32
-object info size (hi,lo)                   : (0,2186)
-object type                                : DSM_OBJ_FILE
-object magic id                            : 71147
-archive description                        : Historic Linux Kernel Makefile
-owner                                      : 
-insert date                                : 2017/03/02 12:33:13
-expiration date                            : 2018/03/02 12:33:13
-restore order (top,hi_hi,hi_lo,lo_hi,lo_lo): (2,0,5431,0,0)
-estimated size (hi,lo)                     : (0,2186)
-
-[INFO] 1488454996.730642 [28773] tsmapi.c:284 mkdir_p(/tmp/archives/linux)
-[INFO] 1488454996.730654 [28773] tsmapi.c:243 fs/hl/ll fpath: //tmp/archives/linux/Makefile
-
-[INFO] 1488454996.806618 [28773] tsmapi.c:349 cur_written: 2186, total_written: 0, obj_size: 2186
-[INFO] 1488454996.806663 [28773] tsmapi.c:1032 retrieve_obj, rc: 0
-
-[INFO] 1488454996.806673 [28773] tsmapi.c:1009 get_query: 1, rc: 0
-[INFO] 1488454996.806681 [28773] tsmapi.c:1020 retrieving object:
-[INFO] 1488454996.806691 [28773] tsmapi.c:438 object # 1
-fs: /, hl: /tmp/archives/linux, ll: /init
-object id (hi,lo)                          : (0,33206)
-object info length                         : 32
-object info size (hi,lo)                   : (0,4096)
-object type                                : DSM_OBJ_DIRECTORY
-object magic id                            : 71147
-archive description                        : Complete Historic Linux Kernel
-owner                                      : 
-insert date                                : 2017/03/02 12:33:56
-expiration date                            : 2018/03/02 12:33:56
-restore order (top,hi_hi,hi_lo,lo_hi,lo_lo): (2,0,5432,0,0)
-estimated size (hi,lo)                     : (0,4096)
-.....
-```
-### Deleting Data
-To delete data on the TSM perform the following command:
-```
-./src/ltsmc -v debug --delete --fsname '/' --node polaris --password polaris --servername polaris-kvm-tsm-server '/tmp/archives/linux*/*'
-```
-One should see the following result:
-```
-...
-[INFO] 1488455109.715133 [28860] tsmapi.c:857 get_query: 95, rc: 0
-[DEBUG] 1488455109.715288 [28860] tsmapi.c:813 dsmBeginTxn: handle: 1 ANS0302I (RC0)    Successfully done.
-[DEBUG] 1488455109.715308 [28860] tsmapi.c:823 dsmDeleteObj: handle: 1 ANS0302I (RC0)    Successfully done.
-[DEBUG] 1488455109.720409 [28860] tsmapi.c:831 dsmEndTxn: handle: 1 ANS0302I (RC0)    Successfully done.
-[INFO] 1488455109.720425 [28860] tsmapi.c:881 
-deleted obj fs: DSM_OBJ_FILE
-		fs: /
-		hl: /tmp/archives/linux/lib
-		ll: /write.c
-[INFO] 1488455109.720433 [28860] tsmapi.c:857 get_query: 96, rc: 0
-[DEBUG] 1488455109.720587 [28860] tsmapi.c:813 dsmBeginTxn: handle: 1 ANS0302I (RC0)    Successfully done.
-[DEBUG] 1488455109.720607 [28860] tsmapi.c:823 dsmDeleteObj: handle: 1 ANS0302I (RC0)    Successfully done.
-[DEBUG] 1488455109.725719 [28860] tsmapi.c:831 dsmEndTxn: handle: 1 ANS0302I (RC0)    Successfully done.
-[INFO] 1488455109.725735 [28860] tsmapi.c:881 
-deleted obj fs: DSM_OBJ_FILE
-		fs: /
-		hl: /tmp/archives/linux/mm
-		ll: /Makefile
-...		
-```
-A subsequent *delete* or *query* command shows that there are no TSM objects of the form '/tmp/archives/linux*/*' found on the TSM server.
-```
-./src/ltsmc -v debug --delete --fsname '/' --node polaris --password polaris --servername polaris-kvm-tsm-server '/tmp/archives/linux*/*'
-```
-One should see the following result:
-```
-...
-[INFO] 1488455280.580033 [28900] tsmapi.c:689 query structure
-fs: /
-hl: /tmp/archives/linux*
-ll: /*
-owner: 
-descr: *
-[DEBUG] 1488455280.580325 [28900] tsmapi.c:692 dsmBeginQuery: handle: 1 ANS0302I (RC0)    Successfully done.
-[DEBUG] 1488455280.603063 [28900] tsmapi.c:709 dsmGetNextQObj: handle: 1 ANS1302E (RC2)    No objects on server match query
-[MESSAGE] 1488455280.603089 [28900] tsmapi.c:732 query has no match
 ```
 
-More documentation and detail is provided in the manual pages [ltsmc.1](https://github.com/tstibor/ltsm/blob/master/man/ltsmc.1) and [lhsmtool_tsm.1](https://github.com/tstibor/ltsm/blob/master/man/lhsmtool_tsm.1).
-
-## Screenshot and Screencast
-Klick on the screenshot to see the full screencast which demonstrates the usage and functionality of this project.
-<a href="http://web-docs.gsi.de/~tstibor/tsm/ltsm-screencast-2.mp4" rel="screencast">![screencast](http://web-docs.gsi.de/~tstibor/tsm/ltsm-screenshot.png)</a>
+## More Information
+In the manual pages [lhsmtool_tsm.1](http://github.com/tstibor/ltsm/blob/master/man/lhsmtool_tsm.1) and [ltsmc.1](http://github.com/tstibor/ltsm/blob/master/man/ltsmc.1) usage details and options of *lhsmtool_tsm* and *ltsmc*
+are provided. In addition, a [screencast](http://web-docs.gsi.de/~tstibor/tsm/ltsm-screencast-2.mp4) of an older version of this project is provided.
 
 ## References
 A thorough description and code examples of IBM's low-level TSM API/library can be found in the open document [Using the Application Programming Interface](http://web-docs.gsi.de/~tstibor/tsm/doc/using_the_programming_application_interface.pdf), Fourth edition (September 2015).
