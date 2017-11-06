@@ -163,7 +163,7 @@ IBM API library version: 7.1.6.0, IBM API application client version: 7.1.6.0
 version: 0.5.7-5 © 2017 by GSI Helmholtz Centre for Heavy Ion Research
 ```
 
-Starting the *copytool* with 4 threads and *archive_id=1* works as follows `./src/lhsmtool_tsm --restore-stripe -a 1 -v debug -n polaris -p polaris -s 'lxltsm01-tsm-server' -t 4 /lustre` where
+Starting the *copytool* with 4 threads and *archive_id=1* works as follows `./src/lhsmtool_tsm --restore-stripe -a 1 -v debug -n polaris -p polaris -s 'polaris-kvm-tsm-server' -t 4 /lustre` where
 parameters, *-n = nodename*, *-p = password* and *-s = servername* have to match with those setup on the TSM Server (see [TSM Server Installation Guide](http://web-docs.gsi.de/~tstibor/tsm/)).
 ```
 [DEBUG] 1509708481.724705 [15063] lhsmtool_tsm.c:262 using TSM filespace name '/lustre'
@@ -304,12 +304,43 @@ lustre stripe count                        : 1
 ```
 
 # Tips for Tuning
-There are basically 3 nobs for adjusting the archive/retrieve performance.
+There are basically 3 knobs for adjusting the archive/retrieve performance.
 1. The [Txnbytelimit](http://www.ibm.com/support/knowledgecenter/en/SSGSG7_7.1.6/client/r_opt_txnbytelimit.html) option for adjusting the number of bytes the *tsmapi* buffers before it sends a transaction to the TSM server. The option depends on the workload, a value of *2GByte* resulted in good performance on most tested machines and setups.
 2. The buffer length [TSM_BUF_LENGTH](github.com/tstibor/ltsm/blob/master/src/lib/tsmapi.h#L55) for sending and receiving TSM
 bulk data. Empirical investigations showed that a buffer length of 2^15 - 4 = 32764 resulted in good performance on most tested machines and setups.
 3. [Maximum number of TSM mount points](https://www.ibm.com/support/knowledgecenter/en/SSS9C9_2.1.3/com.ibm.ia.doc_1.0/ic/t_coll_ssam_set_max_mount_points.html) (that is parallel threaded sessions) and related [QUEUE_MAX_ITEMS](github.com/tstibor/ltsm/blob/master/src/lhsmtool_tsm.c#L84) setting. As described above, this parameter is crucial for achieving high throughput. By means of *QUEUE_MAX_ITEMS* the maximum number of HSM actions items is the queue is determined. That is, no new HSM action items
 will be received until queue length drops below *QUEUE_MAX_ITEMS*. This value is set as *QUEUE_MAX_ITEMS = 2 * # threads*.
+
+For checking the archive/retrieve performance the benchmark tool *ltsmbench* can be used
+```
+>./src/test/ltsmbench --help
+usage: ./src/test/ltsmbench [options]
+	-z, --size <long> [default: 16777216 bytes]
+	-b, --number <int> [default: 16]
+	-t, --threads <int> [default: 1]
+	-f, --fsname <string> [default: '/']
+	-n, --node <string>
+	-p, --password <string>
+	-s, --servername <string>
+	-v, --verbose {error, warn, message, info, debug} [default: message]
+	-h, --help
+
+IBM API library version: 7.1.6.0, IBM API application client version: 7.1.6.0
+version: 0.5.7-5 © 2017 by GSI Helmholtz Centre for Heavy Ion Research
+```
+
+In this example we benchmark the archive/retrieve performance of a TSM server running inside a KVM with 1 thread
+```
+>./src/test/ltsmbench -n polaris -p polaris -s polaris-kvm-tsm-server -t 1 -z 134217728 -b 4 | grep "^\[mea"
+[measurement]	'tsm_archive_fpath' processed 536870912 bytes in 9.307 secs (57.682 Mbytes / sec)
+[measurement]	'tsm_retrieve_fpath' processed 536870912 bytes in 6.381 secs (84.137 Mbytes / sec)
+```
+vs 4 threads
+```
+>./src/test/ltsmbench -n polaris -p polaris -s polaris-kvm-tsm-server -t 4 -z 134217728 -b 4 | grep "^\[mea"
+[measurement]	'tsm_archive_fpath' processed 536870912 bytes in 8.444 secs (63.578 Mbytes / sec)
+[measurement]	'tsm_retrieve_fpath' processed 536870912 bytes in 5.260 secs (102.070 Mbytes / sec)
+```
 
 For more TSM server/client tuning tips see [Tips for Tivoli Storage Manager Performance Tuning and Troubleshooting](http://web-docs.gsi.de/~tstibor/tsm/doc/tips.for.tivoli.storage.manager.performance.tuning.and.troubleshooting.pdf)
 
