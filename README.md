@@ -331,13 +331,13 @@ version: 0.5.7-5 © 2017 by GSI Helmholtz Centre for Heavy Ion Research
 
 In this example we benchmark the archive/retrieve performance of a TSM server running inside a KVM with 1 thread
 ```
->./src/test/ltsmbench -n polaris -p polaris -s polaris-kvm-tsm-server -t 1 -z 134217728 -b 4 | grep "^\[mea"
+>./src/test/ltsmbench -v warn -n polaris -p polaris -s polaris-kvm-tsm-server -t 1 -z 134217728 -b 4
 [measurement]	'tsm_archive_fpath' processed 536870912 bytes in 9.307 secs (57.682 Mbytes / sec)
 [measurement]	'tsm_retrieve_fpath' processed 536870912 bytes in 6.381 secs (84.137 Mbytes / sec)
 ```
 vs 4 threads
 ```
->./src/test/ltsmbench -n polaris -p polaris -s polaris-kvm-tsm-server -t 4 -z 134217728 -b 4 | grep "^\[mea"
+>./src/test/ltsmbench -v warn -n polaris -p polaris -s polaris-kvm-tsm-server -t 4 -z 134217728 -b 4
 [measurement]	'tsm_archive_fpath' processed 536870912 bytes in 8.444 secs (63.578 Mbytes / sec)
 [measurement]	'tsm_retrieve_fpath' processed 536870912 bytes in 5.260 secs (102.070 Mbytes / sec)
 ```
