@@ -200,7 +200,7 @@ object type                                : DSM_OBJ_DIRECTORY
 object magic id                            : 71147
 crc32                                      : 0x00000000 (0000000000)
 archive description                        : node mountpoint check
-owner                                      : 
+owner                                      :
 insert date                                : 2017/11/03 12:28:01
 expiration date                            : 2018/11/03 12:28:01
 restore order (top,hi_hi,hi_lo,lo_hi,lo_lo): (2,0,11491,0,0)
@@ -216,7 +216,7 @@ lustre stripe count                        : 0
 [DEBUG] 1509708482.322375 [15063] lhsmtool_tsm.c:645 waiting for message from kernel
 ```
 Note, there is unfortunately no low-level TSM API call to query the [maximum number of mount points](https://www.ibm.com/support/knowledgecenter/en/SSS9C9_2.1.3/com.ibm.ia.doc_1.0/ic/t_coll_ssam_set_max_mount_points.html) (that is parallel sessions).
-This number is an upper limit of the number of parallel threads of the copytool. To determine the maximum number of mount points and thus set the number of threads appropriately, 
+This number is an upper limit of the number of parallel threads of the copytool. To determine the maximum number of mount points and thus set the number of threads appropriately,
 one can apply a trick and send *dummy* transactions to the TSM server until one receives a certain error code. That is the reason why at start you see (in debug mode) the output of *node mountpoint check*.
 
 Once the copytool is started one can run the Lustre commands *lfs hsm_archive*, *lfs hsm_release*, *lfs hsm_restore* as depicted in the state diagram.
@@ -249,12 +249,12 @@ ll   : /wiki.lustre.org
 [INFO] 1509710509.209510 [16976] tsmapi.c:1615 cur_read: 20313, total_read: 20313, total_size: 20313
 [DEBUG] 1509710509.209747 [16976] tsmapi.c:1663 dsmEndSendObj: handle: 1 ANS0302I (RC0)    Successfully done.
 [DEBUG] 1509710509.394623 [16976] tsmapi.c:1674 dsmEndTxn: handle: 1 ANS0302I (RC0)    Successfully done.
-[INFO] 1509710509.394646 [16976] tsmapi.c:1702 
+[INFO] 1509710509.394646 [16976] tsmapi.c:1702
 *** successfully archived: DSM_OBJ_FILE /lustre/wiki.lustre.org of size: 20313 bytes with settings ***
 fs: /lustre
 hl: /
 ll: /wiki.lustre.org
-desc: 
+desc:
 
 [DEBUG] 1509710509.440357 [16976] tsmapi.c:1707 [rc:0] tsm_obj_update_crc32, crc32: 0x7d0db330 (2098049840)
 [MESSAGE] 1509710509.440370 [16976] lhsmtool_tsm.c:402 archiving '/lustre/wiki.lustre.org' to TSM storage done
@@ -291,8 +291,8 @@ object info size (hi,lo)                   : (0,20313) (20313 bytes)
 object type                                : DSM_OBJ_FILE
 object magic id                            : 71147
 crc32                                      : 0x7d0db330 (2098049840)
-archive description                        : 
-owner                                      : 
+archive description                        :
+owner                                      :
 insert date                                : 2017/11/03 13:01:49
 expiration date                            : 2018/11/03 13:01:49
 restore order (top,hi_hi,hi_lo,lo_hi,lo_lo): (2,0,11497,0,0)
@@ -302,6 +302,16 @@ lustre stripe size                         : 1048576
 lustre stripe count                        : 1
 
 ```
+
+# Tips for Tuning
+There are basically 3 nobs for adjusting the archive/retrieve performance.
+1. The [Txnbytelimit](http://www.ibm.com/support/knowledgecenter/en/SSGSG7_7.1.6/client/r_opt_txnbytelimit.html) option for adjusting the number of bytes the *tsmapi* buffers before it sends a transaction to the TSM server. The option depends on the workload, a value of *2GByte* resulted in good performance on most tested machines and setups.
+2. The buffer length [TSM_BUF_LENGTH](github.com/tstibor/ltsm/blob/master/src/lib/tsmapi.h#L55) for sending and receiving TSM
+bulk data. Empirical investigations showed that a buffer length of 2^15 - 4 = 32764 resulted in good performance on most tested machines and setups.
+3. [Maximum number of TSM mount points](https://www.ibm.com/support/knowledgecenter/en/SSS9C9_2.1.3/com.ibm.ia.doc_1.0/ic/t_coll_ssam_set_max_mount_points.html) (that is parallel threaded sessions) and related [QUEUE_MAX_ITEMS](github.com/tstibor/ltsm/blob/master/src/lhsmtool_tsm.c#L84) setting. As described above, this parameter is crucial for achieving high throughput. By means of *QUEUE_MAX_ITEMS* the maximum number of HSM actions items is the queue is determined. That is, no new HSM action items
+will be received until queue length drops below *QUEUE_MAX_ITEMS*. This value is set as *QUEUE_MAX_ITEMS = 2 * # threads*.
+
+For more TSM server/client tuning tips see [Tips for Tivoli Storage Manager Performance Tuning and Troubleshooting](http://web-docs.gsi.de/~tstibor/tsm/doc/tips.for.tivoli.storage.manager.performance.tuning.and.troubleshooting.pdf)
 
 ## More Information
 In the manual pages [lhsmtool_tsm.1](http://github.com/tstibor/ltsm/blob/master/man/lhsmtool_tsm.1) and [ltsmc.1](http://github.com/tstibor/ltsm/blob/master/man/ltsmc.1) usage details and options of *lhsmtool_tsm* and *ltsmc*
@@ -314,7 +324,7 @@ A thorough description and code examples of IBM's low-level TSM API/library can 
 This project is funded by Intel® through GSI's [Intel® Parallel Computing Centers](https://software.intel.com/en-us/ipcc/)
 
 ## License
-This project itself is licensed under the [GPL-2 license](http://www.gnu.org/licenses/old-licenses/gpl-2.0.en.html). The code however, depends on IBM's low-level TSM API/libraries which are distributed 
+This project itself is licensed under the [GPL-2 license](http://www.gnu.org/licenses/old-licenses/gpl-2.0.en.html). The code however, depends on IBM's low-level TSM API/libraries which are distributed
 under different licenses and thus are not provided in the repository. See [IBM Tivoli Storage Manager Server](http://ftp.software.ibm.com/storage/tivoli-storage-management/maintenance/server/v7r1/Linux/7.1.7.000/README.htm).
 
 ## Warranty
