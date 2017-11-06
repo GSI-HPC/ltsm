@@ -47,7 +47,13 @@ The core capabilities and features of a TSM server are:
 * Deduplication: Eliminating duplicate copies of repeating data.
 * Collocation: Store and pack data of a client in few number of tapes as much as possible to reduce the number of media mounts and for minimizing tape drive movements.
 * Storage hierarchies: Automatically move data from faster devices to slower devices based on characteristics such as file size or storage capacity.
-The last issue is a crucial feature for the Lustre HSM framework, as it enables effectively archiving and retrieving data to fast devices, rather than being tied up to slow but large and cheap devices.
+
+The last issue is a crucial feature for the Lustre HSM framework, as it enables effectively archiving and retrieving data to fast devices, rather than being tied up to slow but large and cheap devices (see Fig. below).
+![fig:storage.hierarchy](http://web-docs.gsi.de/~tstibor/ltsm/storage.hierarchy.png)
+Storage hierarchy of a TSM server. Fast but limited space storage devices (high cost per GByte) are located at the
+top of the pyramid, whereas slower but large space storage devices (low cost per GByte) are located at the bottom.
+Fast storage devices act as a *cache* layer, where data in automatically migrated by the TSM server based on access pattern and
+space occupation level.
 
 # Data Organized on TSM Server
 The TSM server is an object storage server and is developed for storing and retrieving named objects. Similar to Lustre, the TSM
