@@ -1,3 +1,9 @@
+ltsm (0.6.0-1) unstable; urgency=medium
+
+  * Build from official master upstream.
+
+ -- Thomas Stibor <t.stibor@gsi.de>  Wed, 08 Nov 2017 15:54:32 +0200
+
 ltsm (0.5.7-1) unstable; urgency=medium
 
   * Build from official master upstream.
