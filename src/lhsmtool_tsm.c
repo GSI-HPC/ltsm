@@ -35,10 +35,13 @@
 #include <linux/limits.h>
 #include <sys/syscall.h>
 #include <sys/time.h>
-#include <lustre/lustre_idl.h>
 #include <lustre/lustreapi.h>
 #include "tsmapi.h"
 #include "queue.h"
+
+#ifndef LL_HSM_MAX_ARCHIVE
+#define LL_HSM_MAX_ARCHIVE (sizeof(__u32) * 8)
+#endif
 
 /* Program options */
 struct options {

@@ -7,10 +7,6 @@ include /usr/share/dpkg/default.mk
 %:
 	dh $@ --with systemd
 
-override_dh_auto_configure:
-	dh_auto_configure -- \
-		--with-lustre=/home/tstibor/dev/lustre/lustre-release
-
 override_dh_auto_install:
 	dh_auto_install -- prefix=/usr
 

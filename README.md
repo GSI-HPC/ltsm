@@ -106,17 +106,23 @@ git clone https://github.com/tstibor/ltsm
 ```
 and execute
 ```
-./autogen.sh && ./configure CFLAGS='-g -DDEBUG -O0' --with-lustre=<PATH-TO-LUSTRE-RELEASE> LDFLAGS='-L<PATH-TO-LUSTRE-RELEASE>/lustre/utils' --enable-tests
+./autogen.sh && ./configure CFLAGS='-g -DDEBUG -O0' --enable-tests
 ```
-If Lustre in `<PATH-TO-LUSTRE-RELEASE>` is not found you will get the message
+If Lustre API headers are not found you will get the message
 ```
 ...
-configure: WARNING: "cannot find Lustre source tree and Lustre library. Only TSM console client ltsmc will be build"
+configure: WARNING: cannot find Lustre API header files, use --with-lustre-headers=PATH
+configure: WARNING: cannot find Lustre API headers or Lustre API library, only TSM console client ltsmc will be build
 ...
 
 ```
-and the console client *ltsmc* is built only. For building also the Lustre Copytool thus make sure the Lustre sources (header files) are available
-as well as the Lustre library `liblustreapi.so`. If *required* TSM and *optional* Lustre header files and libraries are found the following executable files are provided:
+and the console client *ltsmc* is built only. For building also the Lustre Copytool thus make sure the Lustre API header files
+and the Lustre library `liblustreapi.so` are available and the paths are correctly specified e.g. 
+```
+./autogen.sh && ./configure CFLAGS='-g -DDEBUG -O0' --with-lustre-headers=/usr/local/include/lustre LDFLAGS='-L/usr/local/lib' --with-tsm-headers=/opt/tivoli/tsm/client/api/bin64/sample --enable-tests
+```
+
+If *required* TSM and *optional* Lustre header files and libraries are found the following executable files are provided:
   * `src/lhsmtool_tsm` (Lustre TSM Copytool)
   * `src/ltsmc` (Console client)
   * `src/test/test_cds` (Test suite for data structures (linked-list, queue, hashtable, etc.))

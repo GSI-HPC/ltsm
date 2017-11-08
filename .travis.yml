@@ -6,7 +6,7 @@ env:
     matrix:
         - LDFLAGS='-L/usr/lib'
 
-script: ./autogen.sh && ./configure --with-lustre=/opt/lustre-release --enable-tests && make && ./src/test/test_cds && ./src/test/test_tsmapi
+script: ./autogen.sh && ./configure --enable-tests && make && ./src/test/test_cds && ./src/test/test_tsmapi
 
 install:
   - sudo add-apt-repository ppa:dns/gnu --yes

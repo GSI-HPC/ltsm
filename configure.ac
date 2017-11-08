@@ -32,18 +32,19 @@ AC_LANG([C])
 LT_INIT
 AC_CONFIG_MACRO_DIR([m4])
 
-# Path to Lustre src directory.
-AC_ARG_WITH([lustre], AS_HELP_STRING([--with-lustre[=PATH]],[path to location for Lustre sources]),
-	LUSTRE_SRC_DIR="$withval", LUSTRE_SRC_DIR="lustre-release")
+# Path to Lustre API headers.
+found_lustre_header="no"
+AC_ARG_WITH([lustre-headers],
+	AS_HELP_STRING([--with-lustre-headers[=PATH]],[path to location of Lustre API header files [default=/usr/include/lustre]]),
+	LUSTRE_API_DIR="$withval", LUSTRE_API_DIR="/usr/include/lustre")
 
-AS_IF([test -x "$with_lustre"],
+lapiheader="no"
+AC_CHECK_FILE("$LUSTRE_API_DIR/lustreapi.h", [lapiheader="yes"],
+	[AC_MSG_WARN([cannot find Lustre API header files, use --with-lustre-headers=PATH])])
+
+AS_IF([test "x$lapiheader" = "xyes"],
 	[
-	# Check for Lustre header file.
-	AC_CHECK_FILE("$LUSTRE_SRC_DIR/lustre/include/lustre/lustre_user.h",
-		[],
-		[AC_MSG_ERROR("cannot find Lustre source tree. Use --with-lustre[=PATH]")]
-	)
-	# Check for Lustre library.
+	# We found the required Lustre API header file, so let's check for Lustre API library.
 	AC_CHECK_LIB([lustreapi],
 		 [llapi_error],
 		 [],
@@ -57,15 +58,15 @@ AS_IF([test -x "$with_lustre"],
 	],
 	[
 	AM_CONDITIONAL([HAVE_LUSTRE], [false])
-	AC_MSG_WARN("cannot find Lustre source tree and Lustre library. Only TSM console client ltsmc will be build")
+	AC_MSG_WARN([cannot find Lustre API headers or Lustre API library, only TSM console client ltsmc will be build])
 	]
 )
 
 # Path to TSM API src directory.
-AC_ARG_WITH([tsm-headers], AS_HELP_STRING([--with-tsm-headers[=PATH]],[path to location for IBM TSM header files [default=/opt/tivoli/tsm/client/api/bin64/sample]]),
+AC_ARG_WITH([tsm-headers], AS_HELP_STRING([--with-tsm-headers[=PATH]],[path to location of IBM TSM header files [default=/opt/tivoli/tsm/client/api/bin64/sample]]),
 	TSM_SRC_DIR="$withval", TSM_SRC_DIR="/opt/tivoli/tsm/client/api/bin64/sample")
-AC_CHECK_FILE("$TSM_SRC_DIR/dsmapitd.h",,
-	AC_MSG_ERROR("cannot find proprietary IBM TSM header files. Use --with-tsm-headers=PATH"))
+AC_CHECK_FILE("$TSM_SRC_DIR/dsmapitd.h", [],
+	[AC_MSG_ERROR([cannot find proprietary IBM TSM header files, use --with-tsm-headers=PATH])])
 
 # Checks for other libraries.
 AC_CHECK_LIB([m],[ceil])
