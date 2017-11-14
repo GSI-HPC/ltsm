@@ -2,14 +2,16 @@ ACLOCAL_AMFLAGS = -I m4
 AUTOMAKE_OPTIONS = foreign
 SUBDIRS = src man
 
+RPM_DIR=`pwd`/rpm
+
 undef.h: config.h.in
 	grep -v config.h.in config.h.in > $@
 
-debs: undef.h
-	lversion=$$(echo @VERSION@ | tr '_' '-'); \
+debs: undef.h Makefile
+	gversion=$$(echo @VERSION@); \
 	cversion=$$(cat debian/changelog | grep -m 1 -Po '^ltsm.*\(\K[^)]+'); \
-	if [ "$$lversion" != "$$cversion" ]; then \
-		echo -e "1i\nltsm ($$lversion) unstable; urgency=low\n\n  * Automated changelog entry update\n\n -- Thomas Stibor <t.stibor@gsi.de>  $$(date -R)\n\n.\nwq" | ed debian/changelog; \
+	if [ "$$gversion" != "$$cversion" ]; then \
+		echo -e "1i\nltsm ($$gversion) unstable; urgency=low\n\n  * Automated changelog entry update\n\n -- Thomas Stibor <t.stibor@gsi.de>  $$(date -R)\n\n.\nwq" | ed debian/changelog; \
 	fi; \
 	rm -rf debs
 	dpkg-buildpackage -us -uc -I.git -I\*.out[0-9]\* -I\*.swp || { \
@@ -18,10 +20,24 @@ debs: undef.h
 		exit 0; \
 	}
 
+rpms: Makefile
+	$(MAKE) $(AM_MAKEFLAGS)
+	$(MKDIR_P) $(RPM_DIR)/{TMP,BUILD,RPMS,SRPMS,SPECS,SOURCES,BUILDROOT}; \
+	_version=$$(echo @_VERSION@); \
+	_release=$$(echo @_RELEASE@); \
+	tar --transform "s/./ltsm-$$_version-$$_release/" -c --exclude rpm -f - . | gzip > $(RPM_DIR)/SOURCES/ltsm-$$_version-$$_release.tar.gz
+	rpmbuild \
+		--define "_topdir $(RPM_DIR)" \
+		--define "_sourcedir $(RPM_DIR)/SOURCES" \
+		--define "_tmppath $(RPM_DIR)/TMP" \
+		--define "_version @_VERSION@" \
+		--define "_release @_RELEASE@" \
+		-ba rpm/ltsm.spec
+
 clean-local: clean-local-check
 .PHONY: clean-local-check
 clean-local-check:
-	-rm -rf debian/ltsm
+	-rm -rf debian/ltsm rpm/{TMP,BUILD,RPMS,SRPMS,SPECS,SOURCES,BUILDROOT}
 
 # Files to be deleted by 'make maintainer-clean'
 MAINTAINERCLEANFILES  = aclocal.m4

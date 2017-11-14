@@ -3,7 +3,7 @@
 
 AC_PREREQ([2.69])
 
-# Obtain git version.
+# Obtain GIT tag version.
 m4_define([GIT_VERSION_STRING], m4_esyscmd([git describe --tags | sed 's/\(.*\)-.*/\1/' | tr -d '\n']))
 
 # Define package information.
@@ -141,5 +141,9 @@ LDFLAGS="$LDFLAGS -Wl,--as-needed"
 
 # Halt on warnings.
 CFLAGS="$CFLAGS -Wall -Werror -fPIC"
+
+# For building packages we extract from tag X.Y.Z-R, version: X.Y.Z and release: R
+AC_SUBST(_VERSION, [m4_esyscmd([git describe --tags | cut -f1 -d"-"])])
+AC_SUBST(_RELEASE, [m4_esyscmd([git describe --tags | sed 's/-g[a-z0-9]\{7\}//' | sed -n -e '/^.*-/!{q100}; s/^.*-//p' || echo '1'])])
 
 AC_OUTPUT
