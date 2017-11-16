@@ -1,6 +1,7 @@
 %define name ltsm
 %define version %{_version}
 %define release %{_release}
+%define _etcdir /etc
 
 Summary: Lustre TSM copytool and TSM console client.
 Name: %{name}
@@ -12,8 +13,9 @@ BuildRoot: %{_tmppath}/%{name}-buildroot
 BuildArch: x86_64
 Vendor: GSI
 Packager: Thomas Stibor
-Requires: TIVsm-API64 >= 7
 Url: http://github.com/tstibor/ltsm
+Requires: TIVsm-API64 >= 7, lustre-client >= 2.9
+BuildRequires: systemd
 
 %description
 Lustre TSM copytool for seamlessly archiving and retrieving data in Lustre
@@ -32,7 +34,11 @@ make %{?_smp_mflags}
 %install
 rm -rf %{buildroot}
 mkdir -p %{buildroot}
+mkdir -p %{buildroot}/%{_unitdir}
+mkdir -p %{buildroot}/%{_etcdir}/default
 make install DESTDIR=%{buildroot}
+install -m 644 debian/%{name}.lhsmtool_tsm.service %{buildroot}/%{_unitdir}/%{name}.lhsmtool_tsm.service
+install -m 600 debian/lhsmtool_tsm.default %{buildroot}/%{_etcdir}/default/lhsmtool_tsm
 
 %files
 %defattr(-,root,root)
@@ -40,6 +46,17 @@ make install DESTDIR=%{buildroot}
 %{_mandir}/man1/ltsmc.1.*
 %{_bindir}/ltsmc
 %{_sbindir}/lhsmtool_tsm
+%{_unitdir}/%{name}.lhsmtool_tsm.service
+%{_etcdir}/default/lhsmtool_tsm
+
+%post
+%systemd_post %{name}.lhsmtool_tsm.service
+
+%preun
+%systemd_preun %{name}.lhsmtool_tsm.service
+
+%postun
+%systemd_postun %{name}.lhsmtool_tsm.service
 
 %clean
 rm -rf %{buildroot}
