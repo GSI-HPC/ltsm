@@ -15,7 +15,7 @@ Vendor: GSI
 Packager: Thomas Stibor
 Url: http://github.com/tstibor/ltsm
 Requires: TIVsm-API64 >= 7, lustre-client >= 2.9
-BuildRequires: systemd
+BuildRequires: systemd, lustre-client >= 2.9
 
 %description
 Lustre TSM copytool for seamlessly archiving and retrieving data in Lustre
@@ -60,3 +60,8 @@ install -m 600 debian/lhsmtool_tsm.default %{buildroot}/%{_etcdir}/default/lhsmt
 
 %clean
 rm -rf %{buildroot}
+
+%changelog
+
+* Wed Nov 16 2017 Thomas Stibor <t.stibor@gsi.de> 0.7.0-1
+- Initial ltsm 0.7.0 release

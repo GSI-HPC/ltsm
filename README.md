@@ -129,6 +129,18 @@ If *required* TSM and *optional* Lustre header files and libraries are found the
   * `src/test/test_tsmapi` (Test suite for *tsmapi*)
   * `src/test/ltsmbench` (Benchmark suite for measuring threaded archive/retrieve performance)
 
+### Install or Build DEB/RPM Package
+
+Download and install already built Debian Jessie package [ltsm_0.7.0_amd64.deb](http://web-docs.gsi.de/~tstibor/ltsm/packages/deb/ltsm_0.7.0_amd64.deb) or CentOS 7.4 package [ltsm-0.7.0-1.x86_64.rpm](http://web-docs.gsi.de/~tstibor/ltsm/packages/rpm/ltsm-0.7.0-1.x86_64.rpm). In addition you can build the rpm package
+yourself as follows
+```
+git clone https://github.com/tstibor/ltsm && cd ltsm && ./autogen.sh && ./configure && make rpms
+```
+or the deb package
+```
+git clone https://github.com/tstibor/ltsm && cd ltsm && ./autogen.sh && ./configure && make debs
+```
+
 ## Lustre Copytool
 Make sure you have enabled the HSM functionality on the MGS/MDS, e.g. `lctl set_param 'mdt.<LNAME>-MDT0000.hsm_control=enabled`
 and TSM server is running as well as `dsm.sys` contains the proper entries such as
