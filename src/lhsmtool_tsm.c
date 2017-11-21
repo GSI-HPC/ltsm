@@ -52,7 +52,7 @@ struct options {
 	int o_restore_stripe;
 	int o_abort_on_err;
         int o_archive_cnt;
-        int o_archive_id[LL_HSM_MAX_ARCHIVE];
+        int o_archive_id[LL_HSM_MAX_ARCHIVE + 1];
 	char *o_mnt;
 	int o_mnt_fd;
 	char o_servername[DSM_MAX_SERVERNAME_LENGTH + 1];
@@ -182,17 +182,24 @@ static int ct_parseopts(int argc, char *argv[])
 				long_opts, NULL)) != -1) {
 		switch (c) {
 		case 'a': {
-                        if ((opt.o_archive_cnt >= LL_HSM_MAX_ARCHIVE) ||
-                            (atoi(optarg) >= LL_HSM_MAX_ARCHIVE)) {
-                                rc = -E2BIG;
-                                CT_ERROR(rc, "archive number must be less"
-                                         "than %zu", LL_HSM_MAX_ARCHIVE);
-                                return rc;
-                        }
-                        opt.o_archive_id[opt.o_archive_cnt] = atoi(optarg);
-                        opt.o_archive_cnt++;
-                        break;
-                }
+			char *end = NULL;
+			int val = strtol(optarg, &end, 10);
+			if (*end != '\0') {
+				rc = -EINVAL;
+				CT_ERROR(rc, "invalid archive-id: '%s'", end);
+				return rc;
+			}
+			if ((opt.o_archive_cnt > LL_HSM_MAX_ARCHIVE) ||
+			    (val > LL_HSM_MAX_ARCHIVE)) {
+				rc = -EINVAL;
+				CT_ERROR(rc, "archive number must be less"
+					 " than %zu", LL_HSM_MAX_ARCHIVE + 1);
+				return rc;
+			}
+			opt.o_archive_id[opt.o_archive_cnt] = val;
+			opt.o_archive_cnt++;
+			break;
+		}
 		case 't': {
 			nthreads = atoi(optarg);
 			break;
