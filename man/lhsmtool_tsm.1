@@ -22,7 +22,8 @@ The TSM servername to connect to. Name will be resolved to an actual ip address 
 OPTIONAL
 .TP
 .BR \-a ", " \-\-archive-id =\fIID\fR
-Lustre HSM can manage multiple archive entities. Archive entities are identified by a unique and persistent index (called archive-id). Default is archive-id '1'.
+Lustre HSM can manage multiple archive backends. Archive backends are specified by an unique and persistent identifier (called archive-id).
+Note, archive-id = 0 is reserved for handling any archive id's in the range 1,2,...,32 and is used as default when no archive-id option is provided.
 .TP
 .BR \-o ", " \-\-owner =\fINAME\fR
 If in archive mode the owner's name  will be stored with the file objects onto the TSM server. By default an empty string is used.
