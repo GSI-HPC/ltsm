@@ -251,14 +251,17 @@ static dsInt16_t fallback_dt_unknown(struct dirent *entry, const char *fpath)
  */
 void set_prefix(const char *_prefix)
 {
+	if (!_prefix)
+		return;
+
 	const size_t len = strlen(_prefix);
 	size_t l = 0;
 
 	bzero(prefix, PATH_MAX + 1);
 	if (len > 0 && _prefix[l] != '/') {
 		prefix[l++] = '/';
-		CT_WARN("leading '/' in prefix is missing and automatically "
-			"added");
+		CT_WARN("leading '/' in prefix '%s' is missing and "
+			"automatically added", _prefix);
 	}
 	strncpy(prefix + l, _prefix, len < PATH_MAX ? len : PATH_MAX);
 }

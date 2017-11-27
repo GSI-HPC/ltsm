@@ -26,7 +26,7 @@
 #include "tsmapi.c"
 #include "test_utils.h"
 
-#define SERVERNAME	"lxltsm01-tsm-server"
+#define SERVERNAME	"polaris-kvm-tsm-server"
 #define NODE		"polaris"
 #define PASSWORD	"polaris"
 #define OWNER           ""
@@ -175,6 +175,33 @@ void test_login_fill(CuTest *tc)
 	CuAssertStrEquals(tc, "", login.fstype);
 }
 
+void test_set_prefix(CuTest *tc)
+{
+	char *_prefix = NULL;
+	set_prefix(_prefix);
+	CuAssertPtrEquals(tc, NULL, _prefix);
+
+	_prefix = calloc(128, sizeof(char));
+	CuAssertPtrNotNull(tc, _prefix);
+	snprintf(_prefix, 11, "%s", "0123456789");
+	set_prefix(_prefix);
+	CuAssertStrEquals(tc, "/0123456789", prefix);
+
+	snprintf(_prefix, 8, "%s", "/12/45/\0");
+	set_prefix(_prefix);
+	CuAssertStrEquals(tc, "/12/45/", prefix);
+
+	snprintf(_prefix, 21, "%s", "/0/1/2/3/4/5/6/7/8/9\0");
+	set_prefix(_prefix);
+	CuAssertStrEquals(tc, "/0/1/2/3/4/5/6/7/8/9", prefix);
+
+	snprintf(_prefix, 2, "%s", "/\0");
+	set_prefix(_prefix);
+	CuAssertStrEquals(tc, "/", prefix);
+
+	free(_prefix);
+}
+
 CuSuite* tsmapi_get_suite()
 {
     CuSuite* suite = CuSuiteNew();
@@ -183,13 +210,14 @@ CuSuite* tsmapi_get_suite()
 #endif
     SUITE_ADD_TEST(suite, test_extract_hl_ll);
     SUITE_ADD_TEST(suite, test_login_fill);
+    SUITE_ADD_TEST(suite, test_set_prefix);
 
     return suite;
 }
 
 void run_all_tests(void)
 {
-	api_msg_set_level(API_MSG_WARN);
+	api_msg_set_level(API_MSG_ERROR);
 
 	CuString *output = CuStringNew();
 	CuSuite *suite = CuSuiteNew();
