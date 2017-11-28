@@ -105,7 +105,7 @@ static void usage(const char *cmd_name, const int rc)
 	dsmAppVersion appapi_ver = get_appapi_ver();
 
 	fprintf(stdout, "usage: %s [options] <lustre_mount_point>\n"
-		"\t-a, --archive-id <int> [default: 1]\n"
+		"\t-a, --archive-id <int> [default: 0]\n"
 		"\t\t""archive id number\n"
 		"\t-t, --threads <int>\n"
 		"\t\t""number of processing threads [default: 2]\n"
