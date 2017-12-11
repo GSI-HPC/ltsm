@@ -1,6 +1,8 @@
 [Unit]
 Description=Lustre TSM Copytool
-After=network.target
+Documentation=man:lhsmtool_tsm(1)
+Requires=network-online.target
+After=network-online.target
 
 [Service]
 EnvironmentFile=-/etc/default/lhsmtool_tsm

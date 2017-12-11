@@ -128,8 +128,6 @@ AC_TYPE_UINT8_T
 
 # Checks for library functions.
 AC_FUNC_LSTAT_FOLLOWS_SLASHED_SYMLINK
-AC_FUNC_MALLOC
-AC_FUNC_REALLOC
 AC_CHECK_FUNCS([malloc realloc atexit bzero clock_gettime gettimeofday memmove memset mkdir realpath sqrt strerror strtol])
 
 AC_CONFIG_FILES([Makefile

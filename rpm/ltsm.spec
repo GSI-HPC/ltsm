@@ -63,5 +63,5 @@ rm -rf %{buildroot}
 
 %changelog
 
-* Wed Nov 16 2017 Thomas Stibor <t.stibor@gsi.de> 0.7.0-1
-- Initial ltsm 0.7.0 release
+* Mon Dec 11 2017 Thomas Stibor <t.stibor@gsi.de> 0.7.1-1
+- Update systemd requirements and fix archive_id handling
