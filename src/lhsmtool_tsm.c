@@ -184,9 +184,11 @@ static int ct_parseopts(int argc, char *argv[])
 		case 'a': {
 			char *end = NULL;
 			int val = strtol(optarg, &end, 10);
+
 			if (*end != '\0') {
 				rc = -EINVAL;
-				CT_ERROR(rc, "invalid archive-id: '%s'", end);
+				CT_ERROR(rc, "invalid archive-id: '%s'",
+					 optarg);
 				return rc;
 			}
 			if ((opt.o_archive_cnt > LL_HSM_MAX_ARCHIVE) ||
