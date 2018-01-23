@@ -364,6 +364,11 @@ vs 4 threads
 
 For more TSM server/client tuning tips see [Tips for Tivoli Storage Manager Performance Tuning and Troubleshooting](http://web-docs.gsi.de/~tstibor/tsm/doc/tips.for.tivoli.storage.manager.performance.tuning.and.troubleshooting.pdf)
 
+## Performace Measurement over 10GBit Network
+By means of *ltsmbench* the archive and retrieve performance is measured from a ltsm machine to a TSM server. The TSM server is equipped with SSD's bundled into a hardware RAID-5 where the TSM database and transactions logs are located.
+The TSM bulk data is placed on regular disks bundled into a hardware RAID-6 device. The archive and retrieve performance for iterating number of threads  {1,2,..,16} is visualized as a [Box-Whisker-Plot](https://en.wikipedia.org/wiki/Box_plot).
+![Archive performace](http://web-docs.gsi.de/~tstibor/ltsm/perf.meas.arch.png)
+![Retrieve performace](http://web-docs.gsi.de/~tstibor/ltsm/perf.meas.retr.png)
 ## More Information
 In the manual pages [lhsmtool_tsm.1](http://github.com/tstibor/ltsm/blob/master/man/lhsmtool_tsm.1) and [ltsmc.1](http://github.com/tstibor/ltsm/blob/master/man/ltsmc.1) usage details and options of *lhsmtool_tsm* and *ltsmc*
 are provided. In addition, a [screencast](http://web-docs.gsi.de/~tstibor/tsm/ltsm-screencast-2.mp4) of an older version of this project is provided.
