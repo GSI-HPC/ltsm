@@ -366,7 +366,7 @@ For more TSM server/client tuning tips see [Tips for Tivoli Storage Manager Perf
 
 ## Performace Measurement over 10GBit Network
 By means of *ltsmbench* the archive and retrieve performance is measured from a ltsm machine to a TSM server. The TSM server is equipped with SSD's bundled into a hardware RAID-5 where the TSM database and transactions logs are located.
-The TSM bulk data is placed on regular disks bundled into a hardware RAID-6 device. The archive and retrieve performance for iterating number of threads  {1,2,..,16} is visualized as a [Box-Whisker-Plot](https://en.wikipedia.org/wiki/Box_plot).
+The TSM bulk data is placed on regular disks bundled into a hardware RAID-6 device. The archive and retrieve performance for increasing number of threads  {1,2,..,16} is visualized as a [Box-Whisker-Plot](https://en.wikipedia.org/wiki/Box_plot).
 ![Archive performace](http://web-docs.gsi.de/~tstibor/ltsm/perf.meas.arch.png)
 ![Retrieve performace](http://web-docs.gsi.de/~tstibor/ltsm/perf.meas.retr.png)
 ## More Information
