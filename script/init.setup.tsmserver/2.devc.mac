@@ -1,0 +1,2 @@
+define devc fsdir_devc devt=file maxcap=15G dir=/home/tsminst1/tsm/data mountl=1024
+q devc

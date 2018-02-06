@@ -1,0 +1,2 @@
+define mgmtclass fsdir_domain fsdir_policyset fsdir_mgmtclass
+q mgmtclass
