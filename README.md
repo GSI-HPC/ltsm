@@ -53,7 +53,13 @@ The last issue is a crucial feature for the Lustre HSM framework, as it enables 
 Storage hierarchy of a TSM server. Fast but limited space storage devices (high cost per GByte) are located at the
 top of the pyramid, whereas slower but large space storage devices (low cost per GByte) are located at the bottom.
 Fast storage devices act as a *cache* layer, where data in automatically migrated by the TSM server based on access pattern and
-space occupation level.
+space occupation level. More details can be found in [IBM Tivoli Storage Manager Implementation Guide (pp. 257)](http://web-docs.gsi.de/~tstibor/tsm/doc/ibm_tivoli_storage_management_implementation_guide.pdf#page=287).
+
+Denote r<sub>1</sub> the transfer rate to (fast) storage devices s<sub>1</sub> and r<sub>2</sub> the transfer rate to (slow) storage devices s<sub>2</sub>.
+Make sure to set the migration threshold t from s<sub>1</sub> to s<sub>2</sub> to a proper value which suits your use case.
+Example: Let r<sub>1</sub> = 800MB/sec, r<sub>2</sub> = 200MB/sec, s<sub>1</sub> = 150TB and migration threshold is set to t = 0.6.
+If r<sub>1</sub> &#62; r<sub>2</sub>, then after t &#183; s<sub>1</sub> / (r<sub>1</sub> - r<sub>2</sub>) seconds, s<sub>1</sub> is 100% full. For that example it yields
+41.66667 hours, when continuously writing into s<sub>1</sub> with rate r<sub>1</sub>.
 
 # Data Organized on TSM Server
 The TSM server is an object storage server and is developed for storing and retrieving named objects. Similar to Lustre, the TSM
