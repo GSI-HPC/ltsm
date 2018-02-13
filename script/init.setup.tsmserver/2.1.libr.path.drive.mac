@@ -1,0 +1,23 @@
+define library libr_changer libtype=scsi shared=no resetdrives=no autolabel=yes relabelscratch=yes serial=autodetect
+
+define path lxltsm01 libr_changer srctype=server desttype=library device=/dev/lin_tape/by-id/changer_0000078A37900401 autodetect=yes online=yes
+
+define drive libr_changer tape_0_03592E07_0000078DD38D
+define drive libr_changer tape_1_03592E07_0000078DD3AD
+define drive libr_changer tape_2_03592E07_0000078DD396
+define drive libr_changer tape_3_03592E07_0000078DD3A0
+define drive libr_changer tape_4_03592E07_0000078D0CE1
+define drive libr_changer tape_5_03592E07_0000078D12EF
+define drive libr_changer tape_6_03592E07_0000078D140C
+define drive libr_changer tape_7_03592E07_0000078DD3AE
+
+define path lxltsm01 tape_0_03592E07_0000078DD38D library=libr_changer srctype=server desttype=drive autodetect=yes device=/dev/lin_tape/by-id/tapedrive_0000078DD38D
+define path lxltsm01 tape_1_03592E07_0000078DD3AD library=libr_changer srctype=server desttype=drive autodetect=yes device=/dev/lin_tape/by-id/tapedrive_0000078DD3AD
+define path lxltsm01 tape_2_03592E07_0000078DD396 library=libr_changer srctype=server desttype=drive autodetect=yes device=/dev/lin_tape/by-id/tapedrive_0000078DD396
+define path lxltsm01 tape_3_03592E07_0000078DD3A0 library=libr_changer srctype=server desttype=drive autodetect=yes device=/dev/lin_tape/by-id/tapedrive_0000078DD3A0
+define path lxltsm01 tape_4_03592E07_0000078D0CE1 library=libr_changer srctype=server desttype=drive autodetect=yes device=/dev/lin_tape/by-id/tapedrive_0000078D0CE1
+define path lxltsm01 tape_5_03592E07_0000078D12EF library=libr_changer srctype=server desttype=drive autodetect=yes device=/dev/lin_tape/by-id/tapedrive_0000078D12EF
+define path lxltsm01 tape_6_03592E07_0000078D140C library=libr_changer srctype=server desttype=drive autodetect=yes device=/dev/lin_tape/by-id/tapedrive_0000078D140C
+define path lxltsm01 tape_7_03592E07_0000078DD3AE library=libr_changer srctype=server desttype=drive autodetect=yes device=/dev/lin_tape/by-id/tapedrive_0000078DD3AE
+
+define devclass devc_3592 devtype=3592 library=libr_changer mountret=300
