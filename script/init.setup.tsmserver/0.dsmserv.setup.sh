@@ -1,5 +1,7 @@
 #!/bin/bash
 
+set -x
+
 cd ${HOME}
 mkdir -p tsminst1 && cd tsminst1
 sync && sleep 1
@@ -22,15 +24,15 @@ source ${HOME}/.profile
 
 ${HOME}/sqllib/adm/db2set -i tsminst1 DB2CODEPAGE=1208
 
-TSM_META=${HOME}/tsm/meta
-TSM_DATA=${HOME}/tsm/data
+TSM_META=/tsm/meta/tsminst1
+TSM_DATA=/tsm/data/tsminst1
 TSM_META_DB=${TSM_META}/db
 TSM_META_LOG_ACTIVE=${TSM_META}/log/active_log
 TSM_META_LOG_ARCHIVE=${TSM_META}/log/archive_log
 mkdir -p ${TSM_META} ${TSM_DATA} ${TSM_META_DB} ${TSM_META_LOG_ACTIVE} ${TSM_META_LOG_ARCHIVE}
 sync && sleep 1
 
-dsmserv format dbdir=${TSM_META_DB} activelogsize=8196 activelogdir=${TSM_META_LOG_ACTIVE} archlogdir=${TSM_META_LOG_ARCHIVE}
+dsmserv format dbdir=${TSM_META_DB} activelogsize=262144 activelogdir=${TSM_META_LOG_ACTIVE} archlogdir=${TSM_META_LOG_ARCHIVE}
 
 cat >${HOME}/sqllib/userprofile <<EOF
 export DSMI_CONFIG=${HOME}/tsminst1/tsmdbmgr.opt

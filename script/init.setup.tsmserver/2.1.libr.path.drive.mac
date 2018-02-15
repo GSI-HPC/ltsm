@@ -20,4 +20,7 @@ define path lxltsm01 tape_5_03592E07_0000078D12EF library=libr_changer srctype=s
 define path lxltsm01 tape_6_03592E07_0000078D140C library=libr_changer srctype=server desttype=drive autodetect=yes device=/dev/lin_tape/by-id/tapedrive_0000078D140C
 define path lxltsm01 tape_7_03592E07_0000078DD3AE library=libr_changer srctype=server desttype=drive autodetect=yes device=/dev/lin_tape/by-id/tapedrive_0000078DD3AE
 
+CHECKIN LIBVOL libr_changer SEARCH=Y STATUS=SCR CHECKL=BARC
+CHECKIN LIBVOL libr_changer SEARCH=Y STATUS=PRIV CHECKL=BARC
+
 define devclass devc_3592 devtype=3592 library=libr_changer mountret=300
