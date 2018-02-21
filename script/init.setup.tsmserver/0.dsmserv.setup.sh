@@ -2,6 +2,9 @@
 
 set -x
 
+sudo mkdir -p /tsm/{data,meta}/tsminst1
+sudo chown tsminst1.tsminst1 /tsm/{data,meta}/tsminst1
+
 cd ${HOME}
 mkdir -p tsminst1 && cd tsminst1
 sync && sleep 1
