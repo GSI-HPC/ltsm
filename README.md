@@ -379,6 +379,15 @@ The TSM bulk data is placed on regular disks bundled into a hardware RAID-6 devi
 In the manual pages [lhsmtool_tsm.1](http://github.com/tstibor/ltsm/blob/master/man/lhsmtool_tsm.1) and [ltsmc.1](http://github.com/tstibor/ltsm/blob/master/man/ltsmc.1) usage details and options of *lhsmtool_tsm* and *ltsmc*
 are provided. In addition, a [screencast](http://web-docs.gsi.de/~tstibor/tsm/ltsm-screencast-2.mp4) of an older version of this project is provided.
 
+## Scaling
+The Lustre file system can be bond to *multiple* HSM storage backends, where each bond is identified by
+an unique number called the *archive id*. This concepts thus allows scaling within the Lustre HSM framework.
+In the simplest case, only one copytool instance is started which handles
+all archive id's in the range {1,2,...,32}. That is, all data is transferred through a single TSM Server though
+with multi-threaded access. In the full expanded parallel setup 32 TSM servers can be leveraged for data
+transfer as depicted below.
+![Archive performace](http://web-docs.gsi.de/~tstibor/ltsm/scaling.png)
+
 ## References
 A thorough description and code examples of IBM's low-level TSM API/library can be found in the open document [Using the Application Programming Interface](http://web-docs.gsi.de/~tstibor/tsm/doc/using_the_programming_application_interface.pdf), Fourth edition (September 2015).
 
