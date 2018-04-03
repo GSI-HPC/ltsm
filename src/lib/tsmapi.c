@@ -2407,3 +2407,84 @@ int crc32file(const char *filename, uint32_t *crc32result)
 	*crc32result = crc32sum;
 	return rc;
 }
+
+int parse_line(char *line, struct kv_opt *kv_opt)
+{
+	if (line[0] == '#' || line[0] == '\n')
+		return 0;
+
+	const char *delim = " \t\r\n";
+	char *token;
+	uint16_t cnt = 0;
+	struct kv _kv = {.key = {0},
+			 .val = {0}};
+
+	token = strtok(line, delim);
+	while(token != NULL) {
+		if (token[0] == '#')
+			break;
+		strncpy(_kv.key, token, MAX_OPTIONS_LENGTH);
+		cnt++;
+		token = strtok(NULL, delim);
+		if (token) {
+			strncpy(_kv.val, token, MAX_OPTIONS_LENGTH);
+			cnt++;
+		}
+		token = strtok(NULL, delim);
+	}
+	if (cnt != 2)
+		return -EINVAL;
+
+	kv_opt->kv = realloc(kv_opt->kv, sizeof(struct kv) * (kv_opt->N + 1));
+	if (!kv_opt->kv)
+		return -ENOMEM;
+
+	bzero(kv_opt->kv[kv_opt->N].key, MAX_OPTIONS_LENGTH + 1);
+	bzero(kv_opt->kv[kv_opt->N].val, MAX_OPTIONS_LENGTH + 1);
+	strncpy(kv_opt->kv[kv_opt->N].key, _kv.key, MAX_OPTIONS_LENGTH);
+	strncpy(kv_opt->kv[kv_opt->N].val, _kv.val, MAX_OPTIONS_LENGTH);
+	kv_opt->N++;
+
+	return 0;
+}
+
+int parse_conf(const char *filename, struct kv_opt *kv_opt)
+{
+	FILE *file = NULL;
+	char *line = NULL;
+	size_t len = 0;
+	ssize_t nread;
+	int rc = 0;
+
+	file = fopen(filename, "r");
+	if (!file) {
+		CT_ERROR(errno, "fopen failed on '%s'", filename);
+		return -errno;
+	}
+
+	errno = 0;
+	while ((nread = getline(&line, &len, file) != -1)) {
+		rc = parse_line(line, kv_opt);
+		if (rc == -EINVAL)
+			CT_WARN("malformed option '%s' in conf file '%s'",
+				line, filename);
+	}
+
+	if (errno) {
+		rc = -errno;
+		CT_ERROR(errno, "getline failed");
+	}
+
+	if (line) {
+		free(line);
+		line = NULL;
+	}
+
+	rc = fclose(file);
+	if (rc) {
+		rc = -errno;
+		CT_ERROR(errno, "fclose failed on '%s'", filename);
+	}
+
+	return rc;
+}

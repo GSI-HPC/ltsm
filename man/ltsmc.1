@@ -1,4 +1,4 @@
-.TH ltsmc 1 "September 2017" TSM "user utilities"
+.TH ltsmc 1 "April 2018" TSM "user utilities"
 .SH NAME
 ltsmc \- Console client for archiving, retrieving, deleting and querying files and directories on a TSM server
 .SH SYNOPSIS
@@ -22,7 +22,7 @@ Query TSM server for files and directories, and delete matched files and directo
 .BR \-\-pipe
 Archive data coming from a pipe, e.g. echo "archive me" | ltsmc --pipe <OPTIONS> /archive.me
 .TP
-.BR \-c ", " \-\-checksum
+.BR \-\-checksum
 Calculate crc32 checksum of local files, for verifying that e.g. local and archives files
 have equal crc32 checksums.
 .SS
@@ -68,6 +68,10 @@ Otherwise the name will be used to filter the queries by owner and the wildcards
 .BR \-v ", " \-\-verbose =\fIerror\fR|\fIwarn\fR|\fImessage\fR|\fIinfo\fR|\fIdebug\fR
 Causes ltsmc to be more verbose in printing messages. Default is \fImessage\fR.
 .TP
+.BR \-c ", " \-\-conf =\fIFILE\fR
+Read conf \fIFILE\fR with options: \fIservername\fR, \fInode\fR, \fIowner\fR, \fIpassword\fR, \fIfsname\fR and \fIverbose\fR.
+Syntax in conf \fIFILE\fR is \fIoption\fR \fIvalue\fR where separators are whitespace(s) and tabulator(s). The character # is treated as a comment and strings after character # are ignored.
+.TP
 .BR \-h ", " \-\-help
 Display help and exit.
 .SS
@@ -86,7 +90,7 @@ PATH='/home/user/files/test.txt'
 hl='/home/user/files' and ll='/test.txt' \- matches single file
 .TP
 PATH='/home/user/*.txt'
-hl="/home/user" and ll='/*.txt' \- matches any file ending with '.txt' in path '/home/user'
+hl='/home/user' and ll='/*.txt' \- matches any file ending with '.txt' in path '/home/user'
 .TP
 PATH='/home/*/files/??.txt'
 hl='/home/*/files' and ll='/??.txt' \- matches all files with two characters and ending with '.txt' in all paths matching '/home/*/files'.

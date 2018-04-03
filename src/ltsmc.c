@@ -21,6 +21,7 @@
 #include <time.h>
 #include <getopt.h>
 #include <sys/stat.h>
+#include <sys/param.h>
 #include <zlib.h>
 #include "tsmapi.h"
 #include "measurement.h"
@@ -46,6 +47,7 @@ struct options {
 	char o_fsname[DSM_MAX_FSNAME_LENGTH + 1];
 	char o_fstype[DSM_MAX_FSTYPE_LENGTH + 1];
 	char o_desc[DSM_MAX_DESCR_LENGTH + 1];
+	char o_conf[MAX_OPTIONS_LENGTH + 1];
 };
 
 struct options opt = {
@@ -57,6 +59,7 @@ struct options opt = {
 	.o_fsname = {0},
 	.o_fstype = {0},
 	.o_desc = {0},
+	.o_conf = {0},
 	.o_checksum = 0,
 	.o_sort = SORT_NONE
 };
@@ -72,6 +75,7 @@ static void usage(const char *cmd_name, const int rc)
 		"\t--query\n"
 		"\t--delete\n"
 		"\t--pipe\n"
+		"\t--checksum\n"
 		"\t-l, --latest [retrieve object with latest timestamp when multiple exists]\n"
 		"\t-x, --prefix [retrieve prefix directory]\n"
 		"\t-r, --recursive [archive directory and all sub-directories]\n"
@@ -83,7 +87,7 @@ static void usage(const char *cmd_name, const int rc)
 		"\t-p, --password <string>\n"
 		"\t-s, --servername <string>\n"
 		"\t-v, --verbose {error, warn, message, info, debug} [default: message]\n"
-		"\t-c, --checksum <file>\n"
+		"\t-c, --conf <file>\n"
 		"\t-h, --help\n"
 		"\nIBM API library version: %d.%d.%d.%d, "
 		"IBM API application client version: %d.%d.%d.%d\n"
@@ -97,6 +101,80 @@ static void usage(const char *cmd_name, const int rc)
 	exit(rc);
 }
 
+static int set_verbose(const char *val)
+{
+	if (!val)
+		return -EINVAL;
+
+	if (OPTNCMP("error", val))
+		opt.o_verbose = API_MSG_ERROR;
+	else if (OPTNCMP("warn", val))
+		opt.o_verbose = API_MSG_WARN;
+	else if (OPTNCMP("message", val))
+		opt.o_verbose = API_MSG_NORMAL;
+	else if (OPTNCMP("info", val))
+		opt.o_verbose = API_MSG_INFO;
+	else if (OPTNCMP("debug", val))
+		opt.o_verbose = API_MSG_DEBUG;
+	else
+		return -EINVAL;
+
+	api_msg_set_level(opt.o_verbose);
+	return 0;
+}
+
+static void read_conf(const char *filename)
+{
+	int rc;
+	struct kv_opt kv_opt = {
+		.N	     = 0,
+		.kv	     = NULL
+	};
+
+	rc = parse_conf(filename, &kv_opt);
+	if (!rc) {
+		for (uint8_t n = 0; n < kv_opt.N; n++) {
+			if (OPTNCMP("servername", kv_opt.kv[n].key))
+				strncpy(opt.o_servername, kv_opt.kv[n].val,
+					MIN(DSM_MAX_SERVERNAME_LENGTH,
+					    MAX_OPTIONS_LENGTH));
+			else if (OPTNCMP("node", kv_opt.kv[n].key))
+				strncpy(opt.o_node, kv_opt.kv[n].val,
+					MIN(DSM_MAX_NODE_LENGTH,
+					    MAX_OPTIONS_LENGTH));
+			else if (OPTNCMP("owner", kv_opt.kv[n].key))
+				strncpy(opt.o_owner, kv_opt.kv[n].val,
+					MIN(DSM_MAX_OWNER_LENGTH,
+					    MAX_OPTIONS_LENGTH));
+			else if (OPTNCMP("password", kv_opt.kv[n].key))
+				strncpy(opt.o_password, kv_opt.kv[n].val,
+					MIN(DSM_MAX_VERIFIER_LENGTH,
+					    MAX_OPTIONS_LENGTH));
+			else if (OPTNCMP("fsname", kv_opt.kv[n].key))
+				strncpy(opt.o_fsname, kv_opt.kv[n].val,
+					MIN(DSM_MAX_FSNAME_LENGTH,
+					    MAX_OPTIONS_LENGTH));
+			else if (OPTNCMP("verbose", kv_opt.kv[n].key)) {
+				rc = set_verbose(kv_opt.kv[n].val);
+				if (rc)
+					CT_WARN("wrong value '%s' for option '%s'"
+						" in conf file '%s'",
+						kv_opt.kv[n].val, kv_opt.kv[n].key,
+						filename);
+			} else
+				CT_WARN("unknown option value '%s %s' in conf"
+					" file '%s'", kv_opt.kv[n].key,
+					kv_opt.kv[n].val, filename);
+		}
+	}
+
+	if (kv_opt.kv) {
+		free(kv_opt.kv);
+		kv_opt.kv = NULL;
+		kv_opt.N = 0;
+	}
+}
+
 static void sanity_arg_check(const char *argv)
 {
 	uint8_t count = 0;
@@ -108,13 +186,13 @@ static void sanity_arg_check(const char *argv)
 	count = opt.o_pipe     == 1 ? count + 1 : count;
 
 	if (count == 0) {
-		fprintf(stdout, "missing argument --archive, --retrieve,"
-			" --query, --delete, --pipe or --checksum\n\n");
+		CT_ERROR(0, "missing argument --archive, --retrieve,"
+			 " --query, --delete, --pipe or --checksum");
 		usage(argv, 1);
 	} else if (count != 1) {
-		printf("multiple incompatible arguments"
-		       " --archive, --retrieve, --query, --delete, --pipe or "
-		       "--checksum\n\n");
+		CT_ERROR(0, "multiple incompatible arguments"
+			 " --archive, --retrieve, --query, --delete, --pipe or "
+			 "--checksum");
 		usage(argv, 1);
 	}
 
@@ -124,17 +202,16 @@ static void sanity_arg_check(const char *argv)
 		return;
 
 	/* Required arguments. */
-	if (!strlen(opt.o_node)) {
-		fprintf(stdout, "missing argument -n, --node <string>\n\n");
+	if (!opt.o_node[0]) {
+		CT_ERROR(0, "missing argument -n, --node <string>");
 		usage(argv, 1);
-	} else if (!strlen(opt.o_password)) {
-		fprintf(stdout, "missing argument -p, --password <string>\n\n");
+	} else if (!opt.o_password[0]) {
+		CT_ERROR(0, "missing argument -p, --password <string>");
 		usage(argv, 1);
-	} else if (!strlen(opt.o_servername)) {
-		fprintf(stdout, "missing argument -s, --servername "
-			"<string>\n\n");
+	} else if (!opt.o_servername[0]) {
+		CT_ERROR(0, "missing argument -s, --servername <string>");
 		usage(argv, 1);
-	} else if (!strlen(opt.o_fsname))
+	} else if (!opt.o_fsname[0])
 		strncpy(opt.o_fsname, DEFAULT_FSNAME, DSM_MAX_FSNAME_LENGTH);
 }
 
@@ -146,6 +223,7 @@ static int parseopts(int argc, char *argv[])
 		{"query",	      no_argument, &opt.o_query,       1},
 		{"delete",	      no_argument, &opt.o_delete,      1},
 		{"pipe",              no_argument, &opt.o_pipe,        1},
+		{"checksum",          no_argument, &opt.o_checksum,    1},
 		{"latest",	      no_argument, 0,		     'l'},
 		{"recursive",	      no_argument, 0,		     'r'},
 		{"sort",	required_argument, 0,		     't'},
@@ -157,13 +235,13 @@ static int parseopts(int argc, char *argv[])
 		{"servername",	required_argument, 0,		     's'},
 		{"verbose",	required_argument, 0,		     'v'},
 		{"prefix",	required_argument, 0,		     'x'},
-		{"checksum",	      no_argument, 0,		     'c'},
+		{"conf",	required_argument, 0,		     'c'},
 		{"help",	      no_argument, 0,		     'h'},
 		{0, 0, 0, 0}
 	};
 
 	int c;
-	while ((c = getopt_long(argc, argv, "lrt:f:d:n:o:p:s:v:x:ch",
+	while ((c = getopt_long(argc, argv, "lrt:f:d:n:o:p:s:v:x:c:h",
 				long_opts, NULL)) != -1) {
 		switch (c) {
 		case 'l': {
@@ -185,8 +263,8 @@ static int parseopts(int argc, char *argv[])
 			else if (OPTNCMP("restore", optarg))
 				opt.o_sort = SORT_RESTORE_ORDER;
 			else {
-				fprintf(stdout, "wrong argument for -t, "
-					"--sort '%s'\n", optarg);
+				CT_ERROR(0, "wrong argument for -t, "
+					"--sort '%s", optarg);
 				usage(argv[0], 1);
 			}
 			break;
@@ -218,22 +296,12 @@ static int parseopts(int argc, char *argv[])
 			break;
 		}
 		case 'v': {
-			if (OPTNCMP("error", optarg))
-				opt.o_verbose = API_MSG_ERROR;
-			else if (OPTNCMP("warn", optarg))
-				opt.o_verbose = API_MSG_WARN;
-			else if (OPTNCMP("message", optarg))
-				opt.o_verbose = API_MSG_NORMAL;
-			else if (OPTNCMP("info", optarg))
-				opt.o_verbose = API_MSG_INFO;
-			else if (OPTNCMP("debug", optarg))
-				opt.o_verbose = API_MSG_DEBUG;
-			else {
-				fprintf(stdout, "wrong argument for -v, "
-					"--verbose '%s'\n", optarg);
+			int rc = set_verbose(optarg);
+			if (rc) {
+				CT_ERROR(0, "wrong argument for -v, "
+					 "--verbose '%s'", optarg);
 				usage(argv[0], 1);
 			}
-			api_msg_set_level(opt.o_verbose);
 			break;
 		}
 		case 'x': {
@@ -241,7 +309,7 @@ static int parseopts(int argc, char *argv[])
 			break;
 		}
 		case 'c': {
-			opt.o_checksum = 1;
+			read_conf(optarg);
 			break;
 		}
 		case 'h': {
@@ -299,7 +367,7 @@ int main(int argc, char *argv[])
 	if (opt.o_checksum) {
 
 		if (num_files_dirs == 0) {
-			fprintf(stdout, "missing argument <files>\n");
+			CT_ERROR(0, "missing argument <files>");
 			usage(argv[0], 1);
 		}
 
@@ -336,10 +404,10 @@ int main(int argc, char *argv[])
 
 	if (opt.o_pipe) {
 		if (num_files_dirs == 0) {
-			fprintf(stdout, "missing argument <files>\n");
+			CT_ERROR(0, "missing argument <files>");
 			usage(argv[0], 1);
 		} else if (num_files_dirs > 1) {
-			fprintf(stdout, "too many arguments <files>\n");
+			CT_ERROR(0, "too many arguments <files>");
 			usage(argv[0], 1);
 		}
 
