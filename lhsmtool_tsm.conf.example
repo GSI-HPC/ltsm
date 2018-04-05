@@ -1,0 +1,6 @@
+# Conf example for lhsmtool_tsm
+servername lxltsm01-failover
+node 	   polaris
+password   polaris
+threads	   4
+verbose	   warn

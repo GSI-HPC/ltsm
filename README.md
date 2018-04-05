@@ -123,7 +123,7 @@ configure: WARNING: cannot find Lustre API headers or Lustre API library, only T
 
 ```
 and the console client *ltsmc* is built only. For building also the Lustre Copytool thus make sure the Lustre API header files
-and the Lustre library `liblustreapi.so` are available and the paths are correctly specified e.g. 
+and the Lustre library `liblustreapi.so` are available and the paths are correctly specified e.g.
 ```
 ./autogen.sh && ./configure CFLAGS='-g -DDEBUG -O0' --with-lustre-headers=/usr/local/include/lustre LDFLAGS='-L/usr/local/lib' --with-tsm-headers=/opt/tivoli/tsm/client/api/bin64/sample --enable-tests
 ```
@@ -137,7 +137,7 @@ If *required* TSM and *optional* Lustre header files and libraries are found the
 
 ### Install or Build DEB/RPM Package
 
-Download and install already built Debian Jessie package [ltsm_0.7.1_amd64.deb](http://web-docs.gsi.de/~tstibor/ltsm/packages/deb/) or CentOS 7.4 package [ltsm-0.7.1-1.x86_64.rpm](http://web-docs.gsi.de/~tstibor/ltsm/packages/rpm/). In addition you can build the rpm package
+Download and install already built Debian Jessie package [ltsm_0.7.2_amd64.deb](http://web-docs.gsi.de/~tstibor/ltsm/packages/deb/) or CentOS 7.4 package [ltsm-0.7.2-1.x86_64.rpm](http://web-docs.gsi.de/~tstibor/ltsm/packages/rpm/). In addition you can build the rpm package
 yourself as follows
 ```
 git clone https://github.com/tstibor/ltsm && cd ltsm && ./autogen.sh && ./configure && make rpms

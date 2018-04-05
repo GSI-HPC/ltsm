@@ -63,5 +63,8 @@ rm -rf %{buildroot}
 
 %changelog
 
+* Thu Apr 5 2018 Thomas Stibor <t.stibor@gsi.de> 0.7.2-1
+- Introduce and conf file option setting and man page update and corrections.
+
 * Mon Dec 11 2017 Thomas Stibor <t.stibor@gsi.de> 0.7.1-1
 - Update systemd requirements and fix archive_id handling
