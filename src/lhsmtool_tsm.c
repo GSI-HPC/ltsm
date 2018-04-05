@@ -35,6 +35,7 @@
 #include <linux/limits.h>
 #include <sys/syscall.h>
 #include <sys/time.h>
+#include <sys/param.h>
 #include <lustre/lustreapi.h>
 #include "tsmapi.h"
 #include "queue.h"
@@ -61,6 +62,7 @@ struct options {
 	char o_password[DSM_MAX_VERIFIER_LENGTH + 1];
 	char o_fsname[DSM_MAX_FSNAME_LENGTH + 1];
 	char o_fstype[DSM_MAX_FSTYPE_LENGTH + 1];
+	char o_conf[MAX_OPTIONS_LENGTH + 1];
 };
 
 static struct options opt = {
@@ -71,6 +73,7 @@ static struct options opt = {
 	.o_password = {0},
 	.o_fsname = {0},
 	.o_fstype = {0},
+	.o_conf = {0}
 };
 
 /* Threads */
@@ -108,7 +111,7 @@ static void usage(const char *cmd_name, const int rc)
 		"\t-a, --archive-id <int> [default: 0]\n"
 		"\t\t""archive id number\n"
 		"\t-t, --threads <int>\n"
-		"\t\t""number of processing threads [default: 2]\n"
+		"\t\t""number of processing threads [default: %d]\n"
 		"\t-n, --node <string>\n"
 		"\t\t""node name registered on tsm server\n"
 		"\t-p, --password <string>\n"
@@ -117,6 +120,8 @@ static void usage(const char *cmd_name, const int rc)
 		"\t\t""owner of tsm node\n"
 		"\t-s, --servername <string>\n"
 		"\t\t""hostname of tsm server\n"
+		"\t-c, --conf <file>\n"
+		"\t\t""option conf file\n"
 		"\t-v, --verbose {error, warn, message, info, debug}"
 		" [default: message]\n"
 		"\t\t""produce more verbose output\n"
@@ -134,6 +139,7 @@ static void usage(const char *cmd_name, const int rc)
 		"IBM API application client version: %d.%d.%d.%d\n"
 		"version: %s © 2017 by GSI Helmholtz Centre for Heavy Ion Research\n",
 		cmd_name,
+		nthreads,
 		libapi_ver.version, libapi_ver.release, libapi_ver.level,
 		libapi_ver.subLevel,
 		appapi_ver.applicationVersion, appapi_ver.applicationRelease,
@@ -144,16 +150,128 @@ static void usage(const char *cmd_name, const int rc)
 
 static void sanity_arg_check(const struct options *opts, const char *argv)
 {
-	if (!strlen(opt.o_node)) {
+	if (!opt.o_node[0]) {
 		fprintf(stdout, "missing argument -n, --node <string>\n\n");
 		usage(argv, 1);
-	} else if (!strlen(opt.o_password)) {
+	} else if (!opt.o_password[0]) {
 		fprintf(stdout, "missing argument -p, --password <string>\n\n");
 		usage(argv, 1);
-	} else if (!strlen(opt.o_servername)) {
+	} else if (!opt.o_servername[0]) {
 		fprintf(stdout, "missing argument -s, --servername "
 			"<string>\n\n");
 		usage(argv, 1);
+	}
+}
+
+static int parse_archive_id(const char *arg)
+{
+	char *end = NULL;
+	int val = strtol(arg, &end, 10);
+	int rc = 0;
+
+	if (*end != '\0') {
+		rc = -EINVAL;
+		CT_ERROR(rc, "invalid archive-id: '%s'", arg);
+		return rc;
+	}
+	if ((opt.o_archive_cnt > LL_HSM_MAX_ARCHIVE) ||
+	    (val > LL_HSM_MAX_ARCHIVE)) {
+		rc = -EINVAL;
+		CT_ERROR(rc, "archive number must be less"
+			 " than %zu", LL_HSM_MAX_ARCHIVE + 1);
+		return rc;
+	}
+	opt.o_archive_id[opt.o_archive_cnt] = val;
+	opt.o_archive_cnt++;
+
+	return rc;
+}
+
+static int parse_nthreads(const char *arg)
+{
+	char *end = NULL;
+	int val = strtol(arg, &end, 10);
+	int rc = 0;
+
+	if (*end != '\0') {
+		rc = -EINVAL;
+		CT_ERROR(rc, "invalid number of threads: '%s'", arg);
+		return rc;
+	}
+	if (val <= 0) {
+		rc = -EINVAL;
+		CT_ERROR(rc, "number of threads must be greater than 0");
+		return rc;
+	}
+	nthreads = val;
+
+	return rc;
+}
+
+static void read_conf(const char *filename)
+{
+	int rc;
+	struct kv_opt kv_opt = {
+		.N	     = 0,
+		.kv	     = NULL
+	};
+
+	rc = parse_conf(filename, &kv_opt);
+	if (!rc) {
+		for (uint8_t n = 0; n < kv_opt.N; n++) {
+			if (OPTNCMP("servername", kv_opt.kv[n].key))
+				strncpy(opt.o_servername, kv_opt.kv[n].val,
+					MIN(DSM_MAX_SERVERNAME_LENGTH,
+					    MAX_OPTIONS_LENGTH));
+			else if (OPTNCMP("node", kv_opt.kv[n].key))
+				strncpy(opt.o_node, kv_opt.kv[n].val,
+					MIN(DSM_MAX_NODE_LENGTH,
+					    MAX_OPTIONS_LENGTH));
+			else if (OPTNCMP("owner", kv_opt.kv[n].key))
+				strncpy(opt.o_owner, kv_opt.kv[n].val,
+					MIN(DSM_MAX_OWNER_LENGTH,
+					    MAX_OPTIONS_LENGTH));
+			else if (OPTNCMP("password", kv_opt.kv[n].key))
+				strncpy(opt.o_password, kv_opt.kv[n].val,
+					MIN(DSM_MAX_VERIFIER_LENGTH,
+					    MAX_OPTIONS_LENGTH));
+			else if (OPTNCMP("archive-id", kv_opt.kv[n].key)) {
+				rc = parse_archive_id(kv_opt.kv[n].val);
+				if (rc)
+					CT_WARN("wrong value '%s' for option "
+						"'%s' in conf file '%s'",
+						kv_opt.kv[n].val,
+						kv_opt.kv[n].key,
+						filename);
+			}
+			else if (OPTNCMP("threads", kv_opt.kv[n].key)) {
+				rc = parse_nthreads(kv_opt.kv[n].val);
+				if (rc)
+					CT_WARN("wrong value '%s' for option "
+						"'%s' in conf file '%s'",
+						kv_opt.kv[n].val,
+						kv_opt.kv[n].key,
+						filename);
+			}
+			else if (OPTNCMP("verbose", kv_opt.kv[n].key)) {
+				rc = parse_verbose(kv_opt.kv[n].val,
+						   &opt.o_verbose);
+				if (rc)
+					CT_WARN("wrong value '%s' for option '%s'"
+						" in conf file '%s'",
+						kv_opt.kv[n].val, kv_opt.kv[n].key,
+						filename);
+			} else
+				CT_WARN("unknown option value '%s %s' in conf"
+					" file '%s'", kv_opt.kv[n].key,
+					kv_opt.kv[n].val, filename);
+		}
+	}
+
+	if (kv_opt.kv) {
+		free(kv_opt.kv);
+		kv_opt.kv = NULL;
+		kv_opt.N = 0;
 	}
 }
 
@@ -168,6 +286,7 @@ static int ct_parseopts(int argc, char *argv[])
 		{"password",       required_argument, 0,                   'p'},
 		{"owner",          required_argument, 0,                   'o'},
 		{"servername",     required_argument, 0,                   's'},
+		{"conf",	   required_argument, 0,		   'c'},
 		{"verbose",        required_argument, 0,                   'v'},
 		{"dry-run",	   no_argument,	      &opt.o_dry_run,        1},
 		{"restore-stripe", no_argument,	      &opt.o_restore_stripe, 1},
@@ -178,32 +297,19 @@ static int ct_parseopts(int argc, char *argv[])
 	int c, rc;
 	optind = 0;
 
-	while ((c = getopt_long(argc, argv, "a:t:n:p:o:s:v:h",
+	while ((c = getopt_long(argc, argv, "a:t:n:p:o:s:c:v:h",
 				long_opts, NULL)) != -1) {
 		switch (c) {
 		case 'a': {
-			char *end = NULL;
-			int val = strtol(optarg, &end, 10);
-
-			if (*end != '\0') {
-				rc = -EINVAL;
-				CT_ERROR(rc, "invalid archive-id: '%s'",
-					 optarg);
+			rc = parse_archive_id(optarg);
+			if (rc)
 				return rc;
-			}
-			if ((opt.o_archive_cnt > LL_HSM_MAX_ARCHIVE) ||
-			    (val > LL_HSM_MAX_ARCHIVE)) {
-				rc = -EINVAL;
-				CT_ERROR(rc, "archive number must be less"
-					 " than %zu", LL_HSM_MAX_ARCHIVE + 1);
-				return rc;
-			}
-			opt.o_archive_id[opt.o_archive_cnt] = val;
-			opt.o_archive_cnt++;
 			break;
 		}
 		case 't': {
-			nthreads = atoi(optarg);
+			rc = parse_nthreads(optarg);
+			if (rc)
+				return rc;
 			break;
 		}
 		case 'n': {
@@ -222,6 +328,10 @@ static int ct_parseopts(int argc, char *argv[])
 		case 's': {
 			strncpy(opt.o_servername, optarg,
 				DSM_MAX_SERVERNAME_LENGTH);
+			break;
+		}
+		case 'c': {
+			read_conf(optarg);
 			break;
 		}
 		case 'v': {

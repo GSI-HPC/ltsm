@@ -277,6 +277,29 @@ void set_restore_stripe(const dsBool_t _restore_stripe)
 	restore_stripe = _restore_stripe;
 }
 
+int parse_verbose(const char *val, int *opt_verbose)
+{
+	if (!val)
+		return -EINVAL;
+
+	if (OPTNCMP("error", val))
+		*opt_verbose = API_MSG_ERROR;
+	else if (OPTNCMP("warn", val))
+		*opt_verbose = API_MSG_WARN;
+	else if (OPTNCMP("message", val))
+		*opt_verbose = API_MSG_NORMAL;
+	else if (OPTNCMP("info", val))
+		*opt_verbose = API_MSG_INFO;
+	else if (OPTNCMP("debug", val))
+		*opt_verbose = API_MSG_DEBUG;
+	else
+		return -EINVAL;
+
+	api_msg_set_level(*opt_verbose);
+
+	return 0;
+}
+
 /**
  * @brief Convert TSM dsmDate to string.
  *

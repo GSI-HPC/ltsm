@@ -101,28 +101,6 @@ static void usage(const char *cmd_name, const int rc)
 	exit(rc);
 }
 
-static int set_verbose(const char *val)
-{
-	if (!val)
-		return -EINVAL;
-
-	if (OPTNCMP("error", val))
-		opt.o_verbose = API_MSG_ERROR;
-	else if (OPTNCMP("warn", val))
-		opt.o_verbose = API_MSG_WARN;
-	else if (OPTNCMP("message", val))
-		opt.o_verbose = API_MSG_NORMAL;
-	else if (OPTNCMP("info", val))
-		opt.o_verbose = API_MSG_INFO;
-	else if (OPTNCMP("debug", val))
-		opt.o_verbose = API_MSG_DEBUG;
-	else
-		return -EINVAL;
-
-	api_msg_set_level(opt.o_verbose);
-	return 0;
-}
-
 static void read_conf(const char *filename)
 {
 	int rc;
@@ -155,7 +133,8 @@ static void read_conf(const char *filename)
 					MIN(DSM_MAX_FSNAME_LENGTH,
 					    MAX_OPTIONS_LENGTH));
 			else if (OPTNCMP("verbose", kv_opt.kv[n].key)) {
-				rc = set_verbose(kv_opt.kv[n].val);
+				rc = parse_verbose(kv_opt.kv[n].val,
+						   &opt.o_verbose);
 				if (rc)
 					CT_WARN("wrong value '%s' for option '%s'"
 						" in conf file '%s'",
@@ -296,7 +275,7 @@ static int parseopts(int argc, char *argv[])
 			break;
 		}
 		case 'v': {
-			int rc = set_verbose(optarg);
+			int rc = parse_verbose(optarg, &opt.o_verbose);
 			if (rc) {
 				CT_ERROR(0, "wrong argument for -v, "
 					 "--verbose '%s'", optarg);

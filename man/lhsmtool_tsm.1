@@ -1,4 +1,4 @@
-.TH lhsmtool_tsm 1 "September 2017" Lustre "user utilities"
+.TH lhsmtool_tsm 1 "April 2018" Lustre "user utilities"
 .SH NAME
 lhsmtool_tsm \- Lustre copytool for TSM storage
 .SH SYNOPSIS
@@ -39,6 +39,10 @@ update node <NODENAME> maxnummp=\fICOUNT\fR, otherwise the TSM server will reply
 error message: "This node has exceeded its maximum number of mount points" and will fail
 in processing the HSM action items.
 .TP
+.BR \-c ", " \-\-conf =\fIFILE\fR
+Read conf \fIFILE\fR with options: \fIservername\fR, \fInode\fR, \fIowner\fR, \fIpassword\fR, \fIarchive-id\fR, \fIthreads\fR and \fIverbose\fR.
+Syntax in conf \fIFILE\fR is \fIoption\fR \fIvalue\fR where separators are whitespace(s) and tabulator(s). The character # is treated as a comment and strings after character # are ignored.
+.TP
 .BR \-\-abort-on-error
 Abort operation of major error.
 .TP
@@ -52,7 +56,7 @@ Don't run. Just show what would be done.
 Restore Lustre stripe information in retrieve.
 .TP
 .BR \-v ", " \-\-verbose =\fIerror\fR|\fIwarn\fR|\fImessage\fR|\fIinfo\fR|\fIdebug\fR
-Causes ltsmc to be more verbose in printing messages. Default is \fImessage\fR.
+Causes lhsmtool_tsm to be more verbose in printing messages. Default is \fImessage\fR.
 .TP
 .BR \-h ", " \-\-help
 Display help and exit.

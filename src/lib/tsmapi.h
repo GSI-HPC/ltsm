@@ -164,6 +164,7 @@ void set_recursive(const dsBool_t recursive);
 void select_latest(const dsBool_t latest);
 void set_prefix(const char *_prefix);
 void set_restore_stripe(const dsBool_t _restore_stripe);
+int parse_verbose(const char *val, int *opt_verbose);
 
 void login_fill(struct login_t *login, const char *servername,
 		const char *node, const char *password,
