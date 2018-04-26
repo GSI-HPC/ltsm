@@ -15,8 +15,9 @@ sync && sleep 1
 /opt/tivoli/tsm/db2/bin/db2 update dbm cfg using dftdbpath ${HOME}/tsminst1
 sync && sleep 1
 
-echo "DEVCONFIG /home/tsminst1/tsminst1/devconf.dat" >> ${HOME}/tsminst1/dsmserv.opt           
+echo "DEVCONFIG /home/tsminst1/tsminst1/devconf.dat" >> ${HOME}/tsminst1/dsmserv.opt
 echo "VOLUMEHISTORY /home/tsminst1/tsminst1/volhist.dat" >> ${HOME}/tsminst1/dsmserv.opt
+echo "SANDISCOVERY ON" >> ${HOME}/tsminst1/dsmserv.opt
 
 cat >${HOME}/.profile <<EOF
 if [ -f /home/tsminst1/sqllib/db2profile ]; then
@@ -42,5 +43,3 @@ export DSMI_CONFIG=${HOME}/tsminst1/tsmdbmgr.opt
 export DSMI_DIR=/opt/tivoli/tsm/client/api/bin64
 export DSMI_LOG=${HOME}/tsminst1
 EOF
-
-
