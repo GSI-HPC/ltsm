@@ -660,7 +660,7 @@ static void display_qra(const qryRespArchiveData *qra_data, const uint32_t n,
 
 	if (api_msg_get_level() == API_MSG_NORMAL) {
 		fprintf(stdout, "%s %16s %20s %14zu, fs:%s hl:%s ll:%s "
-			"crc32:%x\n",
+			"crc32:0x%08x\n",
 			msg,
 			ins_str_date,
 			OBJ_TYPE(qra_data->objName.objType),
