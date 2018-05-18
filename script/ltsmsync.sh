@@ -1,7 +1,7 @@
 #!/bin/bash
 # Title       : ltsmsync.sh
-# Date        : Mon 23 Apr 2018 11:57:22 AM CEST
-# Version     : 0.0.3
+# Date        : Fri 18 May 2018 12:20:41 PM CEST
+# Version     : 0.0.4
 # Author      : "Thomas Stibor" <t.stibor@gsi.de>
 # Description : Query TSM server and create from the query result empty files
 #               with appropriate Lustre HSM flags. Subsequent files access, transparently
@@ -16,8 +16,8 @@ LFS_BIN="/usr/bin/lfs"
 LTSMC_BIN="/usr/bin/ltsmc"
 
 # Default arguments.
-FSPACE="/lustre"
-SERVERNAME="lxltsm01-failover"
+FSPACE="/lustre/hebe"
+SERVERNAME="myltsm01"
 NODE=""
 PASSWORD=""
 OWNER=""
@@ -25,8 +25,8 @@ JOBS=4
 
 __usage() {
     echo -e "usage: ${0} <LUSTRE_DIRECTORY>\n" \
-	 "\t-f, --filespace <string> [default: /lustre]\n" \
-	 "\t-s, --servername <string> [default: lxltsm01-failover]\n" \
+	 "\t-f, --filespace <string> [default: ${FSPACE}]\n" \
+	 "\t-s, --servername <string> [default: ${SERVERNAME}]\n" \
 	 "\t-n, --node <string>\n" \
 	 "\t-p, --password <string>\n" \
 	 "\t-o, --owner <string>\n" \
@@ -36,6 +36,26 @@ __usage() {
 
 __check_bin() {
     [[ ! -f ${1} ]] && { echo "cannot find executable file ${1}"; exit 1; }
+}
+
+__job_limit () {
+    # Test for single positive integer input.
+    if (( $# == 1 )) && [[ $1 =~ ^[1-9][0-9]*$ ]]
+    then
+	# Check number of running jobs.
+	joblist=($(jobs -rp))
+	while (( ${#joblist[*]} >= $1 ))
+	do
+	    # Wait for any job to finish
+	    command='wait '${joblist[0]}
+	    for job in ${joblist[@]:1}
+	    do
+		command+=' || wait '$job
+	    done
+	    eval $command
+	    joblist=($(jobs -rp))
+	done
+    fi
 }
 
 __retrieve_file() {
@@ -147,10 +167,11 @@ FILE_LIST=`${LTSMC_BIN} -f ${FSPACE} --query \
 
 for f in ${FILE_LIST}
 do
-    __retrieve_file "${f}" &
-    if (( $(($((++n)) % ${JOBS})) == 0 )) ; then
-        wait -n
+    # TODO: If file has incorrect CRC32, retrieve it.
+    if [[ ! -f ${f} ]]; then
+	( __retrieve_file "${f}" ) &
     fi
+    __job_limit ${JOBS}
 done
 
 wait
