@@ -62,16 +62,6 @@ __job_limit() {
     fi
 }
 
-__crc32_equal() {
-
-    [[ "$#" -ne 2 ]] && { echo "wrong number of arguments"; exit 1; }
-
-    local file_crc="`${LTSMC_BIN} --checksum ${1} | awk '{print $2}'`"
-    local parm_crc="${2}"
-
-    [[ "${file_crc}"  == "${parm_crc}" ]] && { echo 0; } || { echo 1; }
-}
-
 __retrieve_file() {
 
     [[ "$#" -ne 2 ]] && { echo "wrong number of arguments"; exit 1; }
