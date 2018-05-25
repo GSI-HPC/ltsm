@@ -1,7 +1,7 @@
 #!/bin/bash
 # Title       : ltsmsync.sh
-# Date        : Fri 18 May 2018 12:20:41 PM CEST
-# Version     : 0.0.4
+# Date        : Fri 25 May 2018 02:23:48 PM CEST
+# Version     : 0.0.5
 # Author      : "Thomas Stibor" <t.stibor@gsi.de>
 # Description : Query TSM server and create from the query result empty files
 #               with appropriate Lustre HSM flags. Subsequent files access, transparently
@@ -16,12 +16,14 @@ LFS_BIN="/usr/bin/lfs"
 LTSMC_BIN="/usr/bin/ltsmc"
 
 # Default arguments.
-FSPACE="/lustre/hebe"
-SERVERNAME="myltsm01"
+FSPACE="/"
+SERVERNAME=""
 NODE=""
 PASSWORD=""
 OWNER=""
+ARCHIVE_ID=0
 JOBS=4
+DRY_RUN=0
 
 __usage() {
     echo -e "usage: ${0} <LUSTRE_DIRECTORY>\n" \
@@ -30,7 +32,9 @@ __usage() {
 	 "\t-n, --node <string>\n" \
 	 "\t-p, --password <string>\n" \
 	 "\t-o, --owner <string>\n" \
-	 "\t-j, --jobs <int> [default: 4]\n"
+	 "\t-a, --archive-id <int> [default: ${ARCHIVE_ID}]\n" \
+	 "\t-j, --jobs <int> [default: ${JOBS}]\n" \
+	 "\t-d, --dry-run\n"
     exit 1
 }
 
@@ -38,7 +42,7 @@ __check_bin() {
     [[ ! -f ${1} ]] && { echo "cannot find executable file ${1}"; exit 1; }
 }
 
-__job_limit () {
+__job_limit() {
     # Test for single positive integer input.
     if (( $# == 1 )) && [[ $1 =~ ^[1-9][0-9]*$ ]]
     then
@@ -58,11 +62,22 @@ __job_limit () {
     fi
 }
 
+__crc32_equal() {
+
+    [[ "$#" -ne 2 ]] && { echo "wrong number of arguments"; exit 1; }
+
+    local file_crc="`${LTSMC_BIN} --checksum ${1} | awk '{print $2}'`"
+    local parm_crc="${2}"
+
+    [[ "${file_crc}"  == "${parm_crc}" ]] && { echo 0; } || { echo 1; }
+}
+
 __retrieve_file() {
 
-    [[ -z ${1} ]] && { echo "no argument provided"; exit 1; }
+    [[ "$#" -ne 2 ]] && { echo "wrong number of arguments"; exit 1; }
 
-    local f=${1}
+    local f=${1}		# Filename.
+    local i=${2}		# Archive ID.
     local rc=1
 
     DIR=`dirname ${f}`
@@ -71,7 +86,7 @@ __retrieve_file() {
     fi
     if [[ ! -f ${f} ]]; then
 	touch ${f} || exit 1
-	sudo ${LFS_BIN} hsm_set --exists --archived ${f} || exit 1
+	sudo ${LFS_BIN} hsm_set --exists --archived --archive-id ${i} ${f} || exit 1
 	${LFS_BIN} hsm_release ${f} || exit 1
 	# Comment out the line below for creating an empty HSM released file.
 	head --bytes=1 ${f} > /dev/null
@@ -134,9 +149,16 @@ case $arg in
 	OWNER="$2"
 	shift
 	;;
+    -a|--archive-id)
+	ARCHIVE_ID="$2"
+	shift
+	;;
     -j|--jobs)
 	JOBS="$2"
 	shift
+	;;
+    -d|--dry-run)
+	DRY_RUN=1
 	;;
     *)
 	echo "unknown argument $2"
@@ -161,17 +183,36 @@ LUSTRE_DIR="$@"
 FILE_LIST=`${LTSMC_BIN} -f ${FSPACE} --query \
 	     --servername ${SERVERNAME} -n ${NODE} \
 	     --password ${PASSWORD} "${LUSTRE_DIR}" -v message \
-    | awk '{gsub(/^fs:/, "", $6); gsub(/^hl:/, "", $7); gsub(/^ll:/, "", $8); print $6 $7 $8}'`
+	     | awk '{gsub(/^fs:/, "", $6); gsub(/^hl:/, "", $7); gsub(/^ll:/, "", $8); gsub(/^crc32:/, "@", $9); print $6 $7 $8 $9}'`
 
 [[ -z ${FILE_LIST} ]] && { echo "no files found on TSM server"; exit 1; }
 
 for f in ${FILE_LIST}
 do
-    # TODO: If file has incorrect CRC32, retrieve it.
-    if [[ ! -f ${f} ]]; then
-	( __retrieve_file "${f}" ) &
+    # Split ${f} in filename ${FILE_AND_CRC[0]} and crc32 ${FILE_AND_CRC[1]}
+    FILE_AND_CRC=(${f//@/ })
+
+    # File does not exist, retrieve it.
+    if [[ ! -f ${FILE_AND_CRC[0]} ]]; then
+	if [[ ${DRY_RUN} -eq 1 ]]; then
+	    echo "__retrieve_file '${FILE_AND_CRC[0]}'"
+	else
+	    ( __retrieve_file "${FILE_AND_CRC[0]}" ) &
+	fi
+    # File exists, check whether crc32 matches with those stored on TSM server.
+    else
+	file_crc32="`${LTSMC_BIN} --checksum ${FILE_AND_CRC[0]} | awk '{print $2}'`"
+	if [[ "${file_crc32}"  != "${FILE_AND_CRC[1]}" ]]; then
+	    echo "crc32 mismatch of file ${FILE_AND_CRC[0]} (${FILE_AND_CRC[1]},${file_crc32})"
+	    if [[ ${DRY_RUN} -eq 1 ]]; then
+		echo "__retrieve_file '${FILE_AND_CRC[0]}'"
+	    else
+		( __retrieve_file "${FILE_AND_CRC[0]}" ) &
+	    fi
+	else
+	    echo "crc32 matches for file ${FILE_AND_CRC[0]} (${FILE_AND_CRC[1]},${file_crc32})"
+	fi
     fi
     __job_limit ${JOBS}
 done
 
-wait
