@@ -1,7 +1,7 @@
 #!/bin/bash
 # Title       : ltsmsync.sh
-# Date        : Fri 25 May 2018 02:23:48 PM CEST
-# Version     : 0.0.5
+# Date        : Fri 25 May 2018 03:30:44 PM CEST
+# Version     : 0.0.6
 # Author      : "Thomas Stibor" <t.stibor@gsi.de>
 # Description : Query TSM server and create from the query result empty files
 #               with appropriate Lustre HSM flags. Subsequent files access, transparently
@@ -185,9 +185,9 @@ do
     # File does not exist, retrieve it.
     if [[ ! -f ${FILE_AND_CRC[0]} ]]; then
 	if [[ ${DRY_RUN} -eq 1 ]]; then
-	    echo "__retrieve_file '${FILE_AND_CRC[0]}'"
+	    echo "__retrieve_file '${FILE_AND_CRC[0]}' '${ARCHIVE_ID}'"
 	else
-	    ( __retrieve_file "${FILE_AND_CRC[0]}" ) &
+	    ( __retrieve_file "${FILE_AND_CRC[0]}" "${ARCHIVE_ID}" ) &
 	fi
     # File exists, check whether crc32 matches with those stored on TSM server.
     else
@@ -195,12 +195,12 @@ do
 	if [[ "${file_crc32}"  != "${FILE_AND_CRC[1]}" ]]; then
 	    echo "crc32 mismatch of file ${FILE_AND_CRC[0]} (${FILE_AND_CRC[1]},${file_crc32})"
 	    if [[ ${DRY_RUN} -eq 1 ]]; then
-		echo "__retrieve_file '${FILE_AND_CRC[0]}'"
+		echo "__retrieve_file '${FILE_AND_CRC[0]}' '${ARCHIVE_ID}'"
 	    else
-		( __retrieve_file "${FILE_AND_CRC[0]}" ) &
+		( __retrieve_file "${FILE_AND_CRC[0]}" "${ARCHIVE_ID}" ) &
 	    fi
 	else
-	    echo "crc32 matches for file ${FILE_AND_CRC[0]} (${FILE_AND_CRC[1]},${file_crc32})"
+	    echo "file already exists ${FILE_AND_CRC[0]} and has valid crc32 (${FILE_AND_CRC[1]},${file_crc32})"
 	fi
     fi
     __job_limit ${JOBS}
