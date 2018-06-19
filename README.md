@@ -15,7 +15,7 @@ This project consists of *four* parts:
 Lustre has since version 2.5 hierarchical storage management (HSM) capabilities, that is, data can be automatically
 *archived* to low-cost storage media such as tape storage systems and seamlessly *retrieved* when accessing the data on Lustre clients. The Lustre HSM capabilities can be illustrated by means of state diagrams and the related Lustre commands
 *lfs hsm_archive*, *lfs hsm_release*, *lfs hsm_restore* as depicted below.
-![Statediagram](http://web-docs.gsi.de/~tstibor/ltsm/state.diagram.png)
+![Statediagram](https://raw.githubusercontent.com/tstibor/ltsm.github.io/master/doc/images/state.diagram.png)
 The initial state is a *new file*. Once the file is archived, it
 changes into state *archived* and a identical copy exists on the HSM storage. If the archived file is modified, then the state
 changes to *dirty*. As a consequence, one has to re-archive the file to reobtain an identical copy on the Lustre side as well
@@ -31,7 +31,7 @@ When the *archived* data is accessed, the bulk data is seamlessly copied from th
 file system. In summary, the data is still available regardless of where it is actually stored.
 For providing such a functionality, the HSM framework is embedded in the main Lustre components and explained
 for the case of *retrieving* data in the Figure below.
-![HSMArchitecture](http://web-docs.gsi.de/~tstibor/ltsm/hsm.architecture.png)
+![HSMArchitecture](https://raw.githubusercontent.com/tstibor/ltsm.github.io/master/doc/images/hsm.architecture.png)
 Triggered actions and data flows for retrieving data inside the Lustre HSM framework.
 The participating nodes (depicted as dashed frames) are: Client, MDS, OSS, Copytool, Storage. The Lustre client opens a file which is already archived, thus the bulk data is not available on any OST. The MDT node receives the open call, allocate objects on the OST and notifies the HSM coordinator to copy in data for file indentifier (short FID) of the corresponding file. The copytool receives from the HSM coordinator the event to copyin data of FID and notifies the internal data mover for retrieving the data stored on the storage node and copy it over to a OST. Once the copy process is completed, the data mover notifies the HSM agent with a copydone message and the HSM agent finalizes the process with a HSM copydone message back to the MDT node.
 
@@ -49,11 +49,11 @@ The core capabilities and features of a TSM server are:
 * Storage hierarchies: Automatically move data from faster devices to slower devices based on characteristics such as file size or storage capacity.
 
 The last issue is a crucial feature for the Lustre HSM framework, as it enables effectively archiving and retrieving data to fast devices, rather than being tied up to slow but large and cheap devices (see Fig. below).
-![fig:storage.hierarchy](http://web-docs.gsi.de/~tstibor/ltsm/storage.hierarchy.png)
+![fig:storage.hierarchy](https://raw.githubusercontent.com/tstibor/ltsm.github.io/master/doc/images/storage.hierarchy.png)
 Storage hierarchy of a TSM server. Fast but limited space storage devices (high cost per GByte) are located at the
 top of the pyramid, whereas slower but large space storage devices (low cost per GByte) are located at the bottom.
 Fast storage devices act as a *cache* layer, where data in automatically migrated by the TSM server based on access pattern and
-space occupation level. More details can be found in [IBM Tivoli Storage Manager Implementation Guide (pp. 257)](http://web-docs.gsi.de/~tstibor/tsm/doc/ibm_tivoli_storage_management_implementation_guide.pdf#page=287).
+space occupation level. More details can be found in [IBM Tivoli Storage Manager Implementation Guide (pp. 257)](https://github.com/tstibor/ltsm.github.io/raw/master/doc/tsm/ibm_tivoli_storage_management_implementation_guide.pdf#page=287).
 
 Denote r<sub>1</sub> the transfer rate to (fast) storage devices s<sub>1</sub> and r<sub>2</sub> the transfer rate to (slow) storage devices s<sub>2</sub>.
 Make sure to set the migration threshold t from s<sub>1</sub> to s<sub>2</sub> to a proper value which suits your use case.
@@ -73,7 +73,7 @@ name associated with it that is determined by the client. The object name is com
 and must be specified to identify the object for operations query, archive, retrieve and delete. In addition to determined TSM
 metadata information, user defined metadata can be stored on the TSM server of size up to 255 bytes. The user defined space is
 employed to store Lustre information as well as a CRC32 check-sum and a magic id (see Fig. below).
-![](http://web-docs.gsi.de/~tstibor/ltsm/object.meta.data.png)
+![](https://raw.githubusercontent.com/tstibor/ltsm.github.io/master/doc/images/object.meta.data.png)
 
 # Copytool
 As described above, a *copytool* is composed of a HSM proxy and data mover that runs on the same node. Loosely speaking, the
@@ -81,7 +81,7 @@ copytool receives archive, retrieve and delete actions from MDT node and trigger
 daemon process that requires a Lustre mount point for accessing Lustre files and processes actions *HSMA_ARCHIVE*, *HSMA_RESTORE*,
 *HSMA_REMOVE* and *HSMA_CANCEL* as depicted below.
 
-![](http://web-docs.gsi.de/~tstibor/ltsm/source.core.overview.png)
+![](https://raw.githubusercontent.com/tstibor/ltsm.github.io/master/doc/images/source.core.overview.png)
 
 The functions *ct_archive(session)*, *ct_restore(session)* and *ct_remove(session)* implement the core actions for accessing named objects and for transferring data between the Lustre mount point and the TSM storage.
 
@@ -90,7 +90,7 @@ For achieving high data throughput by means of parallelism the copytool employs 
 structure of the model is a concurrent queue. The producer is a single thread receiving HSM action items from the MDS’s and
 enqueues the items in the queue. There are multiple consumer threads, each having a session opened to the TSM server, which are
 dequeueing items and executing the HSM actions (see Fig. below).
-![](http://web-docs.gsi.de/~tstibor/ltsm/produce.consumer.model.png)
+![](https://raw.githubusercontent.com/tstibor/ltsm.github.io/master/doc/images/produce.consumer.model.png)
 
 Overview of a single-producer multiple-consumer model for a produce thread (P-Thread) and four consumer threads
 (C-Threads). Three C-Threads dequeued HSM action items and are executing the actions. The P-Thread received from the MDS
@@ -100,7 +100,7 @@ will be notified to dequeue and execute new HSM action.
 # Getting Started <a id="getting.started"></a>
 Before using LTSM a working access to a TSM server is required. One can install for testing purposes a fully working
 TSM server (e.g. inside a KVM) for a period of 30 days before the license expires. A complete installation and setup guide is provided
-at [TSM Server Installation Guide](http://web-docs.gsi.de/~tstibor/tsm/).
+at [TSM Server Installation Guide](https://github.com/tstibor/ltsm.github.io/tree/master/doc/tutorial).
 Download and install the TSM API client provided at [7.1.X.Y-TIV-TSMBAC-LinuxX86_DEB.tar](http://ftp.software.ibm.com/storage/tivoli-storage-management/maintenance/client/v7r1/Linux/LinuxX86_DEB/BA/).
 Make sure to install `tivsm-api64.amd64.deb` where the header files `dapitype.h, dsmapips.h, ...` and the low-level library `libApiTSM64.so` are provided.
 
@@ -137,7 +137,7 @@ If *required* TSM and *optional* Lustre header files and libraries are found the
 
 ### Install or Build DEB/RPM Package
 
-Download and install already built Debian Jessie package [ltsm_0.7.2_amd64.deb](http://web-docs.gsi.de/~tstibor/ltsm/packages/deb/) or CentOS 7.4 package [ltsm-0.7.2-1.x86_64.rpm](http://web-docs.gsi.de/~tstibor/ltsm/packages/rpm/). In addition you can build the rpm package
+Download and install already built Debian Jessie package [ltsm_0.7.2_amd64.deb](https://github.com/tstibor/ltsm.github.io/tree/master/packages/deb) or CentOS 7.4 package [ltsm-0.7.2-1.x86_64.rpm](https://github.com/tstibor/ltsm.github.io/tree/master/packages/rpm). In addition you can build the rpm package
 yourself as follows
 ```
 git clone https://github.com/tstibor/ltsm && cd ltsm && ./autogen.sh && ./configure && make rpms
@@ -190,7 +190,7 @@ version: 0.5.7-5 © 2017 by GSI Helmholtz Centre for Heavy Ion Research
 ```
 
 Starting the *copytool* with 4 threads and *archive_id=1* works as follows `./src/lhsmtool_tsm --restore-stripe -a 1 -v debug -n polaris -p polaris -s 'polaris-kvm-tsm-server' -t 4 /lustre` where
-parameters, *-n = nodename*, *-p = password* and *-s = servername* have to match with those setup on the TSM Server (see [TSM Server Installation Guide](http://web-docs.gsi.de/~tstibor/tsm/)).
+parameters, *-n = nodename*, *-p = password* and *-s = servername* have to match with those setup on the TSM Server (see [TSM Server Installation Guide](https://github.com/tstibor/ltsm.github.io/tree/master/doc/tutorial)).
 ```
 [DEBUG] 1509708481.724705 [15063] lhsmtool_tsm.c:262 using TSM filespace name '/lustre'
 [DEBUG] 1509708481.743621 [15063] tsmapi.c:739 dsmSetUp: handle: 0 ANS0302I (RC0)    Successfully done.
@@ -368,13 +368,13 @@ vs 4 threads
 [measurement]	'tsm_retrieve_fpath' processed 536870912 bytes in 5.260 secs (102.070 Mbytes / sec)
 ```
 
-For more TSM server/client tuning tips see [Tips for Tivoli Storage Manager Performance Tuning and Troubleshooting](http://web-docs.gsi.de/~tstibor/tsm/doc/tips.for.tivoli.storage.manager.performance.tuning.and.troubleshooting.pdf)
+For more TSM server/client tuning tips see [Tips for Tivoli Storage Manager Performance Tuning and Troubleshooting](https://github.com/tstibor/ltsm.github.io/raw/master/doc/tsm/tips.for.tivoli.storage.manager.performance.tuning.and.troubleshooting.pdf)
 
 ## Performace Measurement over 10GBit Network
 By means of *ltsmbench* the archive and retrieve performance is measured from a ltsm machine to a TSM server. The TSM server is equipped with SSD's bundled into a hardware RAID-5 where the TSM database and transactions logs are located.
 The TSM bulk data is placed on regular disks bundled into a hardware RAID-6 device. The archive and retrieve performance for increasing number of threads  {1,2,..,16} is visualized as a [Box-Whisker-Plot](https://en.wikipedia.org/wiki/Box_plot).
-![Archive performace](http://web-docs.gsi.de/~tstibor/ltsm/perf.meas.arch.png)
-![Retrieve performace](http://web-docs.gsi.de/~tstibor/ltsm/perf.meas.retr.png)
+![Archive performace](https://raw.githubusercontent.com/tstibor/ltsm.github.io/master/doc/images/perf.meas.arch.png)
+![Retrieve performace](https://raw.githubusercontent.com/tstibor/ltsm.github.io/master/doc/images/perf.meas.retr.png)
 
 ## Scaling
 The Lustre file system can be bond to *multiple* HSM storage backends, where each bond is identified by
@@ -383,14 +383,14 @@ In the simplest case, only one copytool instance is started which handles
 all archive id's in the range {1,2,...,32}. That is, all data is transferred through a single TSM Server though
 with multi-threaded access. In the full expanded parallel setup 32 TSM servers can be leveraged for data
 transfer as depicted below.
-![Archive performace](http://web-docs.gsi.de/~tstibor/ltsm/scaling.png)
+![Archive performace](https://raw.githubusercontent.com/tstibor/ltsm.github.io/master/doc/images/scaling.png)
 
 ## More Information
 In the manual pages [lhsmtool_tsm.1](http://github.com/tstibor/ltsm/blob/master/man/lhsmtool_tsm.1) and [ltsmc.1](http://github.com/tstibor/ltsm/blob/master/man/ltsmc.1) usage details and options of *lhsmtool_tsm* and *ltsmc*
-are provided. In addition, a [screencast](http://web-docs.gsi.de/~tstibor/tsm/ltsm-screencast-2.mp4) of an older version of this project is provided.
+are provided. In addition, a [screencast](https://github.com/tstibor/ltsm.github.io/raw/master/screencast/ltsm-screencast-2.mp4) of an older version of this project is provided.
 
 ## References
-A thorough description and code examples of IBM's low-level TSM API/library can be found in the open document [Using the Application Programming Interface](http://web-docs.gsi.de/~tstibor/tsm/doc/using_the_programming_application_interface.pdf), Fourth edition (September 2015).
+A thorough description and code examples of IBM's low-level TSM API/library can be found in the open document [Using the Application Programming Interface](https://github.com/tstibor/ltsm.github.io/raw/master/doc/tsm/using_the_programming_application_interface.pdf), Fourth edition (September 2015).
 
 ## Funding
 This project is funded by Intel® through GSI's [Intel® Parallel Computing Centers](https://software.intel.com/en-us/ipcc/)
