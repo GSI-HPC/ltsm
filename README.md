@@ -27,7 +27,7 @@ The aim of the Lustre HSM framework is to provide an interface for seamlessly *a
 longer used, and place them into a long term retrievable archive storage (such as tape drives).
 The meta information of the *archived* data such as the file name, user id, etc. is however still
 present in the Lustre file system, whereas the bulk data is placed on the retrievable storage.
-When the *archived* data is accessed, the bulk data is seamlessly copied from the retrievable storage back to the Lustre
+When the *released* data is accessed, the bulk data is seamlessly copied from the retrievable storage back to the Lustre
 file system. In summary, the data is still available regardless of where it is actually stored.
 For providing such a functionality, the HSM framework is embedded in the main Lustre components and explained
 for the case of *retrieving* data in the Figure below.
