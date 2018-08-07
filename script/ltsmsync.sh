@@ -1,7 +1,7 @@
 #!/bin/bash
 # Title       : ltsmsync.sh
-# Date        : Fri 25 May 2018 03:30:44 PM CEST
-# Version     : 0.0.6
+# Date        : Thu 09 Aug 2018 01:13:16 PM CEST
+# Version     : 0.0.7
 # Author      : "Thomas Stibor" <t.stibor@gsi.de>
 # Description : Query TSM server and create from the query result empty files
 #               with appropriate Lustre HSM flags. Subsequent files access, transparently
@@ -24,6 +24,7 @@ OWNER=""
 ARCHIVE_ID=0
 JOBS=4
 DRY_RUN=0
+DAYS_AGO=10950
 
 __usage() {
     echo -e "usage: ${0} <LUSTRE_DIRECTORY>\n" \
@@ -34,7 +35,8 @@ __usage() {
 	 "\t-o, --owner <string>\n" \
 	 "\t-a, --archive-id <int> [default: ${ARCHIVE_ID}]\n" \
 	 "\t-j, --jobs <int> [default: ${JOBS}]\n" \
-	 "\t-d, --dry-run\n"
+	 "\t-d, --dry-run\n" \
+	 "\t-y, --days-ago <int> [default: ${DAYS_AGO}]\n"
     exit 1
 }
 
@@ -150,6 +152,10 @@ case $arg in
     -d|--dry-run)
 	DRY_RUN=1
 	;;
+    -y|--days-ago)
+	DAYS_AGO="$2"
+	shift
+	;;
     *)
 	echo "unknown argument $2"
 	__usage
@@ -170,9 +176,10 @@ LUSTRE_DIR="$@"
 [[ ! "${LUSTRE_DIR}" =~ ^${FSPACE}.* ]] && { echo "Filespace is not prefix of Lustre directory"; __usage; }
 
 # Create list of files from query.
+DATE_TIME_DAYS_AGO=`date --date="${DAYS_AGO} days ago" +"%Y:%m:%d:%H:%M:%S"`
 FILE_LIST=`${LTSMC_BIN} -f ${FSPACE} --query \
 	     --servername ${SERVERNAME} -n ${NODE} \
-	     --password ${PASSWORD} "${LUSTRE_DIR}" -v message \
+	     --password ${PASSWORD} "${LUSTRE_DIR}" -v message --datelow "${DATE_TIME_DAYS_AGO}" \
 	     | awk '{gsub(/^fs:/, "", $6); gsub(/^hl:/, "", $7); gsub(/^ll:/, "", $8); gsub(/^crc32:/, "@", $9); print $6 $7 $8 $9}'`
 
 [[ -z ${FILE_LIST} ]] && { echo "no files found on TSM server"; exit 1; }

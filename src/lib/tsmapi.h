@@ -187,7 +187,9 @@ dsInt16_t tsm_archive_fpath(const char *fs, const char *fpath,
 			    const struct lustre_info_t *lustre_info,
 			    struct session_t *session);
 dsInt16_t tsm_query_fpath(const char *fs, const char *fpath,
-			  const char *desc, struct  session_t *session);
+			  const char *desc, const dsmDate *date_lower_bound,
+			  const dsmDate *date_upper_bound,
+			  struct  session_t *session);
 dsInt16_t tsm_delete_fpath(const char *fs, const char *fpath,
 			   struct  session_t *session);
 dsInt16_t tsm_retrieve_fpath(const char *fs, const char *fpath,

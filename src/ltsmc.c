@@ -48,20 +48,24 @@ struct options {
 	char o_fstype[DSM_MAX_FSTYPE_LENGTH + 1];
 	char o_desc[DSM_MAX_DESCR_LENGTH + 1];
 	char o_conf[MAX_OPTIONS_LENGTH + 1];
+	dsmDate o_date_lower_bound;
+	dsmDate o_date_upper_bound;
 };
 
 struct options opt = {
-	.o_verbose = API_MSG_NORMAL,
-	.o_servername = {0},
-	.o_node = {0},
-	.o_owner = {0},
-	.o_password = {0},
-	.o_fsname = {0},
-	.o_fstype = {0},
-	.o_desc = {0},
-	.o_conf = {0},
-	.o_checksum = 0,
-	.o_sort = SORT_NONE
+	.o_verbose	    = API_MSG_NORMAL,
+	.o_servername	    = {0},
+	.o_node		    = {0},
+	.o_owner	    = {0},
+	.o_password	    = {0},
+	.o_fsname	    = {0},
+	.o_fstype	    = {0},
+	.o_desc		    = {0},
+	.o_conf		    = {0},
+	.o_date_lower_bound = {DATE_MINUS_INFINITE, 1, 1, 0, 0, 0},
+	.o_date_upper_bound = {DATE_PLUS_INFINITE, 12, 31, 23, 59, 59},
+	.o_checksum	    = 0,
+	.o_sort		    = SORT_NONE
 };
 
 static void usage(const char *cmd_name, const int rc)
@@ -88,6 +92,8 @@ static void usage(const char *cmd_name, const int rc)
 		"\t-s, --servername <string>\n"
 		"\t-v, --verbose {error, warn, message, info, debug} [default: message]\n"
 		"\t-c, --conf <file>\n"
+		"\t-y, --datelow <string>\n"
+		"\t-z, --datehigh <string>\n"
 		"\t-h, --help\n"
 		"\nIBM API library version: %d.%d.%d.%d, "
 		"IBM API application client version: %d.%d.%d.%d\n"
@@ -99,6 +105,79 @@ static void usage(const char *cmd_name, const int rc)
 		appapi_ver.applicationLevel, appapi_ver.applicationSubLevel,
 		PACKAGE_VERSION);
 	exit(rc);
+}
+
+static int is_valid(char *arg, const int lower_bound, const int upper_bound)
+{
+	char *end = NULL;
+	int val = strtol(arg, &end, 10);
+
+	if (*end != '\0') {
+		CT_ERROR(-EINVAL, "invalid argument: '%s'", arg);
+		return -EINVAL;
+	}
+	if (!(val >= lower_bound && val <= upper_bound)) {
+		CT_ERROR(-EINVAL, "invalid argument: '%s'", arg);
+		return -EINVAL;
+	}
+
+	return val;
+}
+
+static int parse_date_time(char *arg, dsmDate *dsm_date)
+{
+	const char *delim = ":";
+	char *token;
+	uint16_t cnt = 0;
+	int val;
+
+	/* YYYY:MM:DD:hh:mm:ss, e.g. 2018:05:28:23:15:59 */
+	token = strtok(arg, delim);
+	while (token) {
+		if (cnt == 0) { /* Year, 16-bit integer (e.g., 1990). */
+			val = is_valid(token, 0, 0xFFFF);
+			if (val < 0)
+				return val;
+			dsm_date->year = val;
+		}
+		else if (cnt == 1) { /* Month, 8-bit integer (1 - 12). */
+			val = is_valid(token, 1, 12);
+			if (val < 0)
+				return val;
+			dsm_date->month = val;
+		}
+		else if (cnt == 2) { /* Day, 8-bit integer (1 - 31). */
+			val = is_valid(token, 1, 31);
+			if (val < 0)
+				return val;
+			dsm_date->day = val;
+		}
+		else if (cnt == 3) { /* Hour, 8-bit integer (0 - 23). */
+			val = is_valid(token, 0, 23);
+			if (val < 0)
+				return val;
+			dsm_date->hour = val;
+		}
+		else if (cnt == 4) { /* Minute, 8-bit integer (0 - 59). */
+			val = is_valid(token, 0, 59);
+			if (val < 0)
+				return val;
+			dsm_date->minute = val;
+		}
+		else if (cnt == 5) { /* Second, 8-bit integer (0 - 59). */
+			val = is_valid(token, 0, 59);
+			if (val < 0)
+				return val;
+			dsm_date->second = val;
+		}
+		else {
+			CT_ERROR(-EINVAL, "invalid argument: '%s'", token);
+			return -EINVAL;
+		}
+		cnt++;
+		token = strtok(NULL, delim);
+	}
+	return (cnt <= 6 ? 0 : -EINVAL);
 }
 
 static void read_conf(const char *filename)
@@ -215,12 +294,14 @@ static int parseopts(int argc, char *argv[])
 		{"verbose",	required_argument, 0,		     'v'},
 		{"prefix",	required_argument, 0,		     'x'},
 		{"conf",	required_argument, 0,		     'c'},
+		{"datelow",	required_argument, 0,		     'y'},
+		{"datehigh",	required_argument, 0,		     'z'},
 		{"help",	      no_argument, 0,		     'h'},
 		{0, 0, 0, 0}
 	};
 
 	int c;
-	while ((c = getopt_long(argc, argv, "lrt:f:d:n:o:p:s:v:x:c:h",
+	while ((c = getopt_long(argc, argv, "lrt:f:d:n:o:p:s:v:x:c:y:z:h",
 				long_opts, NULL)) != -1) {
 		switch (c) {
 		case 'l': {
@@ -289,6 +370,24 @@ static int parseopts(int argc, char *argv[])
 		}
 		case 'c': {
 			read_conf(optarg);
+			break;
+		}
+		case 'y': {
+			int rc = parse_date_time(optarg, &opt.o_date_lower_bound);
+			if (rc) {
+				CT_ERROR(0, "wrong argument for -y, "
+					 "--datelow '%s'", optarg);
+				usage(argv[0], 1);
+			}
+			break;
+		}
+		case 'z': {
+			int rc = parse_date_time(optarg, &opt.o_date_upper_bound);
+			if (rc) {
+				CT_ERROR(0, "wrong argument for -z, "
+					 "--datehigh '%s'", optarg);
+				usage(argv[0], 1);
+			}
 			break;
 		}
 		case 'h': {
@@ -442,7 +541,8 @@ int main(int argc, char *argv[])
 		     files_dirs_arg[i]; i++) {
 		if (opt.o_query)
 			rc = tsm_query_fpath(opt.o_fsname, files_dirs_arg[i],
-					     opt.o_desc, &session);
+					     opt.o_desc, &opt.o_date_lower_bound,
+					     &opt.o_date_upper_bound, &session);
 		else if (opt.o_retrieve) {
 			MSRT_START(tsm_retrieve_fpath);
 			rc = tsm_retrieve_fpath(opt.o_fsname, files_dirs_arg[i],

@@ -1,3 +1,10 @@
+ltsm (0.7.3) unstable; urgency=medium
+
+  * Lower and upper date/time bound for querying.
+  * Display in query results the CRC32 value.
+
+ -- Thomas Stibor <t.stibor@gsi.de>  Thu, 09 Aug 2018 10:53:30 +0200
+
 ltsm (0.7.2) unstable; urgency=medium
 
   * Introduce conf file option setting and man page update/corrections.

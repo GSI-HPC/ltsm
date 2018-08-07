@@ -1013,8 +1013,13 @@ dsInt16_t tsm_query_session(struct session_t *session)
 	return rc;
 }
 
-static dsInt16_t tsm_query_hl_ll(const char *fs, const char *hl, const char *ll,
-				 const char *desc, struct session_t *session)
+static dsInt16_t tsm_query_hl_ll_date(const char *fs,
+				      const char *hl,
+				      const char *ll,
+				      const char *desc,
+				      const dsmDate *date_lower_bound,
+				      const dsmDate *date_upper_bound,
+				      struct session_t *session)
 {
 	qryArchiveData qry_ar_data;
 	dsmObjName obj_name;
@@ -1027,8 +1032,10 @@ static dsInt16_t tsm_query_hl_ll(const char *fs, const char *hl, const char *ll,
 
 	/* Fill up query structure. */
 	qry_ar_data.stVersion = qryArchiveDataVersion;
-	qry_ar_data.insDateLowerBound.year = DATE_MINUS_INFINITE;
-	qry_ar_data.insDateUpperBound.year = DATE_PLUS_INFINITE;
+	memcpy(&qry_ar_data.insDateLowerBound, date_lower_bound,
+	       sizeof(dsmDate));
+	memcpy(&qry_ar_data.insDateUpperBound, date_upper_bound,
+	       sizeof(dsmDate));
 	qry_ar_data.expDateLowerBound.year = DATE_MINUS_INFINITE;
 	qry_ar_data.expDateUpperBound.year = DATE_PLUS_INFINITE;
 	qry_ar_data.descr = desc == NULL || strlen(desc) == 0 ? "*" : (char *)desc;
@@ -1095,6 +1102,17 @@ static dsInt16_t tsm_query_hl_ll(const char *fs, const char *hl, const char *ll,
 
 cleanup:
 	return rc;
+}
+
+static dsInt16_t tsm_query_hl_ll(const char *fs, const char *hl, const char *ll,
+				 const char *desc, struct session_t *session)
+{
+	dsmDate date_lower_bound = {DATE_MINUS_INFINITE, 1, 1, 0, 0, 0};
+	dsmDate date_upper_bound = {DATE_PLUS_INFINITE, 12, 31, 23, 59, 59};
+
+	return tsm_query_hl_ll_date(fs, hl, ll, desc,
+				    &date_lower_bound, &date_upper_bound,
+				    session);
 }
 
 /**
@@ -1317,6 +1335,8 @@ cleanup:
 }
 
 dsInt16_t tsm_query_fpath(const char *fs, const char *fpath, const char *desc,
+			  const dsmDate *date_lower_bound,
+			  const dsmDate *date_upper_bound,
 			  struct session_t *session)
 {
 	dsInt16_t rc;
@@ -1338,7 +1358,9 @@ dsInt16_t tsm_query_fpath(const char *fs, const char *fpath, const char *desc,
 		CT_ERROR(EFAILED, "init_qtable failed");
 		return rc;
 	}
-	rc = tsm_query_hl_ll(fs, hl, ll, desc, session);
+	rc = tsm_query_hl_ll_date(fs, hl, ll, desc,
+				  date_lower_bound, date_upper_bound,
+				  session);
 	if (rc) {
 		CT_ERROR(EFAILED, "tsm_query_hl_ll failed");
 		goto cleanup;

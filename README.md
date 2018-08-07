@@ -137,7 +137,7 @@ If *required* TSM and *optional* Lustre header files and libraries are found the
 
 ### Install or Build DEB/RPM Package
 
-Download and install already built Debian Jessie package [ltsm_0.7.2_amd64.deb](https://github.com/tstibor/ltsm.github.io/tree/master/packages/deb) or CentOS 7.4 package [ltsm-0.7.2-1.x86_64.rpm](https://github.com/tstibor/ltsm.github.io/tree/master/packages/rpm). In addition you can build the rpm package
+Download and install already built Debian Stretch package [ltsm_0.7.3_amd64.deb](https://github.com/tstibor/ltsm.github.io/tree/master/packages/deb) or CentOS 7.4 package [ltsm-0.7.3-1.x86_64.rpm](https://github.com/tstibor/ltsm.github.io/tree/master/packages/rpm). In addition you can build the rpm package
 yourself as follows
 ```
 git clone https://github.com/tstibor/ltsm && cd ltsm && ./autogen.sh && ./configure && make rpms

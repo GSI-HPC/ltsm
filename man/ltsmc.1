@@ -1,4 +1,4 @@
-.TH ltsmc 1 "April 2018" TSM "user utilities"
+.TH ltsmc 1 "August 2018" TSM "user utilities"
 .SH NAME
 ltsmc \- Console client for archiving, retrieving, deleting and querying files and directories on a TSM server
 .SH SYNOPSIS
@@ -71,6 +71,15 @@ Causes ltsmc to be more verbose in printing messages. Default is \fImessage\fR.
 .BR \-c ", " \-\-conf =\fIFILE\fR
 Read conf \fIFILE\fR with options: \fIservername\fR, \fInode\fR, \fIowner\fR, \fIpassword\fR, \fIfsname\fR and \fIverbose\fR.
 Syntax in conf \fIFILE\fR is \fIoption\fR \fIvalue\fR where separators are whitespace(s) and tabulator(s). The character # is treated as a comment and strings after character # are ignored.
+.TP
+.BR \-y ", " \-\-datelow =\fISTRING\fR
+Lower bound of date and time in format YYYY:MM:DD:hh:mm:ss to limit the query result. Uppercase letters specify the date
+and lowercase letters the time. The lower bound is initialized as 0000:01:01:00:00:00 and thus the parser excepts
+substrings of the form: YYYY, YYYY:MM, YYYY:MM:DD, YYYY:MM:DD:hh or YYYY:MM:DD:hh:mm. Example: Lower bound 2018:10 and upper bound 2018:10 will limit the query result from 2018:10:01:00:00:00 to 2018:10:31:23:59:59. Lower bound 2018:05:01:22:00:00 and
+upper bound 2018:05:01:23:00:00 will limit query result at the same date from time 22:00:00 to 23:00:00.
+.TP
+.BR \-z ", " \-\-datehigh =\fISTRING\fR
+Upper bound of date and time in format YYYY:MM:DD:hh:mm:ss to limit the query result. The upper bound is initialized as 65535:12:31:23:59:59. The value 65535 is defined as DATE_PLUS_INFINITE in IBM's TSM SDK.
 .TP
 .BR \-h ", " \-\-help
 Display help and exit.
