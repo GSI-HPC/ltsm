@@ -193,24 +193,19 @@ static void read_conf(const char *filename)
 		for (uint8_t n = 0; n < kv_opt.N; n++) {
 			if (OPTNCMP("servername", kv_opt.kv[n].key))
 				strncpy(opt.o_servername, kv_opt.kv[n].val,
-					MIN(DSM_MAX_SERVERNAME_LENGTH,
-					    MAX_OPTIONS_LENGTH));
+					sizeof(opt.o_servername));
 			else if (OPTNCMP("node", kv_opt.kv[n].key))
 				strncpy(opt.o_node, kv_opt.kv[n].val,
-					MIN(DSM_MAX_NODE_LENGTH,
-					    MAX_OPTIONS_LENGTH));
+					sizeof(opt.o_node));
 			else if (OPTNCMP("owner", kv_opt.kv[n].key))
 				strncpy(opt.o_owner, kv_opt.kv[n].val,
-					MIN(DSM_MAX_OWNER_LENGTH,
-					    MAX_OPTIONS_LENGTH));
+					sizeof(opt.o_owner));
 			else if (OPTNCMP("password", kv_opt.kv[n].key))
 				strncpy(opt.o_password, kv_opt.kv[n].val,
-					MIN(DSM_MAX_VERIFIER_LENGTH,
-					    MAX_OPTIONS_LENGTH));
+					sizeof(opt.o_password));
 			else if (OPTNCMP("fsname", kv_opt.kv[n].key))
 				strncpy(opt.o_fsname, kv_opt.kv[n].val,
-					MIN(DSM_MAX_FSNAME_LENGTH,
-					    MAX_OPTIONS_LENGTH));
+					sizeof(opt.o_fsname));
 			else if (OPTNCMP("verbose", kv_opt.kv[n].key)) {
 				rc = parse_verbose(kv_opt.kv[n].val,
 						   &opt.o_verbose);

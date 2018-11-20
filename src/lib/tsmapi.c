@@ -816,7 +816,7 @@ dsInt16_t tsm_connect(struct login_t *login, struct session_t *session)
 		return rc;
 	}
 
-	strncpy(session->owner, login->owner, DSM_MAX_OWNER_LENGTH);
+	strncpy(session->owner, login->owner, DSM_MAX_OWNER_LENGTH + 1);
 
 	regFSData reg_fs_data;
 	memset(&reg_fs_data, 0, sizeof(reg_fs_data));
@@ -1875,7 +1875,7 @@ static dsInt16_t tsm_archive_recursive(struct archive_info_t *archive_info,
 
 	/* TODO: Still not happy with this implementation.
 	   There must be a smarter and more elegant approach. */
-	strncpy(dpath, archive_info->fpath, PATH_MAX);
+	strncpy(dpath, archive_info->fpath, sizeof(dpath));
 
         dir = opendir(dpath);
         if (!dir) {
@@ -1966,7 +1966,17 @@ static dsInt16_t tsm_archive_recursive(struct archive_info_t *archive_info,
 				break;
 			}
 			if (do_recursive) {
-				snprintf(archive_info->fpath, PATH_MAX, "%s/%s", dpath, entry->d_name);
+				char _fpath[PATH_MAX + 1 + NAME_MAX + 1] = {0};
+				int len;
+
+				len = snprintf(_fpath, sizeof(_fpath), "%s/%s", dpath, entry->d_name);
+				if (len >= (int)sizeof(archive_info->fpath)) {
+					rc = E2BIG;
+					CT_ERROR(rc, "file path too long '%s/%s'", dpath, entry->d_name);
+					break;
+				}
+				memset(archive_info->fpath, 0, sizeof(archive_info->fpath));
+				memcpy(archive_info->fpath, _fpath, sizeof(archive_info->fpath));
 				rc = tsm_archive_recursive(archive_info, session);
 			}
 			break;
@@ -2488,8 +2498,8 @@ int parse_line(char *line, struct kv_opt *kv_opt)
 
 	bzero(kv_opt->kv[kv_opt->N].key, MAX_OPTIONS_LENGTH + 1);
 	bzero(kv_opt->kv[kv_opt->N].val, MAX_OPTIONS_LENGTH + 1);
-	strncpy(kv_opt->kv[kv_opt->N].key, _kv.key, MAX_OPTIONS_LENGTH);
-	strncpy(kv_opt->kv[kv_opt->N].val, _kv.val, MAX_OPTIONS_LENGTH);
+	strncpy(kv_opt->kv[kv_opt->N].key, _kv.key, MAX_OPTIONS_LENGTH + 1);
+	strncpy(kv_opt->kv[kv_opt->N].val, _kv.val, MAX_OPTIONS_LENGTH + 1);
 	kv_opt->N++;
 
 	return 0;

@@ -53,7 +53,7 @@
 #define LINUX_PLATFORM "GNU/Linux"
 
 #define TSM_BUF_LENGTH 32764 /* (32768 - 4) gives best transfer performance. */
-#define MAX_OPTIONS_LENGTH 256
+#define MAX_OPTIONS_LENGTH 64
 #define MAGIC_ID_V1 71147
 #define DEFAULT_NUM_BUCKETS 64
 
