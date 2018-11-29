@@ -128,11 +128,12 @@ static int parse_date_time(char *arg, dsmDate *dsm_date)
 {
 	const char *delim = ":";
 	char *token;
+	char *saveptr;
 	uint16_t cnt = 0;
 	int val;
 
 	/* YYYY:MM:DD:hh:mm:ss, e.g. 2018:05:28:23:15:59 */
-	token = strtok(arg, delim);
+	token = strtok_r(arg, delim, &saveptr);
 	while (token) {
 		if (cnt == 0) { /* Year, 16-bit integer (e.g., 1990). */
 			val = is_valid(token, 0, 0xFFFF);
@@ -175,7 +176,7 @@ static int parse_date_time(char *arg, dsmDate *dsm_date)
 			return -EINVAL;
 		}
 		cnt++;
-		token = strtok(NULL, delim);
+		token = strtok_r(NULL, delim, &saveptr);
 	}
 	return (cnt <= 6 ? 0 : -EINVAL);
 }

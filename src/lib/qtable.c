@@ -120,7 +120,7 @@ dsInt16_t insert_qtable(struct qtable_t *qtable,
 			const qryRespArchiveData *qra_data)
 {
 	dsInt16_t rc;
-	struct object_t *insobj = NULL;
+	struct object_t *insobj;
 	insobj = calloc(1, sizeof(struct object_t));
 	if (insobj == NULL) {
 		CT_ERROR(errno, "calloc failed");
