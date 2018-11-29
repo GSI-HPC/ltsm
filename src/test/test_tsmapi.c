@@ -52,7 +52,7 @@ void test_fcalls(CuTest *tc)
 		   DEFAULT_FSTYPE);
 
 	struct session_t session;
-	bzero(&session, sizeof(struct session_t));
+	memset(&session, 0, sizeof(struct session_t));
 
 	rc = tsm_init(DSM_SINGLETHREAD);
 	CuAssertIntEquals(tc, DSM_RC_SUCCESSFUL, rc);

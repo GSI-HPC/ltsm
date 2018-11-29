@@ -106,7 +106,7 @@ void test_chashtable_1(CuTest *tc)
 
 	for (uint16_t b = 1; b < 256; b++) {
 
-		bzero(&chashtable, sizeof(chashtable));
+		memset(&chashtable, 0, sizeof(chashtable));
 		rc = chashtable_init(&chashtable, b, hash_sdbm_str, match, free);
 		CuAssertIntEquals(tc, RC_SUCCESS, rc);
 		CuAssertIntEquals(tc, 0, chashtable_size(&chashtable));
@@ -183,7 +183,7 @@ void test_chashtable_2(CuTest *tc)
 	for (uint8_t j = 0; j < 2; j++) {
 		for (uint16_t b = 16; b <= 2048; b *= 2) {
 			/* SDBM hashing */
-			bzero(&chashtable, sizeof(chashtable));
+			memset(&chashtable, 0, sizeof(chashtable));
 			rc = chashtable_init(&chashtable, b, hash_sdbm_str,
 					     match, free);
 			CuAssertIntEquals(tc, RC_SUCCESS, rc);
@@ -201,7 +201,7 @@ void test_chashtable_2(CuTest *tc)
 			CuAssertIntEquals(tc, 0, chashtable_size(&chashtable));
 
 			/* DEK hashing */
-			bzero(&chashtable, sizeof(chashtable));
+			memset(&chashtable, 0, sizeof(chashtable));
 			rc = chashtable_init(&chashtable, b, hash_dek_str,
 					     match, free);
 			CuAssertIntEquals(tc, RC_SUCCESS, rc);
@@ -219,7 +219,7 @@ void test_chashtable_2(CuTest *tc)
 			CuAssertIntEquals(tc, 0, chashtable_size(&chashtable));
 
 			/* DJB hashing */
-			bzero(&chashtable, sizeof(chashtable));
+			memset(&chashtable, 0, sizeof(chashtable));
 			rc = chashtable_init(&chashtable, b, hash_djb_str,
 					     match, free);
 			CuAssertIntEquals(tc, RC_SUCCESS, rc);

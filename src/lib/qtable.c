@@ -48,8 +48,8 @@ static void setup_object(struct object_t *object,
 		strlen(qra_data->objName.hl) +
 		strlen(qra_data->objName.ll) + 1;
 	char key[klen];
-	bzero(key, klen);
-	bzero(&object->qra_data, sizeof(qryRespArchiveData));
+	memset(key, 0, klen);
+	memset(&object->qra_data, 0, sizeof(qryRespArchiveData));
 
 	snprintf(object->key, klen, "%s%s%s",
 		 qra_data->objName.fs,

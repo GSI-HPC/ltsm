@@ -947,7 +947,7 @@ static int ct_connect_sessions(void)
 		return rc;
 	}
 
-	bzero(&login, sizeof(login));
+	memset(&login, 0, sizeof(login));
 	login_fill(&login, opt.o_servername,
 		   opt.o_node, opt.o_password,
 		   opt.o_owner, LINUX_PLATFORM,

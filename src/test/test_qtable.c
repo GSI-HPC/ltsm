@@ -28,14 +28,14 @@ void test_qtable(CuTest *tc)
 {
 	dsInt16_t rc;
 	struct qtable_t qtable;
-	bzero(&qtable, sizeof(struct qtable_t));
+	memset(&qtable, 0, sizeof(struct qtable_t));
 	rc = init_qtable(&qtable);
 	CuAssertTrue(tc, rc == DSM_RC_SUCCESSFUL);
 	CuAssertIntEquals(tc, 0, chashtable_size(qtable.chashtable));
 
 	const uint32_t N = 1024;
 	qryRespArchiveData qra_data;
-	bzero(&qra_data, sizeof(qra_data));
+	memset(&qra_data, 0, sizeof(qra_data));
 	for (uint32_t n = 0; n < N; n++) {
 		qra_data.objId.lo = n;
 		qra_data.objId.hi = n * n;
@@ -60,7 +60,7 @@ void test_qtable_sort_top(CuTest *tc)
 {
 	dsInt16_t rc;
 	struct qtable_t qtable;
-	bzero(&qtable, sizeof(struct qtable_t));
+	memset(&qtable, 0, sizeof(struct qtable_t));
 	rc = init_qtable(&qtable);
 	CuAssertTrue(tc, rc == DSM_RC_SUCCESSFUL);
 
@@ -69,7 +69,7 @@ void test_qtable_sort_top(CuTest *tc)
 	srand(time(NULL));
 
 	for (uint32_t n = 0; n < N; n++) {
-		bzero(&qra_data, sizeof(qra_data));
+		memset(&qra_data, 0, sizeof(qra_data));
 		qra_data.insDate.year = N - n;
 		qra_data.restoreOrderExt.top = rand() % N;
 		rc = insert_qtable(&qtable, &qra_data);
@@ -110,7 +110,7 @@ void test_qtable_sort_all(CuTest *tc)
 {
 	dsInt16_t rc;
 	struct qtable_t qtable;
-	bzero(&qtable, sizeof(struct qtable_t));
+	memset(&qtable, 0, sizeof(struct qtable_t));
 	rc = init_qtable(&qtable);
 	CuAssertTrue(tc, rc == DSM_RC_SUCCESSFUL);
 	CuAssertIntEquals(tc, 0, chashtable_size(qtable.chashtable));
@@ -120,7 +120,7 @@ void test_qtable_sort_all(CuTest *tc)
 	srand(time(NULL));
 
 	for (uint32_t n = 0; n < N; n++) {
-		bzero(&qra_data, sizeof(qra_data));
+		memset(&qra_data, 0, sizeof(qra_data));
 		qra_data.insDate.year = N - n;
 		qra_data.restoreOrderExt.top = rand() % N;
 		qra_data.restoreOrderExt.hi_hi = rand() % N;
@@ -168,7 +168,7 @@ void test_qtable_replace_older1(CuTest *tc)
 {
 	dsInt16_t rc;
 	struct qtable_t qtable;
-	bzero(&qtable, sizeof(struct qtable_t));
+	memset(&qtable, 0, sizeof(struct qtable_t));
 	rc = init_qtable(&qtable);
 	CuAssertTrue(tc, rc == DSM_RC_SUCCESSFUL);
 	CuAssertIntEquals(tc, 0, chashtable_size(qtable.chashtable));
@@ -232,7 +232,7 @@ void test_qtable_replace_older2(CuTest *tc)
 {
 	dsInt16_t rc;
 	struct qtable_t qtable;
-	bzero(&qtable, sizeof(struct qtable_t));
+	memset(&qtable, 0, sizeof(struct qtable_t));
 	rc = init_qtable(&qtable);
 	CuAssertTrue(tc, rc == DSM_RC_SUCCESSFUL);
 	CuAssertIntEquals(tc, 0, chashtable_size(qtable.chashtable));
@@ -240,7 +240,7 @@ void test_qtable_replace_older2(CuTest *tc)
 
 	const uint32_t N = 2048;
 	qryRespArchiveData qra_data;
-	bzero(&qra_data, sizeof(qra_data));
+	memset(&qra_data, 0, sizeof(qra_data));
 	sprintf(qra_data.objName.fs, "%s", "fstest:");
 	sprintf(qra_data.objName.hl, "%s", "/hltest/");
 	for (uint32_t n = 0; n < N; n++) {
@@ -250,7 +250,7 @@ void test_qtable_replace_older2(CuTest *tc)
 	}
 	CuAssertIntEquals(tc, N, chashtable_size(qtable.chashtable));
 
-	bzero(&qra_data, sizeof(qra_data));
+	memset(&qra_data, 0, sizeof(qra_data));
 	sprintf(qra_data.objName.fs, "%s", "fstest:");
 	sprintf(qra_data.objName.hl, "%s", "/hltest/");
 	sprintf(qra_data.objName.ll, "%s", "/lltest/");
@@ -269,7 +269,7 @@ void test_qtable_multiple_init_destroy(CuTest *tc)
 {
 	dsInt16_t rc;
 	struct qtable_t qtable;
-	bzero(&qtable, sizeof(struct qtable_t));
+	memset(&qtable, 0, sizeof(struct qtable_t));
 	rc = init_qtable(&qtable);
 	CuAssertTrue(tc, rc == DSM_RC_SUCCESSFUL);
 	CuAssertIntEquals(tc, 0, chashtable_size(qtable.chashtable));
@@ -291,7 +291,7 @@ void test_qtable_sort_date_ascending(CuTest *tc)
 {
 	dsInt16_t rc;
 	struct qtable_t qtable;
-	bzero(&qtable, sizeof(struct qtable_t));
+	memset(&qtable, 0, sizeof(struct qtable_t));
 	rc = init_qtable(&qtable);
 	CuAssertTrue(tc, rc == DSM_RC_SUCCESSFUL);
 	qtable.multiple = bTrue;
@@ -301,7 +301,7 @@ void test_qtable_sort_date_ascending(CuTest *tc)
 	srand(time(NULL));
 
 	for (uint32_t n = 0; n < N; n++) {
-		bzero(&qra_data, sizeof(qra_data));
+		memset(&qra_data, 0, sizeof(qra_data));
 		qra_data.insDate.year = rand() % N;
 		qra_data.insDate.month = rand() % 12;
 		qra_data.insDate.hour = rand() % 24;
@@ -351,7 +351,7 @@ void test_qtable_sort_date_ascending(CuTest *tc)
 	sprintf(qra_data.objName.hl, "%s", "/hltest/");
 
 	for (uint32_t n = 0; n < N; n++) {
-		bzero(&qra_data, sizeof(qra_data));
+		memset(&qra_data, 0, sizeof(qra_data));
 		qra_data.insDate.year = rand() % N;
 		qra_data.insDate.month = rand() % 12;
 		qra_data.insDate.hour = rand() % 24;
@@ -397,7 +397,7 @@ void test_qtable_sort_date_descending(CuTest *tc)
 {
 	dsInt16_t rc;
 	struct qtable_t qtable;
-	bzero(&qtable, sizeof(struct qtable_t));
+	memset(&qtable, 0, sizeof(struct qtable_t));
 	rc = init_qtable(&qtable);
 	CuAssertTrue(tc, rc == DSM_RC_SUCCESSFUL);
 	qtable.multiple = bTrue;
@@ -407,7 +407,7 @@ void test_qtable_sort_date_descending(CuTest *tc)
 	srand(time(NULL));
 
 	for (uint32_t n = 0; n < N; n++) {
-		bzero(&qra_data, sizeof(qra_data));
+		memset(&qra_data, 0, sizeof(qra_data));
 		qra_data.insDate.year = rand() % N;
 		qra_data.insDate.month = rand() % 12;
 		qra_data.insDate.hour = rand() % 24;
@@ -457,7 +457,7 @@ void test_qtable_sort_date_descending(CuTest *tc)
 	sprintf(qra_data.objName.hl, "%s", "/hltest/");
 
 	for (uint32_t n = 0; n < N; n++) {
-		bzero(&qra_data, sizeof(qra_data));
+		memset(&qra_data, 0, sizeof(qra_data));
 		qra_data.insDate.year = rand() % N;
 		qra_data.insDate.month = rand() % 12;
 		qra_data.insDate.hour = rand() % 24;

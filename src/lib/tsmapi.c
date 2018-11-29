@@ -257,7 +257,7 @@ void set_prefix(const char *_prefix)
 	const size_t len = strlen(_prefix);
 	size_t l = 0;
 
-	bzero(prefix, PATH_MAX + 1);
+	memset(prefix, 0, PATH_MAX + 1);
 	if (len > 0 && _prefix[l] != '/') {
 		prefix[l++] = '/';
 		CT_WARN("leading '/' in prefix '%s' is missing and "
@@ -335,7 +335,7 @@ static dsInt16_t mkdir_subpath(const char *path, const mode_t st_mode)
 	size_t len = strlen(path);
 	char _path[len + 1];
 
-	bzero(_path, len + 1);
+	memset(_path, 0, len + 1);
 	snprintf(_path, len + 1, "%s", path);
 
 	if (len > 1 && _path[len - 1] != '/')
@@ -400,7 +400,7 @@ int xattr_get_lov(const int fd, struct lustre_info_t *lustre_info,
 	lustre_info->lov.stripe_count = lum->lmm_stripe_count;
 
 #ifdef LOV_MAGIC_V3
-	bzero(lustre_info->lov.pool_name, LOV_MAXPOOLNAME + 1);
+	memset(lustre_info->lov.pool_name, 0, LOV_MAXPOOLNAME + 1);
 	strncpy(lustre_info->lov.pool_name, lum->lmm_pool_name,
 		LOV_MAXPOOLNAME + 1);
 #endif
@@ -439,7 +439,7 @@ int xattr_set_lov(int fd, const struct lustre_info_t *lustre_info,
 	lum.lmm_stripe_count = lustre_info->lov.stripe_count;
 
 #ifdef LOV_MAGIC_V3
-	bzero(lum->lmm_pool_name, LOV_MAXPOOLNAME + 1);
+	memset(lum->lmm_pool_name, 0, LOV_MAXPOOLNAME + 1);
 	strncpy(lum->lmm_pool_name, lustre_info->lov.pool_name,
 		LOV_MAXPOOLNAME + 1);
 #endif
@@ -479,7 +479,7 @@ static dsInt16_t retrieve_obj(qryRespArchiveData *query_data,
 	char path[len + 1];
 	char fpath[PATH_MAX + 1] = {0};
 
-	bzero(path, len + 1);
+	memset(path, 0, len + 1);
 	snprintf(path, len + 1, "%s%s%s",
 		 prefix,
 		 query_data->objName.fs,
@@ -949,7 +949,7 @@ dsInt16_t tsm_query_session(struct session_t *session)
 		"owner                    : %s\n"
 		"name of appl config file : %s\n",
 		dsmSessInfo.id, dsmSessInfo.owner, dsmSessInfo.confFile);
-	bzero(&date_str, sizeof(date_str));
+	memset(&date_str, 0, sizeof(date_str));
 	date_to_str(date_str, &dsmSessInfo.polActDate);
 	CT_INFO("\n *** policy data ***\n"
 		"domain name                           : %s\n"
@@ -1136,8 +1136,8 @@ static dsInt16_t extract_hl_ll(const char *fpath, const char *fs,
 	const size_t fpath_len = strlen(fpath);
 	const size_t fs_len = strlen(fs);
 
-	bzero(hl, DSM_MAX_HL_LENGTH);
-	bzero(ll, DSM_MAX_LL_LENGTH);
+	memset(hl, 0, DSM_MAX_HL_LENGTH);
+	memset(ll, 0, DSM_MAX_LL_LENGTH);
 
 	/* Find substring fs at the beginning of fpath. */
 	while (fs[pos_hl] && fpath[pos_hl] && fs[pos_hl] == fpath[pos_hl])
@@ -1471,7 +1471,7 @@ static dsInt16_t tsm_retrieve_generic(int fd, struct session_t *session)
 					strlen(query_data.objName.hl) +
 					strlen(query_data.objName.ll) + 1;
 				char path[len + 1];
-				bzero(path, len + 1);
+				memset(path, 0, len + 1);
 				snprintf(path, len, "%s%s%s%s",
 					 prefix,
 					 query_data.objName.fs,
@@ -2088,7 +2088,7 @@ dsInt16_t tsm_check_free_mountp(const char *fs, struct session_t *session)
 		return ECONNABORTED;
 	}
 
-	bzero(fpath, len);
+	memset(fpath, 0, len);
 
 	if (len_fs == 1 && fs[0] == '/')
 		snprintf(fpath, len - 1, "%s%s", hl, ll);
@@ -2496,8 +2496,8 @@ int parse_line(char *line, struct kv_opt *kv_opt)
 	if (!kv_opt->kv)
 		return -ENOMEM;
 
-	bzero(kv_opt->kv[kv_opt->N].key, MAX_OPTIONS_LENGTH + 1);
-	bzero(kv_opt->kv[kv_opt->N].val, MAX_OPTIONS_LENGTH + 1);
+	memset(kv_opt->kv[kv_opt->N].key, 0, MAX_OPTIONS_LENGTH + 1);
+	memset(kv_opt->kv[kv_opt->N].val, 0, MAX_OPTIONS_LENGTH + 1);
 	strncpy(kv_opt->kv[kv_opt->N].key, _kv.key, MAX_OPTIONS_LENGTH + 1);
 	strncpy(kv_opt->kv[kv_opt->N].val, _kv.val, MAX_OPTIONS_LENGTH + 1);
 	kv_opt->N++;

@@ -466,7 +466,7 @@ int main(int argc, char *argv[])
 		   opt.o_fsname, DEFAULT_FSTYPE);
 
 	struct session_t session;
-	bzero(&session, sizeof(session));
+	memset(&session, 0, sizeof(session));
 
 	session.qtable.multiple = opt.o_latest == 1 ? bFalse : bTrue;
 	session.qtable.sort_by = opt.o_sort;
