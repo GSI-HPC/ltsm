@@ -174,7 +174,7 @@ void test_qtable_replace_older1(CuTest *tc)
 	CuAssertIntEquals(tc, 0, chashtable_size(qtable.chashtable));
 
 	const uint32_t N = 1024;
-	qryRespArchiveData *qra_arrdata = NULL;
+	qryRespArchiveData *qra_arrdata;
 	qra_arrdata = calloc(N, sizeof(qryRespArchiveData));
 	CuAssertPtrNotNull(tc, qra_arrdata);
 	for (uint32_t n = 0; n < N; n++) {

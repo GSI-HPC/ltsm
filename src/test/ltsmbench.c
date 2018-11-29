@@ -256,7 +256,7 @@ static int fill_fnames(void)
 {
 	int rc = 0;
 	FILE *file = NULL;
-	unsigned char *buf = NULL;
+	unsigned char *buf;
 
 	buf = malloc(sizeof(unsigned char) * opt.o_filesize);
 	if (!buf) {
