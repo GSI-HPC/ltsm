@@ -191,7 +191,7 @@ static int parseopts(int argc, char *argv[])
 static void *perform_task(void *thread_data)
 {
 	struct session_t *session = (struct session_t *)thread_data;;
-	char _fpath[5 + LEN_FILENAME_RND + 1] = {0};
+	char _fpath[6 + LEN_FILENAME_RND + 1] = {0};
 
 	int rc = 0;
 
@@ -321,7 +321,7 @@ static int run_threads(void)
 {
 	int rc;
 	pthread_attr_t attr;
-	char thread_name[16] = {0};
+	char thread_name[32] = {0};
 
 	threads = calloc(opt.o_nthreads, sizeof(pthread_t));
 	if (threads == NULL) {
@@ -344,7 +344,8 @@ static int run_threads(void)
 		if (rc)
 			CT_WARN("[rc=%d] pthread_create failed thread '%d'", rc, n);
 		else {
-			snprintf(thread_name, 16, "ltsmbench/%d", n);
+			snprintf(thread_name, sizeof(thread_name),
+				 "ltsmbench/%d", n);
 			pthread_setname_np(threads[n], thread_name);
 		}
 	}
