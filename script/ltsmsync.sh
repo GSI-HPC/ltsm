@@ -1,7 +1,7 @@
 #!/bin/bash
 # Title       : ltsmsync.sh
-# Date        : Thu 09 Aug 2018 01:13:16 PM CEST
-# Version     : 0.0.7
+# Date        : Tue 04 Dec 2018 03:34:02 PM CET
+# Version     : 0.0.8
 # Author      : "Thomas Stibor" <t.stibor@gsi.de>
 # Description : Query TSM server and create from the query result empty files
 #               with appropriate Lustre HSM flags. Subsequent files access, transparently
@@ -23,8 +23,9 @@ PASSWORD=""
 OWNER=""
 ARCHIVE_ID=0
 JOBS=4
+DAYS_AGO=7
 DRY_RUN=0
-DAYS_AGO=10950
+CRC32_VERIFY=0
 
 __usage() {
     echo -e "usage: ${0} <LUSTRE_DIRECTORY>\n" \
@@ -35,8 +36,9 @@ __usage() {
 	 "\t-o, --owner <string>\n" \
 	 "\t-a, --archive-id <int> [default: ${ARCHIVE_ID}]\n" \
 	 "\t-j, --jobs <int> [default: ${JOBS}]\n" \
-	 "\t-d, --dry-run\n" \
-	 "\t-y, --days-ago <int> [default: ${DAYS_AGO}]\n"
+	 "\t-y, --days-ago <int> [default: ${DAYS_AGO}]\n" \
+	 "\t-c, --crc32-verify\n" \
+	 "\t-d, --dry-run\n"
     exit 1
 }
 
@@ -52,7 +54,7 @@ __job_limit() {
 	joblist=($(jobs -rp))
 	while (( ${#joblist[*]} >= $1 ))
 	do
-	    # Wait for any job to finish
+	    # Wait for any job to finish.
 	    command='wait '${joblist[0]}
 	    for job in ${joblist[@]:1}
 	    do
@@ -149,12 +151,15 @@ case $arg in
 	JOBS="$2"
 	shift
 	;;
-    -d|--dry-run)
-	DRY_RUN=1
-	;;
     -y|--days-ago)
 	DAYS_AGO="$2"
 	shift
+	;;
+    -c|--crc32-verify)
+	CRC32_VERIFY=1
+	;;
+    -d|--dry-run)
+	DRY_RUN=1
 	;;
     *)
 	echo "unknown argument $2"
@@ -198,16 +203,29 @@ do
 	fi
     # File exists, check whether crc32 matches with those stored on TSM server.
     else
-	file_crc32="`${LTSMC_BIN} --checksum ${FILE_AND_CRC[0]} | awk '{print $2}'`"
-	if [[ "${file_crc32}"  != "${FILE_AND_CRC[1]}" ]]; then
-	    echo "crc32 mismatch of file ${FILE_AND_CRC[0]} (${FILE_AND_CRC[1]},${file_crc32})"
-	    if [[ ${DRY_RUN} -eq 1 ]]; then
-		echo "__retrieve_file '${FILE_AND_CRC[0]}' '${ARCHIVE_ID}'"
+	if [[ ${CRC32_VERIFY} -eq 1 ]]; then
+	    file_crc32="`${LTSMC_BIN} --checksum ${FILE_AND_CRC[0]} | awk '{print $2}'`"
+	    if [[ "${file_crc32}"  != "${FILE_AND_CRC[1]}" ]]; then
+		echo "crc32 mismatch of file ${FILE_AND_CRC[0]} (${FILE_AND_CRC[1]},${file_crc32})"
+		if [[ ${DRY_RUN} -eq 1 ]]; then
+		    echo "__retrieve_file crc32-verified '${FILE_AND_CRC[0]}' '${ARCHIVE_ID}'"
+		else
+		    ( __retrieve_file "${FILE_AND_CRC[0]}" "${ARCHIVE_ID}" ) &
+		fi
 	    else
-		( __retrieve_file "${FILE_AND_CRC[0]}" "${ARCHIVE_ID}" ) &
+		echo "file already exists ${FILE_AND_CRC[0]} and has valid crc32 (${FILE_AND_CRC[1]},${file_crc32})"
 	    fi
-	else
-	    echo "file already exists ${FILE_AND_CRC[0]} and has valid crc32 (${FILE_AND_CRC[1]},${file_crc32})"
+	else # Do not check crc32, but only whether file size is > 0.
+	    file_size=$(wc -c ${FILE_AND_CRC[0]} | awk '{print $1}')
+	    if [[ ${file_size} -eq 0 ]]; then
+		if [[ ${DRY_RUN} -eq 1 ]]; then
+		    echo "__retrieve_file size-verified '${FILE_AND_CRC[0]}' '${ARCHIVE_ID}'"
+		else
+		    ( __retrieve_file "${FILE_AND_CRC[0]}" "${ARCHIVE_ID}" ) &
+		fi
+	    else
+		echo "file already exists ${FILE_AND_CRC[0]} and has file size '${file_size}'"
+	    fi
 	fi
     fi
     __job_limit ${JOBS}
