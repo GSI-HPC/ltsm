@@ -1,18 +1,52 @@
+sudo: required
 language: c
+dist: xenial
 
-env:
-    global:
-        - CFLAGS='-g -DDEBUG -O0'
-    matrix:
-        - LDFLAGS='-L/usr/lib'
+matrix:
+  include:
+    - os: linux
+      addons:
+        apt:
+          sources:
+            - ubuntu-toolchain-r-test
+          packages:
+            - build-essential gcc-4.9
+      env:
+         - MATRIX_EVAL="CC=gcc-4.9"
 
-script: ./autogen.sh && ./configure --enable-tests && make && ./src/test/test_cds && ./src/test/test_tsmapi
+    - os: linux
+      addons:
+        apt:
+          sources:
+            - ubuntu-toolchain-r-test
+          packages:
+            - build-essential gcc-5
+      env:
+         - MATRIX_EVAL="CC=gcc-5"
 
-install:
-  - sudo add-apt-repository ppa:dns/gnu --yes
-  - sudo apt-get update -q
-  - sudo apt-get install --only-upgrade autoconf
-  - autoconf --version
+    - os: linux
+      addons:
+        apt:
+          sources:
+            - ubuntu-toolchain-r-test
+          packages:
+            - build-essential gcc-6
+      env:
+        - MATRIX_EVAL="CC=gcc-6"
+
+    - os: linux
+      addons:
+        apt:
+          sources:
+            - ubuntu-toolchain-r-test
+          packages:
+            - build-essential gcc-7
+      env:
+        - MATRIX_EVAL="CC=gcc-7"
+
+before_install:
+  - sudo apt-get update
+  - sudo apt-get install -y autoconf autotools-dev libtool
   - wget http://ftp.software.ibm.com/storage/tivoli-storage-management/maintenance/client/v7r1/Linux/LinuxX86_DEB/BA/v716/7.1.6.0-TIV-TSMBAC-LinuxX86_DEB.tar
   - tar xf 7.1.6.0-TIV-TSMBAC-LinuxX86_DEB.tar
   - sudo dpkg -i gskssl64_8.0-50.66.linux.x86_64.deb
@@ -23,4 +57,6 @@ install:
   - sudo dpkg -i lustre-client-utils_2.10.1-1_amd64.deb
   - sudo dpkg -i lustre-dev_2.10.1-1_amd64.deb
   - sudo apt-get install libattr1-dev
+  - eval "${MATRIX_EVAL}"
 
+script: ./autogen.sh && ./configure --enable-tests && make && ./src/test/test_cds && ./src/test/test_tsmapi
