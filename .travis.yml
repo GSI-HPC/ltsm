@@ -44,6 +44,16 @@ matrix:
       env:
         - MATRIX_EVAL="CC=gcc-7"
 
+    - os: linux
+      addons:
+        apt:
+          sources:
+            - ubuntu-toolchain-r-test
+          packages:
+            - build-essential gcc-8
+      env:
+        - MATRIX_EVAL="CC=gcc-8"
+
 before_install:
   - sudo apt-get update
   - sudo apt-get install -y autoconf autotools-dev libtool
