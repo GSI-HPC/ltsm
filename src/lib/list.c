@@ -108,7 +108,7 @@ int list_rem_next(list_t *list, list_node_t *node, void **data)
 void list_for_each(const list_t *list, void (*callback)(void *data))
 {
 	list_node_t *node = list_head(list);
-	while (!list_is_tail(node)) {
+	while (node) {
 		callback(list_data(node));
 		node = list_next(node);
 	}
