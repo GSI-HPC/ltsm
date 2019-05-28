@@ -221,20 +221,20 @@ static void read_conf(const char *filename)
 		for (uint8_t n = 0; n < kv_opt.N; n++) {
 			if (OPTNCMP("servername", kv_opt.kv[n].key))
 				strncpy(opt.o_servername, kv_opt.kv[n].val,
-					MIN(DSM_MAX_SERVERNAME_LENGTH,
-					    MAX_OPTIONS_LENGTH));
+					1 + MIN(DSM_MAX_SERVERNAME_LENGTH,
+					       MAX_OPTIONS_LENGTH));
 			else if (OPTNCMP("node", kv_opt.kv[n].key))
 				strncpy(opt.o_node, kv_opt.kv[n].val,
-					MIN(DSM_MAX_NODE_LENGTH,
-					    MAX_OPTIONS_LENGTH));
+					1 + MIN(DSM_MAX_NODE_LENGTH,
+						MAX_OPTIONS_LENGTH));
 			else if (OPTNCMP("owner", kv_opt.kv[n].key))
 				strncpy(opt.o_owner, kv_opt.kv[n].val,
-					MIN(DSM_MAX_OWNER_LENGTH,
-					    MAX_OPTIONS_LENGTH));
+					1 + MIN(DSM_MAX_OWNER_LENGTH,
+						MAX_OPTIONS_LENGTH));
 			else if (OPTNCMP("password", kv_opt.kv[n].key))
 				strncpy(opt.o_password, kv_opt.kv[n].val,
-					MIN(DSM_MAX_VERIFIER_LENGTH,
-					    MAX_OPTIONS_LENGTH));
+					1 + MIN(DSM_MAX_VERIFIER_LENGTH,
+						MAX_OPTIONS_LENGTH));
 			else if (OPTNCMP("archive-id", kv_opt.kv[n].key)) {
 				rc = parse_archive_id(kv_opt.kv[n].val);
 				if (rc)
