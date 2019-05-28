@@ -214,4 +214,12 @@ ssize_t tsm_fwrite(const void *ptr, size_t size, size_t nmemb,
 		   struct session_t *session);
 int tsm_fclose(struct session_t *session);
 
+int fsd_tsm_fconnect(struct login_t *login, struct session_t *session);
+void fsd_tsm_fdisconnect(struct session_t *session);
+int fsd_tsm_fopen(const char *fs, const char *fpath, const char *desc,
+                  struct session_t *session);
+ssize_t fsd_tsm_fwrite(const void *ptr, size_t size, size_t nmemb,
+                       struct session_t *session);
+int fsd_tsm_fclose(struct session_t *session);
+
 #endif /* TSMAPI_H */

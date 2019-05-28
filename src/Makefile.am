@@ -17,4 +17,9 @@ if HAVE_LUSTRE
     sbin_PROGRAMS = lhsmtool_tsm
     lhsmtool_tsm_SOURCES = lhsmtool_tsm.c
     lhsmtool_tsm_LDADD = $(top_srcdir)/src/lib/libtsmapi.a
+
+    ltsmfsd_CFLAGS = -I@LUSTRE_SRC_DIR@/lustre/include -I@LUSTRE_SRC_DIR@/lustre/include/uapi -I@TSM_SRC_DIR@/ -I$(top_srcdir)/src/lib
+    sbin_PROGRAMS += ltsmfsd
+    ltsmfsd_SOURCES = ltsmfsd.c
+    ltsmfsd_LDADD = $(top_srcdir)/src/lib/libtsmapi.a
 endif
