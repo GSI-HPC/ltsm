@@ -33,6 +33,9 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/param.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
 #include <zlib.h>
 #include "tsmapi.h"
 #include "qtable.h"
@@ -2525,6 +2528,10 @@ int parse_conf(const char *filename, struct kv_opt *kv_opt)
 		if (rc == -EINVAL)
 			CT_WARN("malformed option '%s' in conf file '%s'",
 				line, filename);
+		else if (rc == -ENOMEM) {
+			CT_ERROR(rc, "realloc");
+			goto cleanup;
+		}
 	}
 
 	if (errno) {
@@ -2532,16 +2539,76 @@ int parse_conf(const char *filename, struct kv_opt *kv_opt)
 		CT_ERROR(errno, "getline failed");
 	}
 
+cleanup:
 	if (line) {
 		free(line);
 		line = NULL;
 	}
-
-	rc = fclose(file);
-	if (rc) {
-		rc = -errno;
-		CT_ERROR(errno, "fclose failed on '%s'", filename);
-	}
+	fclose(file);
 
 	return rc;
+}
+
+int fsd_tsm_fconnect(struct login_t *login, struct session_t *session)
+{
+	int rc;
+        struct sockaddr_in sockaddr_cli;
+
+        /* Leverage TSM server for authentication, but close TSM session
+           afterwards. */
+        rc = tsm_connect(login, session);
+        if (rc != DSM_RC_OK)
+                return -rc;
+
+        /* Connect to file system daemon (fsd). */
+        session->sock_fd = socket(AF_INET, SOCK_STREAM, 0);
+        if (session->sock_fd < 0) {
+                rc = -errno;
+                CT_ERROR(rc, "socket");
+                goto out;
+        }
+
+        memset(&sockaddr_cli, 0, sizeof(sockaddr_cli));
+        sockaddr_cli.sin_family = AF_INET;
+        sockaddr_cli.sin_addr.s_addr = inet_addr(login->hostname);
+        sockaddr_cli.sin_port = htons(login->port);
+
+        rc = connect(session->sock_fd, (struct sockaddr *)&sockaddr_cli,
+                     sizeof(sockaddr_cli));
+        if (rc < 0) {
+                rc = errno;
+                CT_ERROR(rc, "connect");
+                goto out;
+        }
+
+out:
+        tsm_fdisconnect(session);
+        if (rc)
+                close(session->sock_fd);
+
+        return rc;
+
+}
+
+void fsd_tsm_fdisconnect(struct session_t *session)
+{
+	tsm_disconnect(session);
+}
+
+int fsd_tsm_fopen(const char *fs, const char *fpath, const char *desc,
+                  struct session_t *session)
+{
+	return 0;
+	/* TODO. */
+}
+
+ssize_t fsd_tsm_fwrite(const void *ptr, size_t size, size_t nmemb,
+                       struct session_t *session)
+{
+	return send(session->sock_fd, ptr, size * nmemb, 0);
+}
+
+int fsd_tsm_fclose(struct session_t *session)
+{
+	return close(session->sock_fd);
 }

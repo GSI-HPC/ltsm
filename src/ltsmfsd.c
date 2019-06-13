@@ -333,20 +333,16 @@ static void *thread_handle_io(void *arg)
 	fd = (int *)arg;
 	CT_INFO("thread serving fd: %d", *fd);
 
-	/* First send data: struct login_t. */
+	/* First receive struct login_t. */
 	memset(&login, 0, sizeof(struct login_t));
 	bytes_recv = recv(*fd, buf, sizeof(buf), 0);
-	if (bytes_recv < 0) {
+	if (bytes_recv < 0 || bytes_recv != sizeof(struct login_t)) {
 		CT_ERROR(errno, "recv");
-		goto out;
-	}
-	if (bytes_recv != sizeof(struct login_t)) {
-		CT_ERROR(EBADE, "recv");
 		goto out;
 	}
 	memcpy(&login, buf, sizeof(struct login_t));
 
-	/* Check whether login.name is in identifier map. */
+	/* Check whether received node name is in listed identifier map. */
 	list_node_t *node = list_head(&ident_list);
 	bool found = false;
 	while (node) {

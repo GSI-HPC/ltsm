@@ -35,6 +35,7 @@
 
 #include <stdint.h>
 #include <stdbool.h>
+#include <limits.h>
 #include <sys/types.h>
 #include "dsmapitd.h"
 #include "dsmapifp.h"
@@ -67,6 +68,7 @@ enum sort_by_t {SORT_NONE	     = 0,
 		SORT_RESTORE_ORDER   = 3};
 
 struct login_t {
+	/* TSM */
 	char node[DSM_MAX_NODE_LENGTH + 1];
 	char password[DSM_MAX_VERIFIER_LENGTH + 1];
 	char owner[DSM_MAX_OWNER_LENGTH + 1];
@@ -74,6 +76,9 @@ struct login_t {
 	char options[MAX_OPTIONS_LENGTH + 1];
 	char fsname[DSM_MAX_FSNAME_LENGTH + 1];
 	char fstype[DSM_MAX_FSTYPE_LENGTH + 1];
+	/* FSD */
+	char hostname[HOST_NAME_MAX + 1];
+	int port;
 };
 
 struct fid_t {
@@ -148,6 +153,7 @@ struct session_t {
 			struct session_t *session);
 
 	struct tsm_file_t *tsm_file;
+	int sock_fd;
 };
 
 struct kv {
