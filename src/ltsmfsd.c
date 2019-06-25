@@ -325,29 +325,34 @@ static int parseopts(int argc, char *argv[])
 static void *thread_handle_io(void *arg)
 {
 	int *fd;
-	char buf[4096] = {0};
 	ssize_t bytes_recv, bytes_recv_total;
 	struct login_t login;
+	struct fsd_info_t fsd_info;
 
 	bytes_recv_total = 0;
 	fd = (int *)arg;
 	CT_INFO("thread serving fd: %d", *fd);
 
-	/* First receive struct login_t. */
+	/* 1.) receive struct login_t. */
 	memset(&login, 0, sizeof(struct login_t));
-	bytes_recv = recv(*fd, buf, sizeof(buf), 0);
-	if (bytes_recv < 0 || bytes_recv != sizeof(struct login_t)) {
+	bytes_recv = read_size(*fd, &login, sizeof(login));
+	CT_DEBUG("[fd=%d] bytes_recv: %zd, expected: %zd", *fd, bytes_recv,
+		 sizeof(struct login_t));
+	if (bytes_recv < 0) {
 		CT_ERROR(errno, "recv");
 		goto out;
 	}
-	memcpy(&login, buf, sizeof(struct login_t));
+	if (bytes_recv != sizeof(struct login_t)) {
+		CT_ERROR(-ENOMSG, "recv");
+		goto out;
+	}
 
 	/* Check whether received node name is in listed identifier map. */
 	list_node_t *node = list_head(&ident_list);
+	struct ident_map_t *ident_map;
 	bool found = false;
 	while (node) {
-		struct ident_map_t *ident_map =
-			(struct ident_map_t *)list_data(node);
+		ident_map = (struct ident_map_t *)list_data(node);
 		if (!strncmp(login.node, ident_map->node, DSM_MAX_NODE_LENGTH)) {
 			found = true;
 			break;
@@ -355,13 +360,34 @@ static void *thread_handle_io(void *arg)
 		node = list_next(node);
 	}
 	if (!found) {
-		CT_ERROR(ENXIO, "no identifier mapping found for node '%s'",
+		CT_ERROR(0, "identifier mapping for node '%s' not found",
 			 login.node);
 		goto out;
 	}
+	CT_DEBUG("found node '%s' in identmap, using archive_id %d, "
+		 "uid: %d, guid: %d", node->data,
+		 ident_map->archive_id, ident_map->uid, ident_map->gid);
 
-	CT_INFO("thread serving fd: %d, recv node: '%s'", login.node);
+	/* 2.) receive struct fsd_info_t. */
+	memset(&fsd_info, 0, sizeof(struct fsd_info_t));
+	bytes_recv = read_size(*fd, &fsd_info, sizeof(fsd_info));
+	CT_DEBUG("[fd=%d] bytes_recv: %zd, expected: %zd", *fd, bytes_recv,
+		 sizeof(struct fsd_info_t));
+	if (bytes_recv < 0) {
+		CT_ERROR(errno, "recv");
+		goto out;
+	}
+	if (bytes_recv != sizeof(struct fsd_info_t)) {
+		CT_ERROR(-ENOMSG, "recv");
+		goto out;
+	}
 
+	CT_INFO("thread serving fd: %d, fpath: '%s', node: '%s'",
+		*fd, fsd_info.fpath, login.node);
+	/* TODO: To be removed. */
+	goto out;
+
+	char buf[0xffff] = {0};
 	while (1) {
 		bytes_recv = recv(*fd, buf, sizeof(buf), 0);
 		bytes_recv_total += bytes_recv;
@@ -387,18 +413,18 @@ out:
 	return NULL;
 }
 
-static int fsd_setup(void)
-{
-	int rc;
+/* static int fsd_setup(void) */
+/* { */
+/* 	int rc; */
 
-	rc = llapi_search_fsname(opt.o_local_mount, opt.o_local_mount);
-	if (rc < 0) {
-		CT_ERROR(rc, "cannot find a Lustre filesystem mounted at '%s'",
-			 opt.o_local_mount);
-	}
+/* 	rc = llapi_search_fsname(opt.o_local_mount, opt.o_local_mount); */
+/* 	if (rc < 0) { */
+/* 		CT_ERROR(rc, "cannot find a Lustre filesystem mounted at '%s'", */
+/* 			 opt.o_local_mount); */
+/* 	} */
 
-	return rc;
-}
+/* 	return rc; */
+/* } */
 
 int main(int argc, char *argv[])
 {
@@ -408,6 +434,7 @@ int main(int argc, char *argv[])
 	pthread_t *threads = NULL;
 	pthread_attr_t attr;
 	char thread_name[16] = {0};
+	int reuse = 1;
 
 	rc = parseopts(argc, argv);
 	if (rc < 0) {
@@ -415,9 +442,9 @@ int main(int argc, char *argv[])
 		return -rc;	/* Return positive error codes back to shell. */
 	}
 
-	rc = fsd_setup();
-	if (rc < 0)
-		return rc;
+	/* rc = fsd_setup(); */
+	/* if (rc < 0) */
+	/* 	return rc; */
 
 	memset(&sockaddr_srv, 0, sizeof(sockaddr_srv));
 	sockaddr_srv.sin_family = AF_INET;
@@ -430,6 +457,14 @@ int main(int argc, char *argv[])
 		CT_ERROR(rc, "socket");
 		goto cleanup;
 	}
+	rc = setsockopt(sock_fd, SOL_SOCKET, SO_REUSEADDR, &reuse,
+			sizeof(reuse));
+	if (rc < 0) {
+		rc = errno;
+		CT_ERROR(rc, "setsockopt");
+		goto cleanup;
+	}
+
 	rc = bind(sock_fd, (struct sockaddr *)&sockaddr_srv,
 		  sizeof(sockaddr_srv));
 	if (rc < 0) {
@@ -451,7 +486,7 @@ int main(int argc, char *argv[])
 	if (threads == NULL) {
 		rc = errno;
 		CT_ERROR(rc, "calloc");
-		return rc;
+		goto cleanup;
 	}
 
 	rc = pthread_attr_init(&attr);
@@ -462,10 +497,11 @@ int main(int argc, char *argv[])
 	rc = pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
 	if (rc != 0) {
 		CT_ERROR(rc, "pthread_attr_setdetachstate");
-		goto cleanup;
+		goto cleanup_attr;
 	}
 
 	while (1) {
+		/* TODO: Make sure fd is closed. */
 		int fd;
 		struct sockaddr_in sockaddr_cli;
 		socklen_t addrlen;
@@ -505,9 +541,10 @@ int main(int argc, char *argv[])
 		}
 	}
 
-cleanup:
+cleanup_attr:
 	pthread_attr_destroy(&attr);
 
+cleanup:
 	if (threads)
 		free(threads);
 

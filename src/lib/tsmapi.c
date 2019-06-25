@@ -36,6 +36,7 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#include <netdb.h>
 #include <zlib.h>
 #include "tsmapi.h"
 #include "qtable.h"
@@ -2553,12 +2554,20 @@ int fsd_tsm_fconnect(struct login_t *login, struct session_t *session)
 {
 	int rc;
         struct sockaddr_in sockaddr_cli;
+	struct hostent *hostent;
 
         /* Leverage TSM server for authentication, but close TSM session
            afterwards. */
         rc = tsm_connect(login, session);
         if (rc != DSM_RC_OK)
                 return -rc;
+
+	hostent = gethostbyname(login->hostname);
+	if (!hostent) {
+		rc = -h_errno;
+		CT_ERROR(rc, "%s", hstrerror(h_errno));
+		goto out;
+	}
 
         /* Connect to file system daemon (fsd). */
         session->sock_fd = socket(AF_INET, SOCK_STREAM, 0);
@@ -2570,9 +2579,10 @@ int fsd_tsm_fconnect(struct login_t *login, struct session_t *session)
 
         memset(&sockaddr_cli, 0, sizeof(sockaddr_cli));
         sockaddr_cli.sin_family = AF_INET;
-        sockaddr_cli.sin_addr.s_addr = inet_addr(login->hostname);
+        sockaddr_cli.sin_addr = *((struct in_addr *)hostent->h_addr);
         sockaddr_cli.sin_port = htons(login->port);
 
+	CT_INFO("connecting to '%s:%d'", login->hostname, login->port);
         rc = connect(session->sock_fd, (struct sockaddr *)&sockaddr_cli,
                      sizeof(sockaddr_cli));
         if (rc < 0) {
@@ -2581,13 +2591,27 @@ int fsd_tsm_fconnect(struct login_t *login, struct session_t *session)
                 goto out;
         }
 
+	/* Send ltsmfsd the login information. */
+	ssize_t bytes_send = write_size(session->sock_fd, login,
+					sizeof(struct login_t));
+	CT_DEBUG("[fd=%d] bytes_send: %zd, expected: %zd", session->sock_fd,
+		 bytes_send, sizeof(struct login_t));
+	if (bytes_send < 0) {
+		rc = -errno;
+		CT_ERROR(rc, "send");
+		goto out;
+	}
+	if (bytes_send != sizeof(struct login_t)) {
+		rc = -ENOMSG;
+		CT_ERROR(rc, "send");
+	}
+
 out:
         tsm_fdisconnect(session);
         if (rc)
                 close(session->sock_fd);
 
         return rc;
-
 }
 
 void fsd_tsm_fdisconnect(struct session_t *session)
@@ -2598,17 +2622,91 @@ void fsd_tsm_fdisconnect(struct session_t *session)
 int fsd_tsm_fopen(const char *fs, const char *fpath, const char *desc,
                   struct session_t *session)
 {
-	return 0;
-	/* TODO. */
+	int rc = 0;
+	ssize_t bytes_send;
+	struct fsd_info_t fsd_info = {
+		.fs		   = {0},
+		.fpath		   = {0},
+		.desc		   = {0}
+	};
+
+	if (fs)
+		strncpy(fsd_info.fs, fs, DSM_MAX_FSNAME_LENGTH);
+	if (fpath)
+		strncpy(fsd_info.fpath, fpath, PATH_MAX);
+	if (desc)
+		strncpy(fsd_info.desc, desc, DSM_MAX_DESCR_LENGTH);
+
+	bytes_send = write_size(session->sock_fd, &fsd_info, sizeof(fsd_info));
+	CT_DEBUG("[fd=%d] bytes_recv: %zd, expected: %zd", session->sock_fd,
+		 bytes_send, sizeof(fsd_info));
+	if (bytes_send < 0) {
+		rc = -errno;
+		CT_ERROR(rc, "send");
+		goto out;
+	}
+	if ((size_t)bytes_send != sizeof(fsd_info)) {
+		rc = -ENOMSG;
+		CT_ERROR(rc, "send");
+	}
+
+out:
+	return rc;
 }
 
 ssize_t fsd_tsm_fwrite(const void *ptr, size_t size, size_t nmemb,
                        struct session_t *session)
 {
-	return send(session->sock_fd, ptr, size * nmemb, 0);
+	return write(session->sock_fd, ptr, size * nmemb);
 }
 
 int fsd_tsm_fclose(struct session_t *session)
 {
 	return close(session->sock_fd);
+}
+
+ssize_t read_size(int fd, void *ptr, size_t n)
+{
+	size_t bytes_total = 0;
+	char *buf;
+
+	buf = ptr;
+	while (bytes_total < n) {
+		ssize_t bytes_read;
+
+		bytes_read = read(fd, buf, n - bytes_total);
+
+		if (bytes_read == 0)
+			return bytes_total;
+		if (bytes_read == -1)
+			return -errno;
+
+		bytes_total += bytes_read;
+		buf += bytes_read;
+	}
+
+	return bytes_total;
+}
+
+ssize_t write_size(int fd, const void *ptr, size_t n)
+{
+	size_t bytes_total = 0;
+	const char *buf;
+
+	buf = ptr;
+	while (bytes_total < n) {
+		ssize_t bytes_written;
+
+		bytes_written = write(fd, buf, n - bytes_total);
+
+		if (bytes_written == 0)
+			return bytes_total;
+		if (bytes_written == -1)
+			return -errno;
+
+		bytes_total += bytes_written;
+		buf += bytes_written;
+	}
+
+	return bytes_total;
 }

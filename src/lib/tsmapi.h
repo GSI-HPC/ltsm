@@ -58,6 +58,13 @@
 #define MAGIC_ID_V1 71147
 #define DEFAULT_NUM_BUCKETS 64
 
+#ifndef DSM_MAX_FSNAME_LENGTH
+#define DSM_MAX_FSNAME_LENGTH 1024
+#endif
+#ifndef DSM_MAX_DESCR_LENGTH
+#define DSM_MAX_DESCR_LENGTH 255
+#endif
+
 #define OPTNCMP(str1, str2)			\
 	((strlen(str1) == strlen(str2)) &&	\
 	 (strncmp(str1, str2, strlen(str1)) == 0))
@@ -79,6 +86,12 @@ struct login_t {
 	/* FSD */
 	char hostname[HOST_NAME_MAX + 1];
 	int port;
+};
+
+struct fsd_info_t {
+	char fs[DSM_MAX_FSNAME_LENGTH + 1];
+	char fpath[PATH_MAX + 1];
+	char desc[DSM_MAX_DESCR_LENGTH + 1];
 };
 
 struct fid_t {
@@ -204,6 +217,8 @@ dsInt16_t tsm_retrieve_fpath(const char *fs, const char *fpath,
 
 int crc32file(const char *filename, uint32_t *crc32result);
 int parse_conf(const char *filename, struct kv_opt *kv_opt);
+ssize_t read_size(int fd, void *ptr, size_t n);
+ssize_t write_size(int fd, const void *ptr, size_t n);
 
 #ifdef HAVE_LUSTRE
 int xattr_get_lov(const int fd, struct lustre_info_t *lustre_info,

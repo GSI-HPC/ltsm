@@ -26,13 +26,17 @@
 #include "tsmapi.c"
 #include "test_utils.h"
 
-#define SERVERNAME	"polaris-kvm-tsm-server"
+#define SERVERNAME	"kvmltsm01"
 #define NODE		"polaris"
 #define PASSWORD	"polaris"
 #define OWNER           ""
+
+#define FSD_HOSTNAME    "localhost"
+#define FSD_PORT         7625
+
 #define LEN_RND_STR     6
 
-void test_fcalls(CuTest *tc)
+void test_tsm_fcalls(CuTest *tc)
 {
 	int rc;
 	struct login_t login;
@@ -126,6 +130,34 @@ void test_fcalls(CuTest *tc)
 	tsm_cleanup(DSM_SINGLETHREAD);
 }
 
+void test_fsd_fcalls(CuTest *tc)
+{
+	int rc;
+	struct login_t login;
+	struct session_t session;
+	const char *fs = "/fs";
+	const char *fpath = "/fs/fsdtest.txt";
+
+	login_fill(&login, SERVERNAME, NODE, PASSWORD,
+		   OWNER, LINUX_PLATFORM, DEFAULT_FSNAME,
+		   DEFAULT_FSTYPE);
+	strncpy(login.hostname, FSD_HOSTNAME, HOST_NAME_MAX);
+	login.port = FSD_PORT;
+
+	memset(&session, 0, sizeof(struct session_t));
+
+	rc = fsd_tsm_fconnect(&login, &session);
+	CuAssertIntEquals(tc, 0, rc);
+
+	rc = fsd_tsm_fopen(fs, fpath, NULL, &session);
+	CuAssertIntEquals(tc, 0, rc);
+
+	rc = fsd_tsm_fclose(&session);
+	CuAssertIntEquals(tc, 0, rc);
+
+	fsd_tsm_fdisconnect(&session);
+}
+
 void test_extract_hl_ll(CuTest *tc)
 {
 	const char *fpath = "/fs/hl/ll";
@@ -205,8 +237,11 @@ void test_set_prefix(CuTest *tc)
 CuSuite* tsmapi_get_suite()
 {
     CuSuite* suite = CuSuiteNew();
-#if TEST_F_OPEN_WRITE_CLOSE
-    SUITE_ADD_TEST(suite, test_fcalls);
+#ifdef TEST_TSM_CALLS
+    SUITE_ADD_TEST(suite, test_tsm_fcalls);
+#endif
+#ifdef TEST_FSD_CALLS
+    SUITE_ADD_TEST(suite, test_fsd_fcalls);
 #endif
     SUITE_ADD_TEST(suite, test_extract_hl_ll);
     SUITE_ADD_TEST(suite, test_login_fill);
@@ -217,7 +252,7 @@ CuSuite* tsmapi_get_suite()
 
 void run_all_tests(void)
 {
-	api_msg_set_level(API_MSG_ERROR);
+	api_msg_set_level(API_MSG_DEBUG);
 
 	CuString *output = CuStringNew();
 	CuSuite *suite = CuSuiteNew();
