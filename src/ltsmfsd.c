@@ -322,28 +322,24 @@ static int parseopts(int argc, char *argv[])
 	return rc;
 }
 
-static void *thread_handle_io(void *arg)
+static int recv_login(int fd, struct login_t *login)
 {
-	int *fd;
-	ssize_t bytes_recv, bytes_recv_total;
-	struct login_t login;
-	struct fsd_info_t fsd_info;
+	int rc = 0;
+	ssize_t bytes_recv;
 
-	bytes_recv_total = 0;
-	fd = (int *)arg;
-	CT_INFO("thread serving fd: %d", *fd);
+	CT_INFO("[fd=%d] recv_login: %p", fd, login);
 
-	/* 1.) receive struct login_t. */
-	memset(&login, 0, sizeof(struct login_t));
-	bytes_recv = read_size(*fd, &login, sizeof(login));
-	CT_DEBUG("[fd=%d] bytes_recv: %zd, expected: %zd", *fd, bytes_recv,
+	bytes_recv = read_size(fd, login, sizeof(*login));
+	CT_DEBUG("[fd=%d] read_size: %zd, expected: %zd", fd, bytes_recv,
 		 sizeof(struct login_t));
 	if (bytes_recv < 0) {
-		CT_ERROR(errno, "recv");
+		rc = -errno;
+		CT_ERROR(rc, "recv");
 		goto out;
 	}
 	if (bytes_recv != sizeof(struct login_t)) {
-		CT_ERROR(-ENOMSG, "recv");
+		rc = -ENOMSG;
+		CT_ERROR(rc, "recv");
 		goto out;
 	}
 
@@ -353,7 +349,7 @@ static void *thread_handle_io(void *arg)
 	bool found = false;
 	while (node) {
 		ident_map = (struct ident_map_t *)list_data(node);
-		if (!strncmp(login.node, ident_map->node, DSM_MAX_NODE_LENGTH)) {
+		if (!strncmp(login->node, ident_map->node, DSM_MAX_NODE_LENGTH)) {
 			found = true;
 			break;
 		}
@@ -361,35 +357,76 @@ static void *thread_handle_io(void *arg)
 	}
 	if (!found) {
 		CT_ERROR(0, "identifier mapping for node '%s' not found",
-			 login.node);
+			 login->node);
+		rc = -EPERM;
 		goto out;
 	}
-	CT_DEBUG("found node '%s' in identmap, using archive_id %d, "
-		 "uid: %d, guid: %d", node->data,
-		 ident_map->archive_id, ident_map->uid, ident_map->gid);
+	CT_INFO("found node '%s' in identmap, using archive_id %d, "
+		"uid: %d, guid: %d", node->data,
+		ident_map->archive_id, ident_map->uid, ident_map->gid);
 
-	/* 2.) receive struct fsd_info_t. */
-	memset(&fsd_info, 0, sizeof(struct fsd_info_t));
-	bytes_recv = read_size(*fd, &fsd_info, sizeof(fsd_info));
-	CT_DEBUG("[fd=%d] bytes_recv: %zd, expected: %zd", *fd, bytes_recv,
+out:
+	return rc;
+}
+
+static int recv_fsd_info(int fd, struct fsd_info_t *fsd_info)
+{
+	int rc = 0;
+	ssize_t bytes_recv;
+
+	CT_INFO("[fd=%d] recv_fsd_info: %p", fd, fsd_info);
+
+	bytes_recv = read_size(fd, fsd_info, sizeof(*fsd_info));
+	CT_DEBUG("[fd=%d] read_size: %zd, expected: %zd", fd, bytes_recv,
 		 sizeof(struct fsd_info_t));
 	if (bytes_recv < 0) {
-		CT_ERROR(errno, "recv");
+		rc = -errno;
+		CT_ERROR(rc, "recv");
 		goto out;
 	}
 	if (bytes_recv != sizeof(struct fsd_info_t)) {
-		CT_ERROR(-ENOMSG, "recv");
+		rc = -ENOMSG;
+		CT_ERROR(rc, "recv");
+		goto out;
+	}
+
+out:
+	return rc;
+}
+
+static void *thread_handle_client(void *arg)
+{
+	int rc, *fd;
+	struct login_t login;
+	struct fsd_info_t fsd_info;
+	ssize_t bytes_recv, bytes_recv_total = 0;
+
+	fd = (int *)arg;
+	memset(&login, 0, sizeof(login));
+	memset(&fsd_info, 0, sizeof(fsd_info));
+
+	/* State 1: Receive struct login_t and verify node id is listed in identifier map. */
+	rc = recv_login(*fd, &login);
+	if (rc) {
+		CT_ERROR(rc, "recv_login failed");
+		goto out;
+	}
+
+	/* State 2:  Receive struct fsd_info_t. */
+	rc = recv_fsd_info(*fd, &fsd_info);
+	if (rc) {
+		CT_ERROR(rc, "recv_fsd_info failed");
 		goto out;
 	}
 
 	CT_INFO("thread serving fd: %d, fpath: '%s', node: '%s'",
 		*fd, fsd_info.fpath, login.node);
-	/* TODO: To be removed. */
-	goto out;
 
-	char buf[0xffff] = {0};
+	uint8_t buf[0xffff] = {0};
 	while (1) {
-		bytes_recv = recv(*fd, buf, sizeof(buf), 0);
+		bytes_recv = read_size(*fd, buf, sizeof(buf));
+		CT_DEBUG("[fd=%d] read_size: %zd, expected: %zd", *fd,
+			 bytes_recv, sizeof(buf));
 		bytes_recv_total += bytes_recv;
 		if (bytes_recv < 0) {
 			CT_ERROR(errno, "recv");
@@ -398,12 +435,11 @@ static void *thread_handle_io(void *arg)
 			CT_INFO("bytes total received: %zu", bytes_recv_total);
 			goto out;
 		} else {
-			/* TODO: */
+			CT_INFO("bytes received: %zu", bytes_recv);
 		}
 	}
 
 out:
-	close(*fd);
 
 	pthread_mutex_lock(&cnt_mutex);
 	if (thread_cnt > 0)
@@ -521,7 +557,7 @@ int main(int argc, char *argv[])
 			}
 			pthread_mutex_lock(&cnt_mutex);
 			rc = pthread_create(&threads[thread_cnt], NULL,
-					    thread_handle_io,
+					    thread_handle_client,
 					    (void *)&fd);
 			if (rc != 0)
 				CT_ERROR(rc, "cannot create thread for "

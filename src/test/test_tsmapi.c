@@ -135,8 +135,12 @@ void test_fsd_fcalls(CuTest *tc)
 	int rc;
 	struct login_t login;
 	struct session_t session;
-	const char *fs = "/fs";
-	const char *fpath = "/fs/fsdtest.txt";
+	char rnd_chars[0xffff + 1] = {0};
+	char fpath[][5 + LEN_RND_STR + 1] = {"/tmp/",
+					     "/tmp/",
+					     "/tmp/",
+					     "/tmp/",
+					     "/tmp/"};
 
 	login_fill(&login, SERVERNAME, NODE, PASSWORD,
 		   OWNER, LINUX_PLATFORM, DEFAULT_FSNAME,
@@ -149,11 +153,25 @@ void test_fsd_fcalls(CuTest *tc)
 	rc = fsd_tsm_fconnect(&login, &session);
 	CuAssertIntEquals(tc, 0, rc);
 
-	rc = fsd_tsm_fopen(fs, fpath, NULL, &session);
-	CuAssertIntEquals(tc, 0, rc);
+	for (uint8_t r = 0; r < sizeof(fpath)/sizeof(fpath[0]); r++) {
+		char rnd_s[LEN_RND_STR + 1] = {0};
 
-	rc = fsd_tsm_fclose(&session);
-	CuAssertIntEquals(tc, 0, rc);
+		rnd_str(rnd_s, LEN_RND_STR);
+		snprintf(fpath[r] + 5, LEN_RND_STR + 1, "%s", rnd_s);
+
+		rc = fsd_tsm_fopen("/", fpath[r], NULL, &session);
+		CuAssertIntEquals(tc, 0, rc);
+
+		const uint16_t len = rand() % 0xffff;
+		ssize_t bytes_written;
+
+		rnd_str(rnd_chars, len);
+		bytes_written = fsd_tsm_fwrite(rnd_chars, len, 1, &session);
+		CuAssertIntEquals(tc, len, bytes_written);
+
+		rc = fsd_tsm_fclose(&session);
+		CuAssertIntEquals(tc, 0, rc);
+	}
 
 	fsd_tsm_fdisconnect(&session);
 }

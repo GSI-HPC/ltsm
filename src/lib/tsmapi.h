@@ -86,12 +86,19 @@ struct login_t {
 	/* FSD */
 	char hostname[HOST_NAME_MAX + 1];
 	int port;
+	uint32_t magic;
 };
 
 struct fsd_info_t {
 	char fs[DSM_MAX_FSNAME_LENGTH + 1];
 	char fpath[PATH_MAX + 1];
 	char desc[DSM_MAX_DESCR_LENGTH + 1];
+	uint32_t magic;
+};
+
+struct fsd_close_t {
+	ssize_t bytes_transferred;
+	uint32_t magic;
 };
 
 struct fid_t {

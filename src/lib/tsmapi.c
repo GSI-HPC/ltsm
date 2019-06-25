@@ -2616,6 +2616,7 @@ out:
 
 void fsd_tsm_fdisconnect(struct session_t *session)
 {
+	close(session->sock_fd);
 	tsm_disconnect(session);
 }
 
@@ -2638,7 +2639,7 @@ int fsd_tsm_fopen(const char *fs, const char *fpath, const char *desc,
 		strncpy(fsd_info.desc, desc, DSM_MAX_DESCR_LENGTH);
 
 	bytes_send = write_size(session->sock_fd, &fsd_info, sizeof(fsd_info));
-	CT_DEBUG("[fd=%d] bytes_recv: %zd, expected: %zd", session->sock_fd,
+	CT_DEBUG("[fd=%d] write_size: %zd, expected: %zd", session->sock_fd,
 		 bytes_send, sizeof(fsd_info));
 	if (bytes_send < 0) {
 		rc = -errno;
@@ -2657,12 +2658,20 @@ out:
 ssize_t fsd_tsm_fwrite(const void *ptr, size_t size, size_t nmemb,
                        struct session_t *session)
 {
-	return write(session->sock_fd, ptr, size * nmemb);
+	ssize_t bytes_written;
+
+	bytes_written = write(session->sock_fd, ptr, size * nmemb);
+	CT_DEBUG("[fd=%d] write: %zd, expected: %zd", session->sock_fd,
+		 bytes_written, size * nmemb);
+
+	return bytes_written;
 }
 
 int fsd_tsm_fclose(struct session_t *session)
 {
-	return close(session->sock_fd);
+	UNUSED(session);
+
+	return 0;
 }
 
 ssize_t read_size(int fd, void *ptr, size_t n)
