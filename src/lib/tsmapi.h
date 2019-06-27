@@ -97,8 +97,12 @@ struct fsd_info_t {
 };
 
 struct fsd_close_t {
-	ssize_t bytes_transferred;
 	uint32_t magic;
+};
+
+struct fsd_session_t {
+	int sock_fd;
+	struct fsd_close_t fsd_close;
 };
 
 struct fid_t {
@@ -173,7 +177,8 @@ struct session_t {
 			struct session_t *session);
 
 	struct tsm_file_t *tsm_file;
-	int sock_fd;
+
+	struct fsd_session_t fsd_session;
 };
 
 struct kv {

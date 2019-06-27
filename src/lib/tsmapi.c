@@ -2570,8 +2570,8 @@ int fsd_tsm_fconnect(struct login_t *login, struct session_t *session)
 	}
 
         /* Connect to file system daemon (fsd). */
-        session->sock_fd = socket(AF_INET, SOCK_STREAM, 0);
-        if (session->sock_fd < 0) {
+        session->fsd_session.sock_fd = socket(AF_INET, SOCK_STREAM, 0);
+        if (session->fsd_session.sock_fd < 0) {
                 rc = -errno;
                 CT_ERROR(rc, "socket");
                 goto out;
@@ -2583,7 +2583,8 @@ int fsd_tsm_fconnect(struct login_t *login, struct session_t *session)
         sockaddr_cli.sin_port = htons(login->port);
 
 	CT_INFO("connecting to '%s:%d'", login->hostname, login->port);
-        rc = connect(session->sock_fd, (struct sockaddr *)&sockaddr_cli,
+        rc = connect(session->fsd_session.sock_fd,
+		     (struct sockaddr *)&sockaddr_cli,
                      sizeof(sockaddr_cli));
         if (rc < 0) {
                 rc = errno;
@@ -2592,10 +2593,11 @@ int fsd_tsm_fconnect(struct login_t *login, struct session_t *session)
         }
 
 	/* Send ltsmfsd the login information. */
-	ssize_t bytes_send = write_size(session->sock_fd, login,
+	ssize_t bytes_send = write_size(session->fsd_session.sock_fd, login,
 					sizeof(struct login_t));
-	CT_DEBUG("[fd=%d] bytes_send: %zd, expected: %zd", session->sock_fd,
-		 bytes_send, sizeof(struct login_t));
+	CT_DEBUG("[fd=%d] bytes_send: %zd, expected: %zd",
+		 session->fsd_session.sock_fd, bytes_send,
+		 sizeof(struct login_t));
 	if (bytes_send < 0) {
 		rc = -errno;
 		CT_ERROR(rc, "send");
@@ -2609,14 +2611,14 @@ int fsd_tsm_fconnect(struct login_t *login, struct session_t *session)
 out:
         tsm_fdisconnect(session);
         if (rc)
-                close(session->sock_fd);
+                close(session->fsd_session.sock_fd);
 
         return rc;
 }
 
 void fsd_tsm_fdisconnect(struct session_t *session)
 {
-	close(session->sock_fd);
+	close(session->fsd_session.sock_fd);
 	tsm_disconnect(session);
 }
 
@@ -2638,8 +2640,10 @@ int fsd_tsm_fopen(const char *fs, const char *fpath, const char *desc,
 	if (desc)
 		strncpy(fsd_info.desc, desc, DSM_MAX_DESCR_LENGTH);
 
-	bytes_send = write_size(session->sock_fd, &fsd_info, sizeof(fsd_info));
-	CT_DEBUG("[fd=%d] write_size: %zd, expected: %zd", session->sock_fd,
+	bytes_send = write_size(session->fsd_session.sock_fd, &fsd_info,
+				sizeof(fsd_info));
+	CT_DEBUG("[fd=%d] write_size: %zd, expected: %zd",
+		 session->fsd_session.sock_fd,
 		 bytes_send, sizeof(fsd_info));
 	if (bytes_send < 0) {
 		rc = -errno;
@@ -2660,8 +2664,9 @@ ssize_t fsd_tsm_fwrite(const void *ptr, size_t size, size_t nmemb,
 {
 	ssize_t bytes_written;
 
-	bytes_written = write(session->sock_fd, ptr, size * nmemb);
-	CT_DEBUG("[fd=%d] write: %zd, expected: %zd", session->sock_fd,
+	bytes_written = write(session->fsd_session.sock_fd, ptr, size * nmemb);
+	CT_DEBUG("[fd=%d] write: %zd, expected: %zd",
+		 session->fsd_session.sock_fd,
 		 bytes_written, size * nmemb);
 
 	return bytes_written;
@@ -2669,9 +2674,27 @@ ssize_t fsd_tsm_fwrite(const void *ptr, size_t size, size_t nmemb,
 
 int fsd_tsm_fclose(struct session_t *session)
 {
-	UNUSED(session);
+	int rc = 0;
+	ssize_t bytes_send;
 
-	return 0;
+	bytes_send = write_size(session->fsd_session.sock_fd,
+				&(session->fsd_session.fsd_close),
+				sizeof(struct fsd_close_t));
+	CT_DEBUG("[fd=%d] write_size: %zd, expected: %zd",
+		 session->fsd_session.sock_fd,
+		 bytes_send, sizeof(struct fsd_close_t));
+	if (bytes_send < 0) {
+		rc = -errno;
+		CT_ERROR(rc, "send");
+		goto out;
+	}
+	if ((size_t)bytes_send != sizeof(struct fsd_close_t)) {
+		rc = -ENOMSG;
+		CT_ERROR(rc, "send");
+	}
+
+out:
+	return rc;
 }
 
 ssize_t read_size(int fd, void *ptr, size_t n)

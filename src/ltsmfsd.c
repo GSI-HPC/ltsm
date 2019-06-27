@@ -178,6 +178,9 @@ static int parse_file_ident(const char *filename)
 	errno = 0;
 	while ((nread = getline(&line, &len, file)) != -1) {
 
+		if (line && line[0] == '#')
+			continue;
+
 		if (parse_line_ident(line, &ident_map))
 			/* Skip malformed lines and output warning. */
 			CT_WARN("ignoring settings in line %d file '%s'",
@@ -394,16 +397,43 @@ out:
 	return rc;
 }
 
+static int recv_fsd_close(int fd, struct fsd_close_t *fsd_close)
+{
+	int rc = 0;
+	ssize_t bytes_recv;
+
+	CT_INFO("[fd=%d] recv_fsd_close: %p", fd, fsd_close);
+
+	bytes_recv = read_size(fd, fsd_close, sizeof(*fsd_close));
+	CT_DEBUG("[fd=%d] read_size: %zd, expected: %zd", fd, bytes_recv,
+		 sizeof(struct fsd_close_t));
+	if (bytes_recv < 0) {
+		rc = -errno;
+		CT_ERROR(rc, "read_size");
+		goto out;
+	}
+	if (bytes_recv != sizeof(struct fsd_close_t)) {
+		rc = -ENOMSG;
+		CT_ERROR(rc, "read_size");
+		goto out;
+	}
+
+out:
+	return rc;
+}
+
 static void *thread_handle_client(void *arg)
 {
 	int rc, *fd;
 	struct login_t login;
 	struct fsd_info_t fsd_info;
+	struct fsd_close_t fsd_close;
 	ssize_t bytes_recv, bytes_recv_total = 0;
 
 	fd = (int *)arg;
 	memset(&login, 0, sizeof(login));
 	memset(&fsd_info, 0, sizeof(fsd_info));
+	memset(&fsd_close, 0, sizeof(fsd_close));
 
 	/* State 1: Receive struct login_t and verify node id is listed in identifier map. */
 	rc = recv_login(*fd, &login);
@@ -422,10 +452,11 @@ static void *thread_handle_client(void *arg)
 	CT_INFO("thread serving fd: %d, fpath: '%s', node: '%s'",
 		*fd, fsd_info.fpath, login.node);
 
+	/* State 3: Receive data buffer. */
 	uint8_t buf[0xffff] = {0};
 	while (1) {
 		bytes_recv = read_size(*fd, buf, sizeof(buf));
-		CT_DEBUG("[fd=%d] read_size: %zd, expected: %zd", *fd,
+		CT_DEBUG("[fd=%d] read_size: %zd, max expected: %zd", *fd,
 			 bytes_recv, sizeof(buf));
 		bytes_recv_total += bytes_recv;
 		if (bytes_recv < 0) {
@@ -439,8 +470,14 @@ static void *thread_handle_client(void *arg)
 		}
 	}
 
-out:
+	/* State 4: Receive struct fsd_close_t. */
+	rc = recv_fsd_close(*fd, &fsd_close);
+	if (rc) {
+		CT_ERROR(rc, "recv_fsd_close failed");
+		goto out;
+	}
 
+out:
 	pthread_mutex_lock(&cnt_mutex);
 	if (thread_cnt > 0)
 		thread_cnt--;
