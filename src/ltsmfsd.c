@@ -325,26 +325,9 @@ static int parseopts(int argc, char *argv[])
 	return rc;
 }
 
-static int recv_login(int fd, struct login_t *login)
+static int verify_node(const struct login_t *login)
 {
 	int rc = 0;
-	ssize_t bytes_recv;
-
-	CT_INFO("[fd=%d] recv_login: %p", fd, login);
-
-	bytes_recv = read_size(fd, login, sizeof(*login));
-	CT_DEBUG("[fd=%d] read_size: %zd, expected: %zd", fd, bytes_recv,
-		 sizeof(struct login_t));
-	if (bytes_recv < 0) {
-		rc = -errno;
-		CT_ERROR(rc, "recv");
-		goto out;
-	}
-	if (bytes_recv != sizeof(struct login_t)) {
-		rc = -ENOMSG;
-		CT_ERROR(rc, "recv");
-		goto out;
-	}
 
 	/* Check whether received node name is in listed identifier map. */
 	list_node_t *node = list_head(&ident_list);
@@ -372,51 +355,34 @@ out:
 	return rc;
 }
 
-static int recv_fsd_info(int fd, struct fsd_info_t *fsd_info)
+static int recv_fsd_protocol(int fd, struct fsd_protocol_t *fsd_protocol,
+			     enum fsd_protocol_state_t fsd_protocol_state)
 {
 	int rc = 0;
 	ssize_t bytes_recv;
 
-	CT_INFO("[fd=%d] recv_fsd_info: %p", fd, fsd_info);
+	if (fd < 0 || !fsd_protocol)
+		return -EINVAL;
 
-	bytes_recv = read_size(fd, fsd_info, sizeof(*fsd_info));
-	CT_DEBUG("[fd=%d] read_size: %zd, expected: %zd", fd, bytes_recv,
-		 sizeof(struct fsd_info_t));
-	if (bytes_recv < 0) {
-		rc = -errno;
-		CT_ERROR(rc, "recv");
-		goto out;
-	}
-	if (bytes_recv != sizeof(struct fsd_info_t)) {
-		rc = -ENOMSG;
-		CT_ERROR(rc, "recv");
-		goto out;
-	}
-
-out:
-	return rc;
-}
-
-static int recv_fsd_close(int fd, struct fsd_close_t *fsd_close)
-{
-	int rc = 0;
-	ssize_t bytes_recv;
-
-	CT_INFO("[fd=%d] recv_fsd_close: %p", fd, fsd_close);
-
-	bytes_recv = read_size(fd, fsd_close, sizeof(*fsd_close));
-	CT_DEBUG("[fd=%d] read_size: %zd, expected: %zd", fd, bytes_recv,
-		 sizeof(struct fsd_close_t));
+	bytes_recv = read_size(fd, fsd_protocol, sizeof(struct fsd_protocol_t));
+	CT_DEBUG("[fd=%d] read size: %zd, expected size: %zd, state: '%s', expected: '%s'",
+		 fd, bytes_recv, sizeof(struct fsd_protocol_t),
+		 FSD_PROTOCOL_STR(fsd_protocol->state),
+		 FSD_PROTOCOL_STR(fsd_protocol_state));
 	if (bytes_recv < 0) {
 		rc = -errno;
 		CT_ERROR(rc, "read_size");
 		goto out;
 	}
-	if (bytes_recv != sizeof(struct fsd_close_t)) {
+	if (bytes_recv != sizeof(struct fsd_protocol_t)) {
 		rc = -ENOMSG;
 		CT_ERROR(rc, "read_size");
 		goto out;
 	}
+	CT_INFO("[fd=%d] recv_fsd_protcol state: '%s', expected: '%s'",
+		fd,
+		FSD_PROTOCOL_STR(fsd_protocol->state),
+		FSD_PROTOCOL_STR(fsd_protocol_state));
 
 out:
 	return rc;
@@ -425,38 +391,44 @@ out:
 static void *thread_handle_client(void *arg)
 {
 	int rc, *fd;
-	struct login_t login;
-	struct fsd_info_t fsd_info;
-	struct fsd_close_t fsd_close;
 	ssize_t bytes_recv, bytes_recv_total = 0;
+	struct fsd_protocol_t fsd_protocol;
 
 	fd = (int *)arg;
-	memset(&login, 0, sizeof(login));
-	memset(&fsd_info, 0, sizeof(fsd_info));
-	memset(&fsd_close, 0, sizeof(fsd_close));
+	memset(&fsd_protocol, 0, sizeof(struct fsd_protocol_t));
 
-	/* State 1: Receive struct login_t and verify node id is listed in identifier map. */
-	rc = recv_login(*fd, &login);
+	/* State 1: Client calls fsd_tsm_fconnect(...). */
+	rc = recv_fsd_protocol(*fd, &fsd_protocol, FSD_CONNECT);
+	CT_DEBUG("[rc=%d,fd=%d] recv_fsd_protocol", rc, *fd);
 	if (rc) {
-		CT_ERROR(rc, "recv_login failed");
+		CT_ERROR(rc, "recv_fsd_protocol failed");
 		goto out;
 	}
 
-	/* State 2:  Receive struct fsd_info_t. */
-	rc = recv_fsd_info(*fd, &fsd_info);
+	rc = verify_node(&fsd_protocol.login);
+	CT_DEBUG("[rc=%d] verify_node", rc);
 	if (rc) {
-		CT_ERROR(rc, "recv_fsd_info failed");
+		CT_ERROR(rc, "verify node");
 		goto out;
 	}
 
-	CT_INFO("thread serving fd: %d, fpath: '%s', node: '%s'",
-		*fd, fsd_info.fpath, login.node);
+	/* State 2: Client calls fsd_tsm_fopen(...). */
+	rc = recv_fsd_protocol(*fd, &fsd_protocol, FSD_OPEN);
+	CT_DEBUG("[rc=%d,fd=%d] recv_fsd_protocol", rc, *fd);
+	if (rc) {
+		CT_ERROR(rc, "recv_fsd_protocol failed");
+		goto out;
+	}
 
-	/* State 3: Receive data buffer. */
+	CT_INFO("[fd=%d] receiving buffer from node: '%s' with fpath: '%s'",
+		*fd, fsd_protocol.login.node, fsd_protocol.fsd_info.fpath);
+
+	/* State 3: Client calls (multiple times) fsd_tsm_write(...).
+	   Receive data buffer. */
 	uint8_t buf[0xffff] = {0};
 	while (1) {
 		bytes_recv = read_size(*fd, buf, sizeof(buf));
-		CT_DEBUG("[fd=%d] read_size: %zd, max expected: %zd", *fd,
+		CT_DEBUG("[fd=%d] receive buffer read_size: %zd, max expected: %zd", *fd,
 			 bytes_recv, sizeof(buf));
 		bytes_recv_total += bytes_recv;
 		if (bytes_recv < 0) {
@@ -470,10 +442,11 @@ static void *thread_handle_client(void *arg)
 		}
 	}
 
-	/* State 4: Receive struct fsd_close_t. */
-	rc = recv_fsd_close(*fd, &fsd_close);
+	/* State 4: Client calls fsd_tsm_fclose(...). */
+	rc = recv_fsd_protocol(*fd, &fsd_protocol, FSD_CLOSE);
+	CT_DEBUG("[rc=%d,fd=%d] recv_fsd_protocol", rc, *fd);
 	if (rc) {
-		CT_ERROR(rc, "recv_fsd_close failed");
+		CT_ERROR(rc, "recv_fsd_protocol failed");
 		goto out;
 	}
 

@@ -69,10 +69,27 @@
 	((strlen(str1) == strlen(str2)) &&	\
 	 (strncmp(str1, str2, strlen(str1)) == 0))
 
-enum sort_by_t {SORT_NONE	     = 0,
-		SORT_DATE_ASCENDING  = 1,
-		SORT_DATE_DESCENDING = 2,
-		SORT_RESTORE_ORDER   = 3};
+#define FSD_PROTOCOL_STR(s)					\
+	s == FSD_CONNECT    ? "FSD_CONNECT"    :		\
+	s == FSD_OPEN       ? "FSD_OPEN"       :		\
+	s == FSD_WRITE      ? "FSD_WRITE"      :		\
+	s == FSD_CLOSE      ? "FSD_CLOSE"      :		\
+	s == FSD_DISCONNECT ? "FSD_DISCONNECT" : "UNKNOWN"	\
+
+enum sort_by_t {
+	SORT_NONE	     = 0,
+	SORT_DATE_ASCENDING  = 1,
+	SORT_DATE_DESCENDING = 2,
+	SORT_RESTORE_ORDER   = 3
+};
+
+enum fsd_protocol_state_t {
+	FSD_CONNECT    = 0,
+	FSD_OPEN       = 1,
+	FSD_WRITE      = 2,
+	FSD_CLOSE      = 3,
+	FSD_DISCONNECT = 0,
+};
 
 struct login_t {
 	/* TSM */
@@ -86,23 +103,19 @@ struct login_t {
 	/* FSD */
 	char hostname[HOST_NAME_MAX + 1];
 	int port;
-	uint32_t magic;
 };
 
 struct fsd_info_t {
 	char fs[DSM_MAX_FSNAME_LENGTH + 1];
 	char fpath[PATH_MAX + 1];
 	char desc[DSM_MAX_DESCR_LENGTH + 1];
-	uint32_t magic;
 };
 
-struct fsd_close_t {
-	uint32_t magic;
-};
-
-struct fsd_session_t {
+struct fsd_protocol_t {
+	enum fsd_protocol_state_t state;
+	struct login_t login;
+	struct fsd_info_t fsd_info;
 	int sock_fd;
-	struct fsd_close_t fsd_close;
 };
 
 struct fid_t {
@@ -178,7 +191,7 @@ struct session_t {
 
 	struct tsm_file_t *tsm_file;
 
-	struct fsd_session_t fsd_session;
+	struct fsd_protocol_t fsd_protocol;
 };
 
 struct kv {

@@ -154,6 +154,7 @@ void test_fsd_fcalls(CuTest *tc)
 	CuAssertIntEquals(tc, 0, rc);
 
 	for (uint8_t r = 0; r < sizeof(fpath)/sizeof(fpath[0]); r++) {
+
 		char rnd_s[LEN_RND_STR + 1] = {0};
 
 		rnd_str(rnd_s, LEN_RND_STR);
