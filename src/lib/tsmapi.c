@@ -2666,12 +2666,22 @@ int fsd_tsm_fopen(const char *fs, const char *fpath, const char *desc,
 ssize_t fsd_tsm_fwrite(const void *ptr, size_t size, size_t nmemb,
                        struct session_t *session)
 {
+	int rc;
 	ssize_t bytes_written;
 
-	bytes_written = write(session->fsd_protocol.sock_fd, ptr, size * nmemb);
+	session->fsd_protocol.size = size * nmemb;
+
+	rc = send_fsd_protocol(&(session->fsd_protocol), FSD_DATA);
+	if (rc) {
+		close(session->fsd_protocol.sock_fd);
+		return rc;
+	}
+
+	bytes_written = write_size(session->fsd_protocol.sock_fd, ptr,
+				   session->fsd_protocol.size);
 	CT_DEBUG("[fd=%d] write size: %zd, expected size: %zd",
 		 session->fsd_protocol.sock_fd,
-		 bytes_written, size * nmemb);
+		 bytes_written, session->fsd_protocol.size);
 
 	return bytes_written;
 }

@@ -26,7 +26,7 @@
 #include "tsmapi.c"
 #include "test_utils.h"
 
-#define SERVERNAME	"kvmltsm01"
+#define SERVERNAME	"centos-7-tsmserver-7"
 #define NODE		"polaris"
 #define PASSWORD	"polaris"
 #define OWNER           ""
@@ -135,13 +135,14 @@ void test_fsd_fcalls(CuTest *tc)
 	int rc;
 	struct login_t login;
 	struct session_t session;
-	char rnd_chars[0xffff + 1] = {0};
+	char rnd_chars[0xfffff + 1] = {0};
 	char fpath[][5 + LEN_RND_STR + 1] = {"/tmp/",
 					     "/tmp/",
 					     "/tmp/",
 					     "/tmp/",
 					     "/tmp/"};
 
+	srand(time(NULL));
 	login_fill(&login, SERVERNAME, NODE, PASSWORD,
 		   OWNER, LINUX_PLATFORM, DEFAULT_FSNAME,
 		   DEFAULT_FSTYPE);
@@ -153,7 +154,7 @@ void test_fsd_fcalls(CuTest *tc)
 	rc = fsd_tsm_fconnect(&login, &session);
 	CuAssertIntEquals(tc, 0, rc);
 
-	for (uint8_t r = 0; r < sizeof(fpath)/sizeof(fpath[0]); r++) {
+	for (uint8_t r = 0; r < 1; /* sizeof(fpath)/sizeof(fpath[0]); */ r++) {
 
 		char rnd_s[LEN_RND_STR + 1] = {0};
 
@@ -163,7 +164,7 @@ void test_fsd_fcalls(CuTest *tc)
 		rc = fsd_tsm_fopen("/", fpath[r], NULL, &session);
 		CuAssertIntEquals(tc, 0, rc);
 
-		const uint16_t len = rand() % 0xffff;
+		const size_t len = rand() % 0xfffff;
 		ssize_t bytes_written;
 
 		rnd_str(rnd_chars, len);

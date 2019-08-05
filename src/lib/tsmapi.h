@@ -72,7 +72,7 @@
 #define FSD_PROTOCOL_STR(s)					\
 	s == FSD_CONNECT    ? "FSD_CONNECT"    :		\
 	s == FSD_OPEN       ? "FSD_OPEN"       :		\
-	s == FSD_WRITE      ? "FSD_WRITE"      :		\
+	s == FSD_DATA       ? "FSD_DATA"       :		\
 	s == FSD_CLOSE      ? "FSD_CLOSE"      :		\
 	s == FSD_DISCONNECT ? "FSD_DISCONNECT" : "UNKNOWN"	\
 
@@ -86,9 +86,9 @@ enum sort_by_t {
 enum fsd_protocol_state_t {
 	FSD_CONNECT    = 0,
 	FSD_OPEN       = 1,
-	FSD_WRITE      = 2,
+	FSD_DATA       = 2,
 	FSD_CLOSE      = 3,
-	FSD_DISCONNECT = 0,
+	FSD_DISCONNECT = 4,
 };
 
 struct login_t {
@@ -116,6 +116,7 @@ struct fsd_protocol_t {
 	struct login_t login;
 	struct fsd_info_t fsd_info;
 	int sock_fd;
+	size_t size;
 };
 
 struct fid_t {

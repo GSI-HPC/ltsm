@@ -5,9 +5,9 @@ const char ALPHANUM[] =
         "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
         "abcdefghijklmnopqrstuvwxyz";
 
-void rnd_str(char *s, const uint16_t len)
+void rnd_str(char *s, const size_t len)
 {
- 	for (uint16_t l = 0; l < len; l++)
+	for (size_t l = 0; l < len; l++)
 		s[l] = ALPHANUM[rand() % (sizeof(ALPHANUM) - 1)];
 	s[len] = 0;
 }
