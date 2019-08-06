@@ -69,12 +69,13 @@
 	((strlen(str1) == strlen(str2)) &&	\
 	 (strncmp(str1, str2, strlen(str1)) == 0))
 
-#define FSD_PROTOCOL_STR(s)					\
-	s == FSD_CONNECT    ? "FSD_CONNECT"    :		\
-	s == FSD_OPEN       ? "FSD_OPEN"       :		\
-	s == FSD_DATA       ? "FSD_DATA"       :		\
-	s == FSD_CLOSE      ? "FSD_CLOSE"      :		\
-	s == FSD_DISCONNECT ? "FSD_DISCONNECT" : "UNKNOWN"	\
+#define FSD_PROTOCOL_STR(s)								 \
+	s == FSD_CONNECT    ? "FSD_CONNECT"    :					 \
+	s == FSD_OPEN       ? "FSD_OPEN"       :					 \
+	s == FSD_DATA       ? "FSD_DATA"       :					 \
+	s == FSD_CLOSE      ? "FSD_CLOSE"      :					 \
+	s == FSD_DISCONNECT ? "FSD_DISCONNECT" :					 \
+	s == (FSD_DISCONNECT | FSD_OPEN) ? "FSD_DISCONNECT | FSD_OPEN" : "UNKNOWN"       \
 
 enum sort_by_t {
 	SORT_NONE	     = 0,
@@ -84,11 +85,11 @@ enum sort_by_t {
 };
 
 enum fsd_protocol_state_t {
-	FSD_CONNECT    = 0,
-	FSD_OPEN       = 1,
-	FSD_DATA       = 2,
-	FSD_CLOSE      = 3,
-	FSD_DISCONNECT = 4,
+	FSD_CONNECT    = 0x1,
+	FSD_OPEN       = 0x2,
+	FSD_DATA       = 0x4,
+	FSD_CLOSE      = 0x8,
+	FSD_DISCONNECT = 0x10,
 };
 
 struct login_t {

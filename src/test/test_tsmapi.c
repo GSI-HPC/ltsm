@@ -64,7 +64,6 @@ void test_tsm_fcalls(CuTest *tc)
 	rc = tsm_fconnect(&login, &session);
 	CuAssertIntEquals(tc, DSM_RC_SUCCESSFUL, rc);
 
-	srand(time(NULL));
 	FILE *file = NULL;
 
         for (uint8_t r = 0; r < sizeof(fpath)/sizeof(fpath[0]); r++) {
@@ -142,7 +141,6 @@ void test_fsd_fcalls(CuTest *tc)
 					     "/tmp/",
 					     "/tmp/"};
 
-	srand(time(NULL));
 	login_fill(&login, SERVERNAME, NODE, PASSWORD,
 		   OWNER, LINUX_PLATFORM, DEFAULT_FSNAME,
 		   DEFAULT_FSTYPE);
@@ -154,7 +152,7 @@ void test_fsd_fcalls(CuTest *tc)
 	rc = fsd_tsm_fconnect(&login, &session);
 	CuAssertIntEquals(tc, 0, rc);
 
-	for (uint8_t r = 0; r < 1; /* sizeof(fpath)/sizeof(fpath[0]); */ r++) {
+	for (uint8_t r = 0; r < sizeof(fpath)/sizeof(fpath[0]); r++) {
 
 		char rnd_s[LEN_RND_STR + 1] = {0};
 
@@ -163,6 +161,7 @@ void test_fsd_fcalls(CuTest *tc)
 
 		rc = fsd_tsm_fopen("/", fpath[r], NULL, &session);
 		CuAssertIntEquals(tc, 0, rc);
+		CT_DEBUG("%s", fpath[r]);
 
 		const size_t len = rand() % 0xfffff;
 		ssize_t bytes_written;
@@ -293,6 +292,8 @@ void run_all_tests(void)
 
 int main(void)
 {
+	srand(time(NULL));
 	run_all_tests();
+
 	return 0;
 }
