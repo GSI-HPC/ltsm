@@ -480,23 +480,37 @@ out:
 		thread_cnt--;
 	pthread_mutex_unlock(&cnt_mutex);
 
-	CT_DEBUG("finish thread");
-
 	return NULL;
 }
 
-/* static int fsd_setup(void) */
-/* { */
-/* 	int rc; */
+static int fsd_setup(void)
+{
+	int rc;
+	struct stat st_buf;
 
-/* 	rc = llapi_search_fsname(opt.o_local_mount, opt.o_local_mount); */
-/* 	if (rc < 0) { */
-/* 		CT_ERROR(rc, "cannot find a Lustre filesystem mounted at '%s'", */
-/* 			 opt.o_local_mount); */
-/* 	} */
+	/* Verify we have a valid local mount point. */
+	memset(&st_buf, 0, sizeof(st_buf));
+	rc = stat(opt.o_local_mount, &st_buf);
+	if (rc < 0) {
+		CT_ERROR(errno, "stat '%s'", opt.o_local_mount);
+		return rc;
+	}
+	if (!S_ISDIR(st_buf.st_mode)) {
+		rc = -ENOTDIR;
+		CT_ERROR(rc, "'%s'", opt.o_local_mount);
+		return rc;
+	}
+#if 0   /* TODO: Deactivated for testing. */
+	/* Verify we have a valid Lustre mount point. */
+	rc = llapi_search_fsname(opt.o_mnt_lustre, opt.o_mnt_lustre);
+	if (rc < 0) {
+		CT_ERROR(rc, "cannot find a Lustre filesystem mounted at '%s'",
+			 opt.o_mnt_lustre);
+	}
+#endif
 
-/* 	return rc; */
-/* } */
+	return rc;
+}
 
 int main(int argc, char *argv[])
 {
@@ -514,9 +528,9 @@ int main(int argc, char *argv[])
 		return -rc;	/* Return positive error codes back to shell. */
 	}
 
-	/* rc = fsd_setup(); */
-	/* if (rc < 0) */
-	/* 	return rc; */
+	rc = fsd_setup();
+	if (rc < 0)
+		return rc;
 
 	memset(&sockaddr_srv, 0, sizeof(sockaddr_srv));
 	sockaddr_srv.sin_family = AF_INET;
