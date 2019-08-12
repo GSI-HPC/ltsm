@@ -333,7 +333,7 @@ static void date_to_str(char *str, const dsmDate *date)
  * @param[in] st_mode Stat setting for directory.
  * @return 0 on success, or -1 if an error occurred.
  */
-static dsInt16_t mkdir_subpath(const char *path, const mode_t st_mode)
+dsInt16_t mkdir_subpath(const char *path, const mode_t st_mode)
 {
 	dsInt16_t rc = 0;
 	size_t len = strlen(path);
@@ -1131,8 +1131,8 @@ static dsInt16_t tsm_query_hl_ll(const char *fs, const char *hl, const char *ll,
  * @param[out] ll   TSM low level name.
  * @return DSM_RC_SUCCESSFUL on success otherwise DSM_RC_UNSUCCESSFUL.
  */
-static dsInt16_t extract_hl_ll(const char *fpath, const char *fs,
-			       char *hl, char *ll)
+dsInt16_t extract_hl_ll(const char *fpath, const char *fs,
+			char *hl, char *ll)
 {
 
 	size_t pos_hl = 0;

@@ -20,8 +20,12 @@
 #define _GNU_SOURCE
 #endif
 
+#include <stdlib.h>
+#include <fcntl.h>
 #include <getopt.h>
 #include <pthread.h>
+#include <sys/types.h>
+#include <sys/stat.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
@@ -395,6 +399,8 @@ static void *thread_handle_client(void *arg)
 {
 	int			rc, *fd;
 	struct fsd_protocol_t	fsd_protocol;
+	char fpath_local[PATH_MAX]	 = {0};
+	int			fd_local = -1;
 
 	fd = (int *)arg;
 	memset(&fsd_protocol, 0, sizeof(struct fsd_protocol_t));
@@ -429,6 +435,39 @@ static void *thread_handle_client(void *arg)
 		CT_INFO("[fd=%d] receiving buffer from node: '%s' with fpath: '%s'",
 			*fd, fsd_protocol.login.node, fsd_protocol.fsd_info.fpath);
 
+		char hl[DSM_MAX_HL_LENGTH + 1] = {0};
+		char ll[DSM_MAX_LL_LENGTH + 1] = {0};
+		rc = extract_hl_ll(fsd_protocol.fsd_info.fpath, fsd_protocol.fsd_info.fs,
+				   hl, ll);
+		if (rc) {
+			rc = -EFAILED;
+			CT_ERROR(rc, "extract_hl_ll");
+			goto out;
+		}
+
+		snprintf(fpath_local, PATH_MAX - strlen(opt.o_local_mount),
+			 "%s/%s", opt.o_local_mount, hl);
+		/* Make sure the directory exists where to store the file. */
+		rc = mkdir_subpath(fpath_local,
+				   S_IRWXU | S_IRGRP | S_IXGRP |
+				   S_IROTH | S_IXOTH);
+		CT_DEBUG("[rc=%d] mkdir_subpath '%s'", rc, fpath_local);
+		if (rc) {
+			CT_ERROR(rc, "mkdir_subpath '%s'", fpath_local);
+			goto out;
+		}
+
+		snprintf(fpath_local + strlen(fpath_local), PATH_MAX, "/%s", ll);
+
+		fd_local = open(fpath_local, O_WRONLY | O_TRUNC | O_CREAT,
+				S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+		CT_DEBUG("[fd=%d] open '%s'", fd_local, fpath_local);
+		if (fd_local < 0) {
+			rc = -errno;
+			CT_ERROR(rc, "open '%s'", fpath_local);
+			goto out;
+		}
+
 		/* State 3: Client calls (multiple times) fsd_tsm_write(...).
 		   Receive data buffer. */
 		rc = recv_fsd_protocol(*fd, &fsd_protocol, FSD_DATA);
@@ -443,6 +482,7 @@ static void *thread_handle_client(void *arg)
 
 		uint8_t buf[0xfffff] = {0}; /* 1MiB. */
 		ssize_t bytes_recv, bytes_to_recv, bytes_recv_total = 0;
+		ssize_t bytes_send, bytes_send_total = 0;
 
 		do {
 			bytes_to_recv	      = fsd_protocol.size < sizeof(buf) ?
@@ -452,7 +492,7 @@ static void *thread_handle_client(void *arg)
 
 			bytes_recv = read_size(*fd, buf, bytes_to_recv);
 			bytes_recv_total += bytes_recv;
-			CT_DEBUG("[fd=%d] read_size %zd, max expected: %zd, total recv size: %zd",
+			CT_DEBUG("[fd=%d] read_size %zd, max expected %zd, total recv size: %zd",
 				 *fd, bytes_recv, sizeof(buf), bytes_recv_total);
 			if (bytes_recv < 0) {
 				CT_ERROR(errno, "recv");
@@ -461,9 +501,21 @@ static void *thread_handle_client(void *arg)
 			if (bytes_recv >= 0)
 				CT_INFO("bytes_recv: %zu, bytes_recv_total: %zu",
 					bytes_recv, bytes_recv_total);
+			bytes_send = write_size(fd_local, buf, bytes_recv);
+			bytes_send_total += bytes_send;
+			CT_DEBUG("[fd=%d] write_size %zd, max expected %zd, total recv size: %zd",
+				 fd_local, bytes_send, sizeof(buf), bytes_send_total);
+			if (bytes_send < 0) {
+				CT_ERROR(errno, "send");
+				goto out;
+			}
 		} while (bytes_recv_total != fsd_protocol.size);
-		CT_DEBUG("[fd=%d] data buffer of size: %zd successfully received",
-			 *fd, bytes_recv_total);
+
+		if (bytes_recv_total != bytes_send_total)
+			CT_WARN("total number of bytes recv and send differs");
+		else
+			CT_DEBUG("[fd=%d,fd_local=%d] data buffer size %zd successfully "
+				 "received and sent", *fd, fd_local, bytes_recv_total);
 
 		/* State 4: Client calls fsd_tsm_fclose(...). */
 		rc = recv_fsd_protocol(*fd, &fsd_protocol, FSD_CLOSE);
@@ -472,9 +524,20 @@ static void *thread_handle_client(void *arg)
 			CT_ERROR(rc, "recv_fsd_protocol failed");
 			goto out;
 		}
+
+		rc = close(fd_local);
+		if (rc < 0) {
+			rc = -errno;
+			CT_ERROR(rc, "close");
+			goto out;
+		}
+		fd_local = -1;
 	} while (fsd_protocol.state != FSD_DISCONNECT);
 
 out:
+	if (!(fd_local < 0))
+		close(fd_local);
+
 	pthread_mutex_lock(&cnt_mutex);
 	if (thread_cnt > 0)
 		thread_cnt--;

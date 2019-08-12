@@ -211,6 +211,9 @@ void select_latest(const dsBool_t latest);
 void set_prefix(const char *_prefix);
 void set_restore_stripe(const dsBool_t _restore_stripe);
 int parse_verbose(const char *val, int *opt_verbose);
+dsInt16_t mkdir_subpath(const char *path, const mode_t st_mode);
+dsInt16_t extract_hl_ll(const char *fpath, const char *fs,
+			char *hl, char *ll);
 
 void login_fill(struct login_t *login, const char *servername,
 		const char *node, const char *password,
