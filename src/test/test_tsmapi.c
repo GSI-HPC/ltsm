@@ -41,7 +41,7 @@ void test_tsm_fcalls(CuTest *tc)
 {
 	int rc;
 	struct login_t login;
-	char fpath[NUM_FILES][PATH_MAX] = {0};
+	char fpath[NUM_FILES][PATH_MAX] = {{0}};
 
 	for (uint8_t r = 0; r < sizeof(fpath)/sizeof(fpath[0]); r++) {
 		char rnd_s[LEN_RND_STR + 1] = {0};
@@ -133,7 +133,7 @@ void test_fsd_fcalls(CuTest *tc)
 	struct login_t login;
 	struct session_t session;
 	char rnd_chars[0xfffff] = {0};
-	char fpath[NUM_FILES][PATH_MAX] = {0};
+	char fpath[NUM_FILES][PATH_MAX] = {{0}};
 
 	login_fill(&login, SERVERNAME, NODE, PASSWORD,
 		   OWNER, LINUX_PLATFORM, DEFAULT_FSNAME,
