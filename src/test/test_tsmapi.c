@@ -134,12 +134,8 @@ void test_fsd_fcalls(CuTest *tc)
 	int rc;
 	struct login_t login;
 	struct session_t session;
-	char rnd_chars[0xfffff + 1] = {0};
-	char fpath[][5 + LEN_RND_STR + 1] = {"/tmp/",
-					     "/tmp/",
-					     "/tmp/",
-					     "/tmp/",
-					     "/tmp/"};
+	char rnd_chars[0xfffff] = {0};
+	char fpath[5][PATH_MAX] = {0};
 
 	login_fill(&login, SERVERNAME, NODE, PASSWORD,
 		   OWNER, LINUX_PLATFORM, DEFAULT_FSNAME,
@@ -155,9 +151,10 @@ void test_fsd_fcalls(CuTest *tc)
 	for (uint8_t r = 0; r < sizeof(fpath)/sizeof(fpath[0]); r++) {
 
 		char rnd_s[LEN_RND_STR + 1] = {0};
+		uint32_t crc32sum_buf = 0, crc32sum_file = 0;
 
 		rnd_str(rnd_s, LEN_RND_STR);
-		snprintf(fpath[r] + 5, LEN_RND_STR + 1, "%s", rnd_s);
+		snprintf(fpath[r], PATH_MAX, "/tmp/%s", rnd_s);
 
 		rc = fsd_tsm_fopen("/", fpath[r], NULL, &session);
 		CuAssertIntEquals(tc, 0, rc);
@@ -167,11 +164,19 @@ void test_fsd_fcalls(CuTest *tc)
 		ssize_t bytes_written;
 
 		rnd_str(rnd_chars, len);
+
 		bytes_written = fsd_tsm_fwrite(rnd_chars, len, 1, &session);
 		CuAssertIntEquals(tc, len, bytes_written);
 
 		rc = fsd_tsm_fclose(&session);
 		CuAssertIntEquals(tc, 0, rc);
+
+		snprintf(fpath[r], PATH_MAX, "/fsddata/tmp/%s", rnd_s);
+		crc32sum_buf = crc32(crc32sum_buf, (const unsigned char *)rnd_chars, len);
+		rc = crc32file(fpath[r], &crc32sum_file);
+		CT_INFO("buf crc32 %lu, file crc32 %lu", crc32sum_buf, crc32sum_file);
+		CuAssertIntEquals(tc, 0, rc);
+		CuAssertTrue(tc, crc32sum_buf == crc32sum_file);
 	}
 
 	fsd_tsm_fdisconnect(&session);
