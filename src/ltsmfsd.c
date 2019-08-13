@@ -448,12 +448,11 @@ static void *thread_handle_client(void *arg)
 		snprintf(fpath_local, PATH_MAX - strlen(opt.o_local_mount),
 			 "%s/%s", opt.o_local_mount, hl);
 		/* Make sure the directory exists where to store the file. */
-		rc = mkdir_subpath(fpath_local,
-				   S_IRWXU | S_IRGRP | S_IXGRP |
-				   S_IROTH | S_IXOTH);
-		CT_DEBUG("[rc=%d] mkdir_subpath '%s'", rc, fpath_local);
+		rc = mkdir_p(fpath_local, S_IRWXU | S_IRGRP | S_IXGRP
+			     | S_IROTH | S_IXOTH);
+		CT_DEBUG("[rc=%d] mkdir_p '%s'", rc, fpath_local);
 		if (rc) {
-			CT_ERROR(rc, "mkdir_subpath '%s'", fpath_local);
+			CT_ERROR(rc, "mkdir_p '%s'", fpath_local);
 			goto out;
 		}
 

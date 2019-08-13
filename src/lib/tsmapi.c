@@ -321,50 +321,37 @@ static void date_to_str(char *str, const dsmDate *date)
 		(dsInt16_t)date->second);
 }
 
-/**
- * @brief Split path in all subpaths S and create directories S
- *        when they no not exist.
- *
- * Split input pathname into all subpaths S, e.g.
- * /tmp/a/b/c into S := {'/','/tmp','/tmp/a','/tmp/a/b','/tmp/a/b/c'}
- * and create directories S when they do not exist.
- *
- * @param[in] path Pathname of directory.
- * @param[in] st_mode Stat setting for directory.
- * @return 0 on success, or -1 if an error occurred.
- */
-dsInt16_t mkdir_subpath(const char *path, const mode_t st_mode)
+int mkdir_p(const char *path, const mode_t st_mode)
 {
-	dsInt16_t rc = 0;
-	size_t len = strlen(path);
-	char _path[len + 1];
+	if (!path)
+		return -EPERM;
 
-	memset(_path, 0, len + 1);
-	snprintf(_path, len + 1, "%s", path);
+	const size_t len = strlen(path);
+	if (len > PATH_MAX)
+		return -ENAMETOOLONG;
 
-	if (len > 1 && _path[len - 1] != '/')
-		_path[len] = '/';
-	if (len == 1 && _path[len - 1] == '/')
-		_path[len] = '/';
+	/* Operate on copy of path, so we not alter the original path. */
+	char _path[PATH_MAX] = {0};
+	strncpy(_path, path, PATH_MAX);
 
-	for (size_t l = 1; l <= len; l++) {
-		if (_path[l] == '/') {
+	for (size_t l = 0; l <= len; l++) {
+		if ((_path[l] == '/' && l > 0) || l == len) {
+
 			_path[l] = '\0';
-			mode_t process_mask = umask(0);
-			rc = mkdir(_path, st_mode);
-			CT_DEBUG("[rc:%d] mkdir '%s'", rc, _path);
-			umask(process_mask);
 
-			if (rc < 0 && errno != EEXIST) {
-				CT_ERROR(errno, "mkdir failed on '%s'", _path);
-				return rc;
-			}
+			mode_t process_mask = umask(0);
+			int rc = mkdir(_path, st_mode);
+                        umask(process_mask);
+                        if (rc < 0 && errno != EEXIST) {
+                                CT_ERROR(errno, "mkdir failed on '%s'", _path);
+                                return -errno;
+                        }
+
 			_path[l] = '/';
 		}
 	}
-	/* If directory already exists return success. */
-	rc = rc < 0 && errno == EEXIST ? 0 : rc;
-	return rc;
+
+	return 0;
 }
 
 #ifdef HAVE_LUSTRE
@@ -511,12 +498,11 @@ static dsInt16_t retrieve_obj(qryRespArchiveData *query_data,
 		   S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH */
 
 		/* Make sure the directory exists where to store the file. */
-		rc = mkdir_subpath(path,
-				   S_IRWXU | S_IRGRP | S_IXGRP |
-				   S_IROTH | S_IXOTH);
-		CT_DEBUG("[rc=%d] mkdir_subpath '%s'", rc, path);
+		rc = mkdir_p(path,
+			     S_IRWXU | S_IRGRP | S_IXGRP |
+			     S_IROTH | S_IXOTH);
 		if (rc) {
-			CT_ERROR(rc, "mkdir_subpath '%s'", path);
+			CT_ERROR(rc, "mkdir_p '%s'", path);
 			return DSM_RC_UNSUCCESSFUL;
 		}
 
@@ -1481,12 +1467,10 @@ static dsInt16_t tsm_retrieve_generic(int fd, struct session_t *session)
 					 query_data.objName.fs,
 					 query_data.objName.hl,
 					 query_data.objName.ll);
-				rc_minor = mkdir_subpath(path,
-							 obj_info.st_mode);
-				CT_DEBUG("[rc:%d] mkdir_subpath(%s)\n",
-					 rc_minor, path);
+				rc_minor = mkdir_p(path, obj_info.st_mode);
+				CT_DEBUG("[rc:%d] mkdir_p(%s)\n", rc_minor, path);
 				if (rc_minor) {
-					CT_ERROR(rc_minor, "mkdir_subpath '%s'", path);
+					CT_ERROR(rc_minor, "mkdir_p '%s'", path);
 					goto cleanup_getdata;
 				}
 				break;
