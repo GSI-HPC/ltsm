@@ -397,7 +397,7 @@ out:
 
 static void *thread_handle_client(void *arg)
 {
-	int			rc, *fd;
+	int			rc, *fd  = NULL;
 	struct fsd_protocol_t	fsd_protocol;
 	char fpath_local[PATH_MAX]	 = {0};
 	int			fd_local = -1;
@@ -543,6 +543,11 @@ out:
 		thread_cnt--;
 	pthread_mutex_unlock(&cnt_mutex);
 
+	if (fd) {
+		free(fd);
+		fd = NULL;
+	}
+
 	return NULL;
 }
 
@@ -666,12 +671,22 @@ int main(int argc, char *argv[])
 				CT_WARN("maximum number of serving "
 					"threads %d exceeded",
 					opt.o_nthreads);
+				close(fd);
 				continue;
 			}
+
+			int *fd_sock = NULL;
+			fd_sock = malloc(sizeof(int));
+			if (!fd_sock) {
+				CT_ERROR(-errno, "malloc");
+				goto cleanup_attr;
+			}
+			*fd_sock = fd;
+
 			pthread_mutex_lock(&cnt_mutex);
 			rc = pthread_create(&threads[thread_cnt], NULL,
 					    thread_handle_client,
-					    (void *)&fd);
+					    fd_sock);
 			if (rc != 0)
 				CT_ERROR(rc, "cannot create thread for "
 					 "client '%s'",
