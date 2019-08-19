@@ -525,6 +525,7 @@ static void *thread_handle_client(void *arg)
 		}
 
 		rc = close(fd_local);
+		CT_DEBUG("[rc=%d,fd_local=%d] close", rc, fd_local);
 		if (rc < 0) {
 			rc = -errno;
 			CT_ERROR(rc, "close");
