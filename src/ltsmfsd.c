@@ -329,7 +329,7 @@ static int parseopts(int argc, char *argv[])
 	return rc;
 }
 
-static int verify_node(const struct login_t *login)
+static int verify_node(struct login_t *login, uid_t *uid, gid_t *gid)
 {
 	int rc = 0;
 
@@ -354,6 +354,8 @@ static int verify_node(const struct login_t *login)
 	CT_INFO("found node '%s' in identmap, using archive_id %d, "
 		"uid: %d, guid: %d", node->data,
 		ident_map->archive_id, ident_map->uid, ident_map->gid);
+	*uid = ident_map->uid;
+	*gid = ident_map->gid;
 
 out:
 	return rc;
@@ -397,10 +399,12 @@ out:
 
 static void *thread_handle_client(void *arg)
 {
-	int			rc, *fd  = NULL;
-	struct fsd_protocol_t	fsd_protocol;
-	char fpath_local[PATH_MAX]	 = {0};
-	int			fd_local = -1;
+	int rc, *fd  = NULL;
+	struct fsd_protocol_t fsd_protocol;
+	char fpath_local[PATH_MAX] = {0};
+	int fd_local = -1;
+	uid_t uid = 0;
+	gid_t gid = 0;
 
 	fd = (int *)arg;
 	memset(&fsd_protocol, 0, sizeof(struct fsd_protocol_t));
@@ -413,7 +417,7 @@ static void *thread_handle_client(void *arg)
 		goto out;
 	}
 
-	rc = verify_node(&fsd_protocol.login);
+	rc = verify_node(&fsd_protocol.login, &uid, &gid);
 	CT_DEBUG("[rc=%d] verify_node", rc);
 	if (rc) {
 		CT_ERROR(rc, "verify_node");
@@ -464,6 +468,16 @@ static void *thread_handle_client(void *arg)
 		if (fd_local < 0) {
 			rc = -errno;
 			CT_ERROR(rc, "open '%s'", fpath_local);
+			goto out;
+		}
+
+		/* Change owner and group. */
+		rc = fchown(fd_local, uid, gid);
+		CT_DEBUG("[rc=%d,fd=%d] fchown uid %zu gid %zu", rc, fd_local,
+			 uid, gid);
+		if (rc) {
+			rc = -errno;
+			CT_ERROR(rc, "fchown uid %zu gid %zu", uid, gid);
 			goto out;
 		}
 
@@ -538,15 +552,16 @@ out:
 	if (!(fd_local < 0))
 		close(fd_local);
 
+	if (fd) {
+		close(*fd);
+		free(fd);
+		fd = NULL;
+	}
+
 	pthread_mutex_lock(&cnt_mutex);
 	if (thread_cnt > 0)
 		thread_cnt--;
 	pthread_mutex_unlock(&cnt_mutex);
-
-	if (fd) {
-		free(fd);
-		fd = NULL;
-	}
 
 	return NULL;
 }
