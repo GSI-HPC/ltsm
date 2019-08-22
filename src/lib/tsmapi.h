@@ -265,6 +265,11 @@ ssize_t tsm_fwrite(const void *ptr, size_t size, size_t nmemb,
 		   struct session_t *session);
 int tsm_fclose(struct session_t *session);
 
+void fsd_login_fill(struct login_t *login, const char *servername,
+		    const char *node, const char *password,
+		    const char *owner, const char *platform,
+		    const char *fsname, const char *fstype,
+		    const char *hostname, const int port);
 int fsd_tsm_fconnect(struct login_t *login, struct session_t *session);
 void fsd_tsm_fdisconnect(struct session_t *session);
 int fsd_tsm_fopen(const char *fs, const char *fpath, const char *desc,

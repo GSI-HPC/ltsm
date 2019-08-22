@@ -139,12 +139,9 @@ void test_fsd_fcalls(CuTest *tc)
 
 	memset(fpath, 0, sizeof(char) * NUM_FILES * PATH_MAX);
 
-	login_fill(&login, SERVERNAME, NODE, PASSWORD,
-		   OWNER, LINUX_PLATFORM, DEFAULT_FSNAME,
-		   DEFAULT_FSTYPE);
-	strncpy(login.hostname, FSD_HOSTNAME, HOST_NAME_MAX);
-	login.port = FSD_PORT;
-
+	fsd_login_fill(&login, SERVERNAME, NODE, PASSWORD,
+		       OWNER, LINUX_PLATFORM, DEFAULT_FSNAME,
+		       DEFAULT_FSTYPE, FSD_HOSTNAME, FSD_PORT);
 	memset(&session, 0, sizeof(struct session_t));
 
 	rc = fsd_tsm_fconnect(&login, &session);

@@ -2561,6 +2561,23 @@ out:
 	return rc;
 }
 
+void fsd_login_fill(struct login_t *login, const char *servername,
+		    const char *node, const char *password,
+		    const char *owner, const char *platform,
+		    const char *fsname, const char *fstype,
+		    const char *hostname, const int port)
+{
+	if (!login)
+		return;
+
+	login_fill(login, servername, node, password,
+		   owner, platform, fsname, fstype);
+
+	STRNCPY(login->hostname, hostname, HOST_NAME_MAX);
+	login->port = port;
+}
+
+
 int fsd_tsm_fconnect(struct login_t *login, struct session_t *session)
 {
 	int rc;
