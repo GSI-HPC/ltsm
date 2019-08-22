@@ -69,13 +69,14 @@
 	((strlen(str1) == strlen(str2)) &&	\
 	 (strncmp(str1, str2, strlen(str1)) == 0))
 
-#define FSD_PROTOCOL_STR(s)								 \
-	s == FSD_CONNECT    ? "FSD_CONNECT"    :					 \
-	s == FSD_OPEN       ? "FSD_OPEN"       :					 \
-	s == FSD_DATA       ? "FSD_DATA"       :					 \
-	s == FSD_CLOSE      ? "FSD_CLOSE"      :					 \
-	s == FSD_DISCONNECT ? "FSD_DISCONNECT" :					 \
-	s == (FSD_DISCONNECT | FSD_OPEN) ? "FSD_DISCONNECT | FSD_OPEN" : "UNKNOWN"       \
+#define FSD_PROTOCOL_STR(s)							   \
+	s == FSD_CONNECT    ? "FSD_CONNECT"    :				   \
+	s == FSD_OPEN       ? "FSD_OPEN"       :				   \
+	s == FSD_DATA       ? "FSD_DATA"       :				   \
+	s == FSD_CLOSE      ? "FSD_CLOSE"      :				   \
+	s == FSD_DISCONNECT ? "FSD_DISCONNECT" :				   \
+	s == (FSD_DATA | FSD_CLOSE) ? "FSD_DATA | FSD_CLOSE" :                     \
+	s == (FSD_DISCONNECT | FSD_OPEN) ? "FSD_DISCONNECT | FSD_OPEN" : "UNKNOWN" \
 
 enum sort_by_t {
 	SORT_NONE	     = 0,
@@ -277,5 +278,10 @@ int fsd_tsm_fopen(const char *fs, const char *fpath, const char *desc,
 ssize_t fsd_tsm_fwrite(const void *ptr, size_t size, size_t nmemb,
                        struct session_t *session);
 int fsd_tsm_fclose(struct session_t *session);
+
+int send_fsd_protocol(struct fsd_protocol_t *fsd_protocol,
+		      const enum fsd_protocol_state_t protocol_state);
+int recv_fsd_protocol(int fd, struct fsd_protocol_t *fsd_protocol,
+		      enum fsd_protocol_state_t fsd_protocol_state);
 
 #endif /* TSMAPI_H */

@@ -34,7 +34,7 @@
 #define FSD_HOSTNAME    "localhost"
 #define FSD_PORT         7625
 
-#define NUM_FILES       100
+#define NUM_FILES       10
 #define LEN_RND_STR     6
 
 void test_tsm_fcalls(CuTest *tc)
@@ -158,13 +158,16 @@ void test_fsd_fcalls(CuTest *tc)
 		CuAssertIntEquals(tc, 0, rc);
 		CT_DEBUG("%s", fpath[r]);
 
-		const size_t len = rand() % 0xfffff;
-		ssize_t bytes_written;
+		for (uint8_t b = 0; b < rand() % 0xff; b++) {
 
-		rnd_str(rnd_chars, len);
+			const size_t len = rand() % 0xfffff;
+			ssize_t bytes_written;
 
-		bytes_written = fsd_tsm_fwrite(rnd_chars, len, 1, &session);
-		CuAssertIntEquals(tc, len, bytes_written);
+			rnd_str(rnd_chars, len);
+
+			bytes_written = fsd_tsm_fwrite(rnd_chars, len, 1, &session);
+			CuAssertIntEquals(tc, len, bytes_written);
+		}
 
 		rc = fsd_tsm_fclose(&session);
 		CuAssertIntEquals(tc, 0, rc);

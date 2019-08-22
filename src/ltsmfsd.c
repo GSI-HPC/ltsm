@@ -361,42 +361,6 @@ out:
 	return rc;
 }
 
-static int recv_fsd_protocol(int fd, struct fsd_protocol_t *fsd_protocol,
-			     enum fsd_protocol_state_t fsd_protocol_state)
-{
-	int rc = 0;
-	ssize_t bytes_recv;
-
-	if (fd < 0 || !fsd_protocol)
-		return -EINVAL;
-
-	bytes_recv = read_size(fd, fsd_protocol, sizeof(struct fsd_protocol_t));
-	CT_DEBUG("[fd=%d] protocol size: %zd, expected size: %zd, state: '%s', expected: '%s'",
-		 fd, bytes_recv, sizeof(struct fsd_protocol_t),
-		 FSD_PROTOCOL_STR(fsd_protocol->state),
-		 FSD_PROTOCOL_STR(fsd_protocol_state));
-	if (bytes_recv < 0) {
-		rc = -errno;
-		CT_ERROR(rc, "read_size");
-		goto out;
-	}
-	if (bytes_recv != sizeof(struct fsd_protocol_t)) {
-		rc = -ENOMSG;
-		CT_ERROR(rc, "read_size");
-		goto out;
-	}
-	CT_INFO("[fd=%d] recv_fsd_protocol state: '%s', expected: '%s'",
-		fd,
-		FSD_PROTOCOL_STR(fsd_protocol->state),
-		FSD_PROTOCOL_STR(fsd_protocol_state));
-
-	if (!(fsd_protocol->state & fsd_protocol_state))
-		rc = -EPROTO;
-
-out:
-	return rc;
-}
-
 static void *thread_handle_client(void *arg)
 {
 	int rc, *fd  = NULL;
@@ -481,62 +445,58 @@ static void *thread_handle_client(void *arg)
 			goto out;
 		}
 
-		/* State 3: Client calls (multiple times) fsd_tsm_write(...).
-		   Receive data buffer. */
-		rc = recv_fsd_protocol(*fd, &fsd_protocol, FSD_DATA);
-		CT_DEBUG("[rc=%d,fd=%d] recv_fsd_protocol, size: %zu", rc, *fd,
-			 fsd_protocol.size);
-		if (rc) {
-			CT_ERROR(rc, "recv_fsd_protocol failed");
-			goto out;
-		}
-
-		/* TODO: Make here some sanity on fsd_protocol.size. */
-
-		uint8_t buf[0xfffff] = {0}; /* 1MiB. */
-		ssize_t bytes_recv, bytes_to_recv, bytes_recv_total = 0;
-		ssize_t bytes_send, bytes_send_total = 0;
-
+		uint8_t buf[0xfffff]; /* 0xfffff = 1MiB, 0x400000 = 4MiB */
+		ssize_t bytes_recv, bytes_to_recv, bytes_recv_total;
+		ssize_t bytes_send, bytes_send_total;
 		do {
-			bytes_to_recv	      = fsd_protocol.size < sizeof(buf) ?
-				fsd_protocol.size : sizeof(buf);
-			if (fsd_protocol.size - bytes_recv_total < bytes_to_recv)
-				bytes_to_recv = fsd_protocol.size - bytes_recv_total;
-
-			bytes_recv = read_size(*fd, buf, bytes_to_recv);
-			bytes_recv_total += bytes_recv;
-			CT_DEBUG("[fd=%d] read_size %zd, max expected %zd, total recv size: %zd",
-				 *fd, bytes_recv, sizeof(buf), bytes_recv_total);
-			if (bytes_recv < 0) {
-				CT_ERROR(errno, "recv");
+			rc = recv_fsd_protocol(*fd, &fsd_protocol, (FSD_DATA | FSD_CLOSE));
+			CT_DEBUG("[rc=%d,fd=%d] recv_fsd_protocol, size: %zu", rc, *fd,
+				 fsd_protocol.size);
+			if (rc) {
+				CT_ERROR(rc, "recv_fsd_protocol failed");
 				goto out;
 			}
-			if (bytes_recv >= 0)
-				CT_INFO("bytes_recv: %zu, bytes_recv_total: %zu",
-					bytes_recv, bytes_recv_total);
-			bytes_send = write_size(fd_local, buf, bytes_recv);
-			bytes_send_total += bytes_send;
-			CT_DEBUG("[fd=%d] write_size %zd, max expected %zd, total recv size: %zd",
-				 fd_local, bytes_send, sizeof(buf), bytes_send_total);
-			if (bytes_send < 0) {
-				CT_ERROR(errno, "send");
-				goto out;
-			}
-		} while (bytes_recv_total != fsd_protocol.size);
 
+			if (fsd_protocol.state & FSD_CLOSE)
+				goto out_close;
+
+			bytes_recv_total = bytes_send_total = 0;
+			memset(buf, 0, sizeof(buf));
+			do {
+				bytes_to_recv = fsd_protocol.size < sizeof(buf) ? fsd_protocol.size : sizeof(buf);
+				if (fsd_protocol.size - bytes_recv_total < bytes_to_recv)
+					bytes_to_recv = fsd_protocol.size - bytes_recv_total;
+
+				bytes_recv = read_size(*fd, buf, bytes_to_recv);
+				bytes_recv_total += bytes_recv;
+				CT_DEBUG("[fd=%d] read_size %zd, max expected %zd, total recv size: %zd, to recv: %zd",
+					 *fd, bytes_recv, sizeof(buf), bytes_recv_total, bytes_to_recv);
+				if (bytes_recv < 0) {
+					CT_ERROR(errno, "recv");
+					goto out;
+				}
+				if (bytes_recv == 0) {
+					CT_INFO("bytes_recv: %zu, bytes_recv_total: %zu",
+						bytes_recv, bytes_recv_total);
+					break;
+				}
+				bytes_send = write_size(fd_local, buf, bytes_recv);
+				bytes_send_total += bytes_send;
+				CT_DEBUG("[fd=%d] write_size %zd, max expected %zd, total recv size: %zd",
+					 fd_local, bytes_send, sizeof(buf), bytes_send_total);
+				if (bytes_send < 0) {
+					CT_ERROR(errno, "send");
+					goto out;
+				}
+			} while (bytes_recv_total != fsd_protocol.size);
+		} while (fsd_protocol.state & FSD_DATA);
+
+out_close:
 		if (bytes_recv_total != bytes_send_total)
 			CT_WARN("total number of bytes recv and send differs");
 		else
 			CT_DEBUG("[fd=%d,fd_local=%d] data buffer size %zd successfully "
 				 "received and sent", *fd, fd_local, bytes_recv_total);
-
-		/* State 4: Client calls fsd_tsm_fclose(...). */
-		rc = recv_fsd_protocol(*fd, &fsd_protocol, FSD_CLOSE);
-		CT_DEBUG("[rc=%d,fd=%d] recv_fsd_protocol", rc, *fd);
-		if (rc) {
-			CT_ERROR(rc, "recv_fsd_protocol failed");
-			goto out;
-		}
 
 		rc = close(fd_local);
 		CT_DEBUG("[rc=%d,fd_local=%d] close", rc, fd_local);

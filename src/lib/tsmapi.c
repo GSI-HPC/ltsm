@@ -2534,8 +2534,8 @@ cleanup:
 	return rc;
 }
 
-static int send_fsd_protocol(struct fsd_protocol_t *fsd_protocol,
-			     const enum fsd_protocol_state_t protocol_state)
+int send_fsd_protocol(struct fsd_protocol_t *fsd_protocol,
+		      const enum fsd_protocol_state_t protocol_state)
 {
 	int rc = 0;
 	ssize_t bytes_send;
@@ -2543,7 +2543,7 @@ static int send_fsd_protocol(struct fsd_protocol_t *fsd_protocol,
 	fsd_protocol->state = protocol_state;
 	bytes_send = write_size(fsd_protocol->sock_fd, fsd_protocol,
 				sizeof(struct fsd_protocol_t));
-	CT_DEBUG("[fd=%d] write size: %zd, expected size: %zd, state: '%s'",
+	CT_DEBUG("[fd=%d] send_fsd_protocol %zd, expected size: %zd, state: '%s'",
 		 fsd_protocol->sock_fd,
 		 bytes_send, sizeof(struct fsd_protocol_t),
 		 FSD_PROTOCOL_STR(fsd_protocol->state));
@@ -2556,6 +2556,43 @@ static int send_fsd_protocol(struct fsd_protocol_t *fsd_protocol,
 		rc = -ENOMSG;
 		CT_ERROR(rc, "write_size");
 	}
+
+out:
+	return rc;
+}
+
+
+int recv_fsd_protocol(int fd, struct fsd_protocol_t *fsd_protocol,
+		      enum fsd_protocol_state_t fsd_protocol_state)
+{
+	int rc = 0;
+	ssize_t bytes_recv;
+
+	if (fd < 0 || !fsd_protocol)
+		return -EINVAL;
+
+	bytes_recv = read_size(fd, fsd_protocol, sizeof(struct fsd_protocol_t));
+	CT_DEBUG("[fd=%d] recv_fsd_protocol %zd, expected size: %zd, state: '%s', expected: '%s'",
+		 fd, bytes_recv, sizeof(struct fsd_protocol_t),
+		 FSD_PROTOCOL_STR(fsd_protocol->state),
+		 FSD_PROTOCOL_STR(fsd_protocol_state));
+	if (bytes_recv < 0) {
+		rc = -errno;
+		CT_ERROR(rc, "read_size");
+		goto out;
+	}
+	if (bytes_recv != sizeof(struct fsd_protocol_t)) {
+		rc = -ENOMSG;
+		CT_ERROR(rc, "read_size");
+		goto out;
+	}
+	CT_INFO("[fd=%d] recv_fsd_protocol state: '%s', expected: '%s'",
+		fd,
+		FSD_PROTOCOL_STR(fsd_protocol->state),
+		FSD_PROTOCOL_STR(fsd_protocol_state));
+
+	if (!(fsd_protocol->state & fsd_protocol_state))
+		rc = -EPROTO;
 
 out:
 	return rc;
@@ -2680,7 +2717,7 @@ ssize_t fsd_tsm_fwrite(const void *ptr, size_t size, size_t nmemb,
 
 	bytes_written = write_size(session->fsd_protocol.sock_fd, ptr,
 				   session->fsd_protocol.size);
-	CT_DEBUG("[fd=%d] write size: %zd, expected size: %zd",
+	CT_DEBUG("[fd=%d] write size %zd, expected size %zd",
 		 session->fsd_protocol.sock_fd,
 		 bytes_written, session->fsd_protocol.size);
 
