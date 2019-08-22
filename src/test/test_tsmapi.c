@@ -134,7 +134,7 @@ void test_fsd_fcalls(CuTest *tc)
 	int rc;
 	struct login_t login;
 	struct session_t session;
-	char rnd_chars[0xfffff] = {0};
+	char rnd_chars[0xffff] = {0};
 	char fpath[NUM_FILES][PATH_MAX];
 
 	memset(fpath, 0, sizeof(char) * NUM_FILES * PATH_MAX);
@@ -150,6 +150,8 @@ void test_fsd_fcalls(CuTest *tc)
 	for (uint8_t r = 0; r < NUM_FILES; r++) {
 
 		char rnd_s[LEN_RND_STR + 1] = {0};
+		uint32_t crc32sum_buf = 0;
+		uint32_t crc32sum_file = 0;
 
 		rnd_str(rnd_s, LEN_RND_STR);
 		snprintf(fpath[r], PATH_MAX, "/tmp/%s", rnd_s);
@@ -160,13 +162,15 @@ void test_fsd_fcalls(CuTest *tc)
 
 		for (uint8_t b = 0; b < rand() % 0xff; b++) {
 
-			const size_t len = rand() % 0xfffff;
+			const size_t len = rand() % sizeof(rnd_chars);
 			ssize_t bytes_written;
 
 			rnd_str(rnd_chars, len);
 
 			bytes_written = fsd_tsm_fwrite(rnd_chars, len, 1, &session);
 			CuAssertIntEquals(tc, len, bytes_written);
+
+			crc32sum_buf = crc32(crc32sum_buf, (const unsigned char *)rnd_chars, len);
 		}
 
 		rc = fsd_tsm_fclose(&session);
@@ -174,15 +178,12 @@ void test_fsd_fcalls(CuTest *tc)
 
 		snprintf(fpath[r], PATH_MAX, "/fsddata/tmp/%s", rnd_s);
 		CT_DEBUG("%s", fpath[r]);
-#if 0
-		uint32_t crc32sum_buf = 0;
-		uint32_t crc32sum_file = 0;
-		crc32sum_buf = crc32(crc32sum_buf, (const unsigned char *)rnd_chars, len);
+
+		sleep(1); /* Give Linux some time to flash data to disk. */
 		rc = crc32file(fpath[r], &crc32sum_file);
 		CT_INFO("buf crc32 %lu, file crc32 %lu", crc32sum_buf, crc32sum_file);
 		CuAssertIntEquals(tc, 0, rc);
 		CuAssertTrue(tc, crc32sum_buf == crc32sum_file);
-#endif
 	}
 
 	fsd_tsm_fdisconnect(&session);
