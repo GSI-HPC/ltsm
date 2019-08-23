@@ -13,7 +13,7 @@
  */
 
 /*
- * Copyright (c) 2017, GSI Helmholtz Centre for Heavy Ion Research
+ * Copyright (c) 2017-2019, GSI Helmholtz Centre for Heavy Ion Research
  */
 
 #include <string.h>
@@ -152,13 +152,23 @@ void test_fsd_fcalls(CuTest *tc)
 		char rnd_s[LEN_RND_STR + 1] = {0};
 		uint32_t crc32sum_buf = 0;
 		uint32_t crc32sum_file = 0;
+		char hl_ll[PATH_MAX + 1] = {0};
 
 		rnd_str(rnd_s, LEN_RND_STR);
 		snprintf(fpath[r], PATH_MAX, "/tmp/%s", rnd_s);
 
 		rc = fsd_tsm_fopen("/", fpath[r], NULL, &session);
 		CuAssertIntEquals(tc, 0, rc);
-		CT_DEBUG("%s", fpath[r]);
+		CT_DEBUG("fpath '%s', tsm_file fs '%s', hl '%s', ll '%s'",
+			 fpath[r],
+			 session.tsm_file->archive_info.obj_name.fs,
+			 session.tsm_file->archive_info.obj_name.hl,
+			 session.tsm_file->archive_info.obj_name.ll);
+
+		snprintf(hl_ll, PATH_MAX, "%s%s",
+			 session.tsm_file->archive_info.obj_name.hl,
+			 session.tsm_file->archive_info.obj_name.ll);
+		CuAssertStrEquals(tc, (const char *)&fpath[r], (const char *) hl_ll);
 
 		for (uint8_t b = 0; b < rand() % 0xff; b++) {
 
@@ -177,7 +187,7 @@ void test_fsd_fcalls(CuTest *tc)
 		CuAssertIntEquals(tc, 0, rc);
 
 		snprintf(fpath[r], PATH_MAX, "/fsddata/tmp/%s", rnd_s);
-		CT_DEBUG("%s", fpath[r]);
+		CT_DEBUG("fpath fsd '%s'", fpath[r]);
 
 		sleep(1); /* Give Linux some time to flush data to disk. */
 		rc = crc32file(fpath[r], &crc32sum_file);
