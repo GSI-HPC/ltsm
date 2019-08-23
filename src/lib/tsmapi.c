@@ -13,7 +13,7 @@
  */
 
 /*
- * Copyright (c) 2016, 2017, GSI Helmholtz Centre for Heavy Ion Research
+ * Copyright (c) 2016-2019, GSI Helmholtz Centre for Heavy Ion Research
  */
 
 #ifndef _GNU_SOURCE
@@ -2291,21 +2291,18 @@ static int tsm_fclose_write(struct session_t *session)
 	return rc;
 }
 
-int tsm_fopen(const char *fs, const char *fpath, const char *desc,
-	      struct session_t *session)
+static int init_tsm_file(const char *fs, const char *fpath, const char *desc,
+			 struct session_t *session)
 {
 	int rc;
 
-	if (session->tsm_file) {
-		rc = EFAULT;
-		CT_ERROR(rc, "session->tsm_file already allocated");
-		goto cleanup;
-	}
-	session->tsm_file = calloc(1, sizeof(struct tsm_file_t));
 	if (!session->tsm_file) {
-		rc = errno;
-		CT_ERROR(rc, "calloc");
-		goto cleanup;
+		session->tsm_file = calloc(1, sizeof(struct tsm_file_t));
+		if (!session->tsm_file) {
+			rc = -errno;
+			CT_ERROR(rc, "calloc");
+			return rc;
+		}
 	}
 
 	session->tsm_file->archive_info.obj_info.magic = MAGIC_ID_V1;
@@ -2317,20 +2314,17 @@ int tsm_fopen(const char *fs, const char *fpath, const char *desc,
 	rc = extract_hl_ll(fpath, fs,
 			   session->tsm_file->archive_info.obj_name.hl,
 			   session->tsm_file->archive_info.obj_name.ll);
-	CT_DEBUG("[rc:%d] extract_hl_ll:\n"
-		 "fpath: %s\n"
-		 "fs   : %s\n"
-		 "hl: %s\n"
-		 "ll: %s\n", rc, fpath, fs,
+	CT_DEBUG("[rc:%d] extract_hl_ll fpath '%s', fs '%s', hl '%s', ll '%s'",
+		 rc, fpath, fs,
 		 session->tsm_file->archive_info.obj_name.hl,
 		 session->tsm_file->archive_info.obj_name.ll);
 	if (rc) {
-		CT_ERROR(rc, "extract_hl_ll failed, resolved_path: %s, "
-			 "hl: %s, ll: %s", fpath,
+		CT_ERROR(rc, "extract_hl_ll failed, resolved_path '%s', "
+			 "hl '%s', ll '%s'", fpath,
 			 session->tsm_file->archive_info.obj_name.hl,
 			 session->tsm_file->archive_info.obj_name.ll);
-		rc = DSM_RC_UNSUCCESSFUL;
-		goto cleanup;
+		rc = -ECANCELED;
+		return rc;
 	}
 	strncpy(session->tsm_file->archive_info.obj_name.fs, fs,
 		DSM_MAX_FSNAME_LENGTH);
@@ -2341,17 +2335,19 @@ int tsm_fopen(const char *fs, const char *fpath, const char *desc,
 		strncpy(session->tsm_file->archive_info.desc, desc,
 			DSM_MAX_DESCR_LENGTH);
 
-	rc = tsm_fopen_write(session);
-	if (rc)
-		goto cleanup;
-
 	return rc;
+}
 
-cleanup:
-	if (session->tsm_file) {
-		free(session->tsm_file);
-		session->tsm_file = NULL;
-	}
+int tsm_fopen(const char *fs, const char *fpath, const char *desc,
+	      struct session_t *session)
+{
+	int rc;
+
+	rc = init_tsm_file(fs, fpath, desc, session);
+	if (rc)
+		return rc;
+
+	rc = tsm_fopen_write(session);
 
 	return rc;
 }
@@ -2672,6 +2668,12 @@ void fsd_tsm_fdisconnect(struct session_t *session)
 {
 	send_fsd_protocol(&(session->fsd_protocol), FSD_DISCONNECT);
 	close(session->fsd_protocol.sock_fd);
+
+	if (session->tsm_file) {
+		free(session->tsm_file);
+		session->tsm_file = NULL;
+	}
+
 	tsm_disconnect(session);
 }
 
@@ -2685,14 +2687,27 @@ int fsd_tsm_fopen(const char *fs, const char *fpath, const char *desc,
 		.desc		   = {0}
 	};
 
-	if (fs)
-		strncpy(fsd_info.fs, fs, DSM_MAX_FSNAME_LENGTH);
-	if (fpath)
-		strncpy(fsd_info.fpath, fpath, PATH_MAX);
+	if (!session)
+		return -EFAULT;
+
+	if (!(fs && fpath)) {
+		close(session->fsd_protocol.sock_fd);
+		return -EFAULT;
+	}
+
+	strncpy(fsd_info.fs, fs, DSM_MAX_FSNAME_LENGTH);
+	strncpy(fsd_info.fpath, fpath, PATH_MAX);
 	if (desc)
 		strncpy(fsd_info.desc, desc, DSM_MAX_DESCR_LENGTH);
-
+	/* Fillup struct fsd_info_t with fs, fpath, desc. */
 	memcpy(&(session->fsd_protocol.fsd_info), &fsd_info, sizeof(fsd_info));
+
+	/* Fillup struct tsm_file_t with fs, fpath, desc, etc... */
+	rc = init_tsm_file(fs, fpath, desc, session);
+	if (rc) {
+		close(session->fsd_protocol.sock_fd);
+		return rc;
+	}
 
 	rc = send_fsd_protocol(&(session->fsd_protocol), FSD_OPEN);
 	if (rc)
@@ -2731,6 +2746,11 @@ int fsd_tsm_fclose(struct session_t *session)
 	rc = send_fsd_protocol(&session->fsd_protocol, FSD_CLOSE);
 	if (rc)
 		close(session->fsd_protocol.sock_fd);
+
+	if (session->tsm_file) {
+		free(session->tsm_file);
+		session->tsm_file = NULL;
+	}
 
 	return rc;
 }

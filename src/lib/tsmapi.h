@@ -193,7 +193,6 @@ struct session_t {
 			struct session_t *session);
 
 	struct tsm_file_t *tsm_file;
-
 	struct fsd_protocol_t fsd_protocol;
 };
 
