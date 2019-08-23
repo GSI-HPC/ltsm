@@ -630,7 +630,7 @@ int main(int argc, char *argv[])
 	}
 
 	while (1) {
-		/* TODO: Make sure fd is closed. */
+
 		int fd;
 		struct sockaddr_in sockaddr_cli;
 		socklen_t addrlen;

@@ -179,7 +179,7 @@ void test_fsd_fcalls(CuTest *tc)
 		snprintf(fpath[r], PATH_MAX, "/fsddata/tmp/%s", rnd_s);
 		CT_DEBUG("%s", fpath[r]);
 
-		sleep(1); /* Give Linux some time to flash data to disk. */
+		sleep(1); /* Give Linux some time to flush data to disk. */
 		rc = crc32file(fpath[r], &crc32sum_file);
 		CT_INFO("buf crc32 %lu, file crc32 %lu", crc32sum_buf, crc32sum_file);
 		CuAssertIntEquals(tc, 0, rc);
