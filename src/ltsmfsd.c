@@ -24,6 +24,8 @@
 #include <fcntl.h>
 #include <getopt.h>
 #include <pthread.h>
+#include <signal.h>
+#include <stdbool.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/socket.h>
@@ -66,6 +68,7 @@ static struct options opt = {
 static list_t ident_list;
 static uint16_t thread_cnt = 0;
 static pthread_mutex_t cnt_mutex = PTHREAD_MUTEX_INITIALIZER;
+static bool keep_running = true;
 
 static void usage(const char *cmd_name, const int rc)
 {
@@ -337,6 +340,7 @@ static int verify_node(struct login_t *login, uid_t *uid, gid_t *gid)
 	list_node_t *node = list_head(&ident_list);
 	struct ident_map_t *ident_map;
 	bool found = false;
+
 	while (node) {
 		ident_map = (struct ident_map_t *)list_data(node);
 		if (!strncmp(login->node, ident_map->node, DSM_MAX_NODE_LENGTH)) {
@@ -345,19 +349,18 @@ static int verify_node(struct login_t *login, uid_t *uid, gid_t *gid)
 		}
 		node = list_next(node);
 	}
-	if (!found) {
+	if (found) {
+		CT_INFO("found node '%s' in identmap, using archive_id %d, "
+			"uid: %d, guid: %d", node->data,
+			ident_map->archive_id, ident_map->uid, ident_map->gid);
+		*uid = ident_map->uid;
+		*gid = ident_map->gid;
+	} else {
 		CT_ERROR(0, "identifier mapping for node '%s' not found",
 			 login->node);
 		rc = -EPERM;
-		goto out;
 	}
-	CT_INFO("found node '%s' in identmap, using archive_id %d, "
-		"uid: %d, guid: %d", node->data,
-		ident_map->archive_id, ident_map->uid, ident_map->gid);
-	*uid = ident_map->uid;
-	*gid = ident_map->gid;
 
-out:
 	return rc;
 }
 
@@ -555,6 +558,11 @@ static int fsd_setup(void)
 	return rc;
 }
 
+static void signal_handler(int signal)
+{
+	keep_running = false;
+}
+
 int main(int argc, char *argv[])
 {
 	int rc;
@@ -564,6 +572,13 @@ int main(int argc, char *argv[])
 	pthread_attr_t attr;
 	char thread_name[16] = {0};
 	int reuse = 1;
+	struct sigaction sig_act;
+
+	sig_act.sa_handler = signal_handler;
+	sig_act.sa_flags = 0;
+	sigemptyset(&sig_act.sa_mask);
+	sigaction(SIGINT, &sig_act, NULL);
+	sigaction(SIGTERM, &sig_act, NULL);
 
 	rc = parseopts(argc, argv);
 	if (rc < 0) {
@@ -629,7 +644,7 @@ int main(int argc, char *argv[])
 		goto cleanup_attr;
 	}
 
-	while (1) {
+	while (keep_running) {
 
 		int fd;
 		struct sockaddr_in sockaddr_cli;
@@ -659,9 +674,8 @@ int main(int argc, char *argv[])
 			*fd_sock = fd;
 
 			pthread_mutex_lock(&cnt_mutex);
-			rc = pthread_create(&threads[thread_cnt], NULL,
-					    thread_handle_client,
-					    fd_sock);
+			rc = pthread_create(&threads[thread_cnt], &attr,
+					    thread_handle_client, fd_sock);
 			if (rc != 0)
 				CT_ERROR(rc, "cannot create thread for "
 					 "client '%s'",
@@ -671,9 +685,9 @@ int main(int argc, char *argv[])
 					 "ltsmfsd/%d", thread_cnt);
 				pthread_setname_np(threads[thread_cnt],
 						   thread_name);
-				CT_MESSAGE("created thread '%s' for client '%s'",
+				CT_MESSAGE("created thread '%s' for client '%s' and fd %d",
 					   thread_name,
-					   inet_ntoa(sockaddr_cli.sin_addr));
+					   inet_ntoa(sockaddr_cli.sin_addr), *fd_sock);
 				thread_cnt++;
 			}
 			pthread_mutex_unlock(&cnt_mutex);
