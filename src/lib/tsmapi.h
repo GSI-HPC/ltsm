@@ -13,7 +13,7 @@
  */
 
 /*
- * Copyright (c) 2016, 2017, GSI Helmholtz Centre for Heavy Ion Research
+ * Copyright (c) 2016-2019, GSI Helmholtz Centre for Heavy Ion Research
  */
 
 /* Important note: The API can only retrieve objects that were
@@ -85,12 +85,22 @@ enum sort_by_t {
 	SORT_RESTORE_ORDER   = 3
 };
 
+enum fsd_action_state_t {
+	STATE_FSD_COPY_DONE	= 0x1,
+	STATE_LUSTRE_COPY_RUN	= 0x2,
+	STATE_LUSTRE_COPY_ERROR = 0x4,
+	STATE_LUSTRE_COPY_DONE  = 0x8,
+	STATE_TSM_COPY_RUN	= 0x10,
+	STATE_TSM_COPY_ERROR	= 0x20,
+	STATE_TSM_COPY_DONE	= 0x40
+};
+
 enum fsd_protocol_state_t {
 	FSD_CONNECT    = 0x1,
 	FSD_OPEN       = 0x2,
 	FSD_DATA       = 0x4,
 	FSD_CLOSE      = 0x8,
-	FSD_DISCONNECT = 0x10,
+	FSD_DISCONNECT = 0x10
 };
 
 struct login_t {
@@ -119,6 +129,14 @@ struct fsd_protocol_t {
 	struct fsd_info_t fsd_info;
 	int sock_fd;
 	size_t size;
+};
+
+struct fsd_action_item_t {
+	uint32_t fsd_action_state;
+	struct fsd_info_t fsd_info;
+	size_t size;
+	size_t progress_size;
+	time_t ts[3];
 };
 
 struct fid_t {

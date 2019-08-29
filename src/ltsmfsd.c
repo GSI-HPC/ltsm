@@ -24,6 +24,7 @@
 #include <fcntl.h>
 #include <getopt.h>
 #include <pthread.h>
+#include <semaphore.h>
 #include <signal.h>
 #include <stdbool.h>
 #include <sys/types.h>
@@ -33,6 +34,7 @@
 #include <arpa/inet.h>
 #include <lustre/lustreapi.h>
 #include "tsmapi.h"
+#include "queue.h"
 
 #define PORT_DEFAULT_FSD	7625
 #define N_THREADS_DEFAULT	4
@@ -69,6 +71,9 @@ static list_t ident_list;
 static uint16_t thread_cnt = 0;
 static pthread_mutex_t cnt_mutex = PTHREAD_MUTEX_INITIALIZER;
 static bool keep_running = true;
+
+/* Work queue */
+static queue_t queue;
 
 static void usage(const char *cmd_name, const int rc)
 {
@@ -555,6 +560,8 @@ static int fsd_setup(void)
 	}
 #endif
 
+	queue_init(&queue, free);
+
 	return rc;
 }
 
@@ -705,6 +712,7 @@ cleanup:
 		close(sock_fd);
 
 	list_destroy(&ident_list);
+	queue_destroy(&queue);
 
 	return rc;
 }
