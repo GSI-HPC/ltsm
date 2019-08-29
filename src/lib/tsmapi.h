@@ -78,6 +78,15 @@
 	s == (FSD_DATA | FSD_CLOSE) ? "FSD_DATA | FSD_CLOSE" :                     \
 	s == (FSD_DISCONNECT | FSD_OPEN) ? "FSD_DISCONNECT | FSD_OPEN" : "UNKNOWN" \
 
+#define FSD_QUEUE_STR(s)						     \
+	s == STATE_FSD_COPY_DONE     ? "STATE_FSD_COPY_DONE"     :	     \
+	s == STATE_LUSTRE_COPY_RUN   ? "STATE_LUSTRE_COPY_RUN"   :	     \
+	s == STATE_LUSTRE_COPY_ERROR ? "STATE_LUSTRE_COPY_ERROR" :	     \
+	s == STATE_LUSTRE_COPY_DONE  ? "STATE_LUSTRE_COPY_DONE"  :	     \
+	s == STATE_TSM_COPY_RUN      ? "STATE_TSM_COPY_RUN"      :	     \
+	s == STATE_TSM_COPY_ERROR    ? "STATE_TSM_COPY_ERROR"    :           \
+	s == STATE_TSM_COPY_DONE     ? "STATE_TSM_COPY_DONE"     : "UNKNOWN" \
+
 enum sort_by_t {
 	SORT_NONE	     = 0,
 	SORT_DATE_ASCENDING  = 1,

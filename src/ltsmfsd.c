@@ -35,6 +35,10 @@
 #include <lustre/lustreapi.h>
 #include "tsmapi.h"
 #include "queue.h"
+#include "measurement.h"
+
+MSRT_DECLARE(fsd_recv_data);
+MSRT_DECLARE(fsd_send_data);
 
 #define PORT_DEFAULT_FSD	7625
 #define N_THREADS_DEFAULT	4
@@ -73,7 +77,8 @@ static pthread_mutex_t cnt_mutex = PTHREAD_MUTEX_INITIALIZER;
 static bool keep_running = true;
 
 /* Work queue */
-static queue_t queue;
+static pthread_mutex_t	queue_mutex;
+static queue_t		queue;
 
 static void usage(const char *cmd_name, const int rc)
 {
@@ -456,6 +461,8 @@ static void *thread_handle_client(void *arg)
 		uint8_t buf[0xfffff]; /* 0xfffff = 1MiB, 0x400000 = 4MiB */
 		ssize_t bytes_recv, bytes_to_recv, bytes_recv_total;
 		ssize_t bytes_send, bytes_send_total;
+		MSRT_START(fsd_recv_data);
+		MSRT_START(fsd_send_data);
 		do {
 			rc = recv_fsd_protocol(*fd, &fsd_protocol, (FSD_DATA | FSD_CLOSE));
 			CT_DEBUG("[rc=%d,fd=%d] recv_fsd_protocol, size: %zu", rc, *fd,
@@ -477,6 +484,7 @@ static void *thread_handle_client(void *arg)
 
 				bytes_recv = read_size(*fd, buf, bytes_to_recv);
 				bytes_recv_total += bytes_recv;
+				MSRT_DATA(fsd_recv_data, bytes_recv);
 				CT_DEBUG("[fd=%d] read_size %zd, max expected %zd, total recv size: %zd, to recv: %zd",
 					 *fd, bytes_recv, sizeof(buf), bytes_recv_total, bytes_to_recv);
 				if (bytes_recv < 0) {
@@ -490,6 +498,7 @@ static void *thread_handle_client(void *arg)
 				}
 				bytes_send = write_size(fd_local, buf, bytes_recv);
 				bytes_send_total += bytes_send;
+				MSRT_DATA(fsd_send_data, bytes_send);
 				CT_DEBUG("[fd=%d] write_size %zd, max expected %zd, total recv size: %zd",
 					 fd_local, bytes_send, sizeof(buf), bytes_send_total);
 				if (bytes_send < 0) {
@@ -498,13 +507,62 @@ static void *thread_handle_client(void *arg)
 				}
 			} while (bytes_recv_total != fsd_protocol.size);
 		} while (fsd_protocol.state & FSD_DATA);
+		MSRT_STOP(fsd_recv_data);
+		MSRT_STOP(fsd_send_data);
+		MSRT_DISPLAY_RESULT(fsd_recv_data);
+		MSRT_DISPLAY_RESULT(fsd_send_data);
 
 out_close:
 		if (bytes_recv_total != bytes_send_total)
-			CT_WARN("total number of bytes recv and send differs");
-		else
-			CT_DEBUG("[fd=%d,fd_local=%d] data buffer size %zd successfully "
-				 "received and sent", *fd, fd_local, bytes_recv_total);
+			CT_WARN("total number of bytes recv and send differs, "
+				"recv: %lu and send: %lu", bytes_recv_total, bytes_send_total);
+		else {
+			CT_INFO("[fd=%d,fd_local=%d] data buffer of size: %zd successfully "
+				"received and sent", *fd, fd_local, bytes_recv_total);
+
+			/* Fill struct fsd_action_item_t and enqueue in queue. */
+			struct fsd_action_item_t *fsd_action_item;
+			fsd_action_item = calloc(1, sizeof(struct fsd_action_item_t));
+			if (fsd_action_item) {
+				fsd_action_item->fsd_action_state = STATE_FSD_COPY_DONE;
+				fsd_action_item->size = bytes_recv_total;
+				memcpy(&fsd_action_item->fsd_info, &fsd_protocol.fsd_info,
+				       sizeof(struct fsd_info_t));
+				fsd_action_item->ts[0] = time(NULL);
+
+				/* Lock queue to avoid thread access. */
+				pthread_mutex_lock(&queue_mutex);
+				rc = queue_enqueue(&queue, fsd_action_item);
+				/* Free the lock of the queue. */
+				pthread_mutex_unlock(&queue_mutex);
+
+				char ctime_buf[32] = {0};
+				if (ctime_r(&fsd_action_item->ts[0], ctime_buf))
+					ctime_buf[strlen(ctime_buf) - 1] = '\0'; /* Remove '\n' at end. */
+
+				CT_INFO("enqueue action: state='%s', fs='%s', fpath='%s', size=%lu, ts='%s'",
+					FSD_QUEUE_STR(fsd_action_item->fsd_action_state),
+					fsd_action_item->fsd_info.fs,
+					fsd_action_item->fsd_info.fpath,
+					fsd_action_item->size,
+					ctime_buf);
+				if (rc) {
+					rc = -ECANCELED;
+					CT_ERROR(rc, "enqueue action failed: state='%s', fs='%s', fpath='%s', size=%lu, ts='%s'",
+						 FSD_QUEUE_STR(fsd_action_item->fsd_action_state),
+						 fsd_action_item->fsd_info.fs,
+						 fsd_action_item->fsd_info.fpath,
+						 fsd_action_item->size,
+						 ctime_buf);
+					free(fsd_action_item);
+					goto out;
+				}
+			} else {
+				rc = -errno;
+				CT_ERROR(rc, "calloc");
+				goto out;
+			}
+		}
 
 		rc = close(fd_local);
 		CT_DEBUG("[rc=%d,fd_local=%d] close", rc, fd_local);
@@ -560,6 +618,7 @@ static int fsd_setup(void)
 	}
 #endif
 
+	pthread_mutex_init(&queue_mutex, NULL);
 	queue_init(&queue, free);
 
 	return rc;
@@ -713,6 +772,7 @@ cleanup:
 
 	list_destroy(&ident_list);
 	queue_destroy(&queue);
+	pthread_mutex_destroy(&queue_mutex);
 
 	return rc;
 }
