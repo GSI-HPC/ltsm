@@ -529,6 +529,7 @@ out_close:
 				memcpy(&fsd_action_item->fsd_info, &fsd_protocol.fsd_info,
 				       sizeof(struct fsd_info_t));
 				fsd_action_item->ts[0] = time(NULL);
+				strncpy(fsd_action_item->fpath_local, fpath_local, PATH_MAX);
 
 				/* Lock queue to avoid thread access. */
 				pthread_mutex_lock(&queue_mutex);

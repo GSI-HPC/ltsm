@@ -143,6 +143,7 @@ struct fsd_protocol_t {
 struct fsd_action_item_t {
 	uint32_t fsd_action_state;
 	struct fsd_info_t fsd_info;
+	char fpath_local[PATH_MAX + 1];
 	size_t size;
 	size_t progress_size;
 	time_t ts[3];
