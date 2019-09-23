@@ -30,6 +30,7 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/socket.h>
+#include <sys/xattr.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <lustre/lustreapi.h>
@@ -374,6 +375,82 @@ static int verify_node(struct login_t *login, uid_t *uid, gid_t *gid)
 	return rc;
 }
 
+static int xattr_set_fsd(const char *fpath_local,
+			 const struct fsd_info_t *fsd_info,
+			 const uint32_t fsd_action_state)
+{
+	int rc;
+
+	rc = setxattr(fpath_local, XATTR_FSD_DESC,
+		      (char *)fsd_info->desc, sizeof(fsd_info->desc), 0);
+	if (rc < 0) {
+		rc = -errno;
+		CT_ERROR(rc, "setxattr '%s %s'", fpath_local, XATTR_FSD_DESC);
+		return rc;
+	}
+
+	rc = setxattr(fpath_local, XATTR_FSD_FLAGS,
+		      (uint32_t *)&fsd_action_state, sizeof(uint32_t), 0);
+	if (rc < 0) {
+		rc = -errno;
+		CT_ERROR(rc, "setxattr '%s %s'", fpath_local, XATTR_FSD_FLAGS);
+	}
+
+	return rc;
+}
+
+static int enqueue_fsd_item(const size_t bytes_recv_total,
+			    struct fsd_protocol_t *fsd_protocol,
+			    char *fpath_local)
+{
+	int rc;
+	struct fsd_action_item_t *fsd_action_item;
+
+	fsd_action_item = calloc(1, sizeof(struct fsd_action_item_t));
+	if (!fsd_action_item) {
+		rc = -errno;
+		CT_ERROR(rc, "calloc");
+
+		return rc;
+	}
+
+	fsd_action_item->fsd_action_state = STATE_FSD_COPY_DONE;
+	fsd_action_item->size = bytes_recv_total;
+	memcpy(&fsd_action_item->fsd_info, &fsd_protocol->fsd_info,
+	       sizeof(struct fsd_info_t));
+	fsd_action_item->ts[0] = time(NULL);
+	strncpy(fsd_action_item->fpath_local, fpath_local, PATH_MAX);
+
+	/* Lock queue to avoid thread access. */
+	pthread_mutex_lock(&queue_mutex);
+	rc = queue_enqueue(&queue, fsd_action_item);
+	/* Free the lock of the queue. */
+	pthread_mutex_unlock(&queue_mutex);
+
+	char ctime_buf[32] = {0};
+	if (ctime_r(&fsd_action_item->ts[0], ctime_buf))
+		ctime_buf[strlen(ctime_buf) - 1] = '\0'; /* Remove '\n' at end. */
+
+	CT_INFO("enqueue action: state='%s', fs='%s', fpath='%s', size=%lu, ts='%s'",
+		FSD_QUEUE_STR(fsd_action_item->fsd_action_state),
+		fsd_action_item->fsd_info.fs,
+		fsd_action_item->fsd_info.fpath,
+		fsd_action_item->size,
+		ctime_buf);
+	if (rc) {
+		rc = -ECANCELED;
+		CT_ERROR(rc, "enqueue action failed: state='%s', fs='%s', fpath='%s', size=%lu, ts='%s'",
+			 FSD_QUEUE_STR(fsd_action_item->fsd_action_state),
+			 fsd_action_item->fsd_info.fs,
+			 fsd_action_item->fsd_info.fpath,
+			 fsd_action_item->size,
+			 ctime_buf);
+		free(fsd_action_item);
+	}
+
+	return rc;
+}
+
 static void *thread_handle_client(void *arg)
 {
 	int rc, *fd  = NULL;
@@ -537,49 +614,15 @@ out_close:
 			CT_INFO("[fd=%d,fd_local=%d] data buffer of size: %zd successfully "
 				"received and sent", *fd, fd_local, bytes_recv_total);
 
-			/* Fill struct fsd_action_item_t and enqueue in queue. */
-			struct fsd_action_item_t *fsd_action_item;
-			fsd_action_item = calloc(1, sizeof(struct fsd_action_item_t));
-			if (fsd_action_item) {
-				fsd_action_item->fsd_action_state = STATE_FSD_COPY_DONE;
-				fsd_action_item->size = bytes_recv_total;
-				memcpy(&fsd_action_item->fsd_info, &fsd_protocol.fsd_info,
-				       sizeof(struct fsd_info_t));
-				fsd_action_item->ts[0] = time(NULL);
-				strncpy(fsd_action_item->fpath_local, fpath_local, PATH_MAX);
-
-				/* Lock queue to avoid thread access. */
-				pthread_mutex_lock(&queue_mutex);
-				rc = queue_enqueue(&queue, fsd_action_item);
-				/* Free the lock of the queue. */
-				pthread_mutex_unlock(&queue_mutex);
-
-				char ctime_buf[32] = {0};
-				if (ctime_r(&fsd_action_item->ts[0], ctime_buf))
-					ctime_buf[strlen(ctime_buf) - 1] = '\0'; /* Remove '\n' at end. */
-
-				CT_INFO("enqueue action: state='%s', fs='%s', fpath='%s', size=%lu, ts='%s'",
-					FSD_QUEUE_STR(fsd_action_item->fsd_action_state),
-					fsd_action_item->fsd_info.fs,
-					fsd_action_item->fsd_info.fpath,
-					fsd_action_item->size,
-					ctime_buf);
-				if (rc) {
-					rc = -ECANCELED;
-					CT_ERROR(rc, "enqueue action failed: state='%s', fs='%s', fpath='%s', size=%lu, ts='%s'",
-						 FSD_QUEUE_STR(fsd_action_item->fsd_action_state),
-						 fsd_action_item->fsd_info.fs,
-						 fsd_action_item->fsd_info.fpath,
-						 fsd_action_item->size,
-						 ctime_buf);
-					free(fsd_action_item);
-					goto out;
-				}
-			} else {
-				rc = -errno;
-				CT_ERROR(rc, "calloc");
+			rc = xattr_set_fsd(fpath_local,
+					   &fsd_protocol.fsd_info,
+					   STATE_FSD_COPY_DONE);
+			if (rc)
 				goto out;
-			}
+
+			rc = enqueue_fsd_item(bytes_recv_total, &fsd_protocol, fpath_local);
+			if (rc)
+				goto out;
 		}
 
 		rc = close(fd_local);

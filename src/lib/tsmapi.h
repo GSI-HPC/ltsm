@@ -65,6 +65,10 @@
 #define DSM_MAX_DESCR_LENGTH 255
 #endif
 
+#define XATTR_FSD_PREFIX	"fsd."
+#define XATTR_FSD_DESC		XATTR_FSD_PREFIX"desc"
+#define XATTR_FSD_FLAGS		XATTR_FSD_PREFIX"flags"
+
 #define OPTNCMP(str1, str2)			\
 	((strlen(str1) == strlen(str2)) &&	\
 	 (strncmp(str1, str2, strlen(str1)) == 0))
