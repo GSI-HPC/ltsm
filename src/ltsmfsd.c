@@ -378,7 +378,7 @@ static void *thread_handle_client(void *arg)
 {
 	int rc, *fd  = NULL;
 	struct fsd_protocol_t fsd_protocol;
-	char fpath_local[PATH_MAX] = {0};
+	char *fpath_local = NULL;
 	int fd_local = -1;
 	uid_t uid = 0;
 	gid_t gid = 0;
@@ -426,8 +426,25 @@ static void *thread_handle_client(void *arg)
 			goto out;
 		}
 
-		snprintf(fpath_local, PATH_MAX - strlen(opt.o_local_mount),
-			 "%s/%s", opt.o_local_mount, hl);
+		const size_t L = strlen(opt.o_local_mount) + strlen(hl) + strlen(ll);
+		const size_t L_MAX = PATH_MAX + DSM_MAX_HL_LENGTH +
+			DSM_MAX_LL_LENGTH + 1;
+		if (L > PATH_MAX) {
+			rc = -ENAMETOOLONG;
+			CT_ERROR(rc, "fpath name '%s/%s/%s'",
+				 opt.o_local_mount, hl, ll);
+			goto out;
+		}
+		/* This twist is necessary to avoid error:
+		   ‘%s’ directive output may be truncated writing up to ... */
+		fpath_local = calloc(1, L_MAX);
+		if (!fpath_local) {
+			rc = -errno;
+			CT_ERROR(rc, "calloc");
+			goto out;
+		}
+		snprintf(fpath_local, L_MAX, "%s/%s", opt.o_local_mount, hl);
+
 		/* Make sure the directory exists where to store the file. */
 		rc = mkdir_p(fpath_local, S_IRWXU | S_IRGRP | S_IXGRP
 			     | S_IROTH | S_IXOTH);
@@ -459,8 +476,8 @@ static void *thread_handle_client(void *arg)
 		}
 
 		uint8_t buf[0xfffff]; /* 0xfffff = 1MiB, 0x400000 = 4MiB */
-		ssize_t bytes_recv, bytes_to_recv, bytes_recv_total;
-		ssize_t bytes_send, bytes_send_total;
+		ssize_t bytes_recv, bytes_to_recv, bytes_recv_total = 0;
+		ssize_t bytes_send, bytes_send_total = 0;
 		MSRT_START(fsd_recv_data);
 		MSRT_START(fsd_send_data);
 		do {
@@ -576,9 +593,12 @@ out_close:
 	} while (fsd_protocol.state != FSD_DISCONNECT);
 
 out:
+	if (fpath_local) {
+		free(fpath_local);
+		fpath_local = NULL;
+	}
 	if (!(fd_local < 0))
 		close(fd_local);
-
 	if (fd) {
 		close(*fd);
 		free(fd);
