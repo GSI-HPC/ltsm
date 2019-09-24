@@ -375,25 +375,28 @@ static int verify_node(struct login_t *login, uid_t *uid, gid_t *gid)
 	return rc;
 }
 
-static int xattr_set_fsd(const char *fpath_local,
+static int xattr_set_fsd(const int fd,
+			 const char *fpath_local,
 			 const struct fsd_info_t *fsd_info,
 			 const uint32_t fsd_action_state)
 {
 	int rc;
 
-	rc = setxattr(fpath_local, XATTR_FSD_DESC,
+	rc = fsetxattr(fd, XATTR_FSD_DESC,
 		      (char *)fsd_info->desc, sizeof(fsd_info->desc), 0);
 	if (rc < 0) {
 		rc = -errno;
-		CT_ERROR(rc, "setxattr '%s %s'", fpath_local, XATTR_FSD_DESC);
+		CT_ERROR(rc, "fsetxattr %d '%s %s'", fd, fpath_local,
+			 XATTR_FSD_DESC);
 		return rc;
 	}
 
-	rc = setxattr(fpath_local, XATTR_FSD_FLAGS,
+	rc = fsetxattr(fd, XATTR_FSD_FLAGS,
 		      (uint32_t *)&fsd_action_state, sizeof(uint32_t), 0);
 	if (rc < 0) {
 		rc = -errno;
-		CT_ERROR(rc, "setxattr '%s %s'", fpath_local, XATTR_FSD_FLAGS);
+		CT_ERROR(rc, "fsetxattr %d '%s %s'", fd, fpath_local,
+			 XATTR_FSD_FLAGS);
 	}
 
 	return rc;
@@ -614,7 +617,7 @@ out_close:
 			CT_INFO("[fd=%d,fd_local=%d] data buffer of size: %zd successfully "
 				"received and sent", *fd, fd_local, bytes_recv_total);
 
-			rc = xattr_set_fsd(fpath_local,
+			rc = xattr_set_fsd(fd_local, fpath_local,
 					   &fsd_protocol.fsd_info,
 					   STATE_FSD_COPY_DONE);
 			if (rc)
