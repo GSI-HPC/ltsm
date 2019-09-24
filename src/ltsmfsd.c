@@ -43,7 +43,9 @@ MSRT_DECLARE(fsd_send_data);
 
 #define PORT_DEFAULT_FSD	7625
 #define N_THREADS_SOCK_DEFAULT	4
-#define N_THREADS_SOCK_MAX	1024
+#define N_THREADS_SOCK_MAX	64
+#define N_THREADS_QUEUE_DEFAULT	4
+#define N_THREADS_QUEUE_MAX	64
 #define BACKLOG			32
 
 struct ident_map_t {
@@ -59,6 +61,7 @@ struct options {
 	char o_file_ident[PATH_MAX + 1];
 	int o_port;
 	int o_nthreads_sock;
+	int o_nthreads_queue;
 	int o_daemonize;
 	int o_verbose;
 };
@@ -68,18 +71,21 @@ static struct options opt = {
 	.o_file_ident	  = {0},
 	.o_port		  = PORT_DEFAULT_FSD,
 	.o_nthreads_sock  = N_THREADS_SOCK_DEFAULT,
+	.o_nthreads_queue = N_THREADS_QUEUE_DEFAULT,
 	.o_daemonize	  = 0,
 	.o_verbose	  = API_MSG_NORMAL
 };
 
-static list_t ident_list;
-static uint16_t thread_sock_cnt = 0;
-static pthread_mutex_t cnt_mutex = PTHREAD_MUTEX_INITIALIZER;
-static bool keep_running = true;
+static list_t		ident_list;
+static uint16_t		thread_sock_cnt = 0;
+static pthread_mutex_t	mutex_sock_cnt	= PTHREAD_MUTEX_INITIALIZER;
+static bool		keep_running	= true;
 
 /* Work queue */
-static pthread_mutex_t	queue_mutex;
-static queue_t		queue;
+static queue_t		 queue;
+static pthread_t	*threads_queue = NULL;
+static pthread_mutex_t	 queue_mutex   = PTHREAD_MUTEX_INITIALIZER;
+static pthread_cond_t	 queue_cond    = PTHREAD_COND_INITIALIZER;
 
 static void usage(const char *cmd_name, const int rc)
 {
@@ -92,6 +98,8 @@ static void usage(const char *cmd_name, const int rc)
 		"\t\t""port accepting connections [default: %d]\n"
 		"\t-s, --sthreads <int>\n"
 		"\t\t""number of socket threads [default: %d]\n"
+		"\t-q, --qthreads <int>\n"
+		"\t\t""number of queue worker threads [default: %d]\n"
 		"\t--daemon\n"
 		"\t\t""daemon mode run in background\n"
 		"\t-v, --verbose {error, warn, message, info, debug}"
@@ -103,6 +111,7 @@ static void usage(const char *cmd_name, const int rc)
 		cmd_name,
 		PORT_DEFAULT_FSD,
 		N_THREADS_SOCK_DEFAULT,
+		N_THREADS_QUEUE_DEFAULT,
 		PACKAGE_VERSION);
 	exit(rc);
 }
@@ -250,6 +259,11 @@ static void sanity_arg_check(const struct options *opts, const char *argv)
 			N_THREADS_SOCK_MAX);
 		usage(argv, 1);
 	}
+	if (opt.o_nthreads_queue > N_THREADS_QUEUE_MAX) {
+		fprintf(stdout, "maximum number of queue worker threads %d exceeded\n\n",
+			N_THREADS_QUEUE_MAX);
+		usage(argv, 1);
+	}
 }
 
 static int parseopts(int argc, char *argv[])
@@ -259,6 +273,7 @@ static int parseopts(int argc, char *argv[])
 		{"identmap",	required_argument, 0,		     'i'},
 		{"port",	required_argument, 0,		     'p'},
 		{"sthreads",	required_argument, 0,		     's'},
+		{"qthreads",	required_argument, 0,		     'q'},
 		{"daemon",	no_argument,	   &opt.o_daemonize,   1},
 		{"verbose",	required_argument, 0,		     'v'},
 		{"help",	no_argument,	   0,		     'h'},
@@ -268,7 +283,7 @@ static int parseopts(int argc, char *argv[])
 	int c, rc;
 	optind = 0;
 
-	while ((c = getopt_long(argc, argv, "l:i:p:s:v:h",
+	while ((c = getopt_long(argc, argv, "l:i:p:s:q:v:h",
 				long_opts, NULL)) != -1) {
 		switch (c) {
 		case 'l': {
@@ -293,6 +308,14 @@ static int parseopts(int argc, char *argv[])
 			if (rc)
 				return rc;
 			opt.o_nthreads_sock = (int)t;
+			break;
+		}
+		case 'q': {
+			long int t;
+			rc = parse_valid_num(optarg, &t);
+			if (rc)
+				return rc;
+			opt.o_nthreads_queue = (int)t;
 			break;
 		}
 		case 'v': {
@@ -426,22 +449,16 @@ static int enqueue_fsd_item(const size_t bytes_recv_total,
 
 	/* Lock queue to avoid thread access. */
 	pthread_mutex_lock(&queue_mutex);
+
+	/* Enqueue FSD action item in queue. */
 	rc = queue_enqueue(&queue, fsd_action_item);
-	/* Free the lock of the queue. */
-	pthread_mutex_unlock(&queue_mutex);
 
 	char ctime_buf[32] = {0};
 	if (ctime_r(&fsd_action_item->ts[0], ctime_buf))
 		ctime_buf[strlen(ctime_buf) - 1] = '\0'; /* Remove '\n' at end. */
 
-	CT_INFO("enqueue action: state='%s', fs='%s', fpath='%s', size=%lu, ts='%s'",
-		FSD_QUEUE_STR(fsd_action_item->fsd_action_state),
-		fsd_action_item->fsd_info.fs,
-		fsd_action_item->fsd_info.fpath,
-		fsd_action_item->size,
-		ctime_buf);
 	if (rc) {
-		rc = -ECANCELED;
+		rc = -EFAILED;
 		CT_ERROR(rc, "enqueue action failed: state='%s', fs='%s', fpath='%s', size=%lu, ts='%s'",
 			 FSD_QUEUE_STR(fsd_action_item->fsd_action_state),
 			 fsd_action_item->fsd_info.fs,
@@ -449,7 +466,20 @@ static int enqueue_fsd_item(const size_t bytes_recv_total,
 			 fsd_action_item->size,
 			 ctime_buf);
 		free(fsd_action_item);
+	} else {
+		CT_INFO("enqueue action: state='%s', fs='%s', fpath='%s', size=%lu, ts='%s'",
+		FSD_QUEUE_STR(fsd_action_item->fsd_action_state),
+		fsd_action_item->fsd_info.fs,
+		fsd_action_item->fsd_info.fpath,
+		fsd_action_item->size,
+		ctime_buf);
 	}
+
+	/* Free the lock of the queue. */
+	pthread_mutex_unlock(&queue_mutex);
+
+	/* Wakeup sleeping consumer (worker threads). */
+	pthread_cond_signal(&queue_cond);
 
 	return rc;
 }
@@ -651,10 +681,10 @@ out:
 		fd = NULL;
 	}
 
-	pthread_mutex_lock(&cnt_mutex);
+	pthread_mutex_lock(&mutex_sock_cnt);
 	if (thread_sock_cnt > 0)
 		thread_sock_cnt--;
-	pthread_mutex_unlock(&cnt_mutex);
+	pthread_mutex_unlock(&mutex_sock_cnt);
 
 	return NULL;
 }
@@ -685,7 +715,6 @@ static int fsd_setup(void)
 	}
 #endif
 
-	pthread_mutex_init(&queue_mutex, NULL);
 	queue_init(&queue, free);
 
 	return rc;
@@ -696,6 +725,91 @@ static void signal_handler(int signal)
 	keep_running = false;
 }
 
+static void *thread_queue_worker(void *data)
+{
+	int rc;
+	struct fsd_action_item_t *fsd_action_item;
+
+	for (;;) {
+		/* Critical region, lock. */
+		pthread_mutex_lock(&queue_mutex);
+
+		while (queue_size(&queue) == 0)
+			pthread_cond_wait(&queue_cond, &queue_mutex);
+
+		rc = queue_dequeue(&queue, (void **)&fsd_action_item);
+		if (rc) {
+			rc = -EFAILED;
+			CT_ERROR(rc, "queue_dequeue");
+		} else {
+			char ctime_buf[32] = {0};
+			if (ctime_r(&fsd_action_item->ts[0], ctime_buf))
+				ctime_buf[strlen(ctime_buf) - 1] = '\0'; /* Remove '\n' at end. */
+
+			CT_INFO("dequeue action: state='%s', fs='%s', fpath='%s', size=%lu, ts='%s'",
+				FSD_QUEUE_STR(fsd_action_item->fsd_action_state),
+				fsd_action_item->fsd_info.fs,
+				fsd_action_item->fsd_info.fpath,
+				fsd_action_item->size,
+				ctime_buf);
+		}
+
+		/* Unlock. */
+		pthread_mutex_unlock(&queue_mutex);
+	}
+
+	return NULL;
+}
+
+static int start_queue_threads(void)
+{
+	int rc;
+	pthread_attr_t attr;
+	char thread_queue_name[16];
+
+	/* Initialize queue worker threads. */
+	threads_queue = calloc(opt.o_nthreads_queue, sizeof(pthread_t));
+	if (threads_queue == NULL) {
+		rc = -errno;
+		CT_ERROR(rc, "calloc");
+		return rc;
+	}
+
+	rc = pthread_attr_init(&attr);
+	if (rc != 0) {
+		CT_ERROR(rc, "pthread_attr_init");
+		goto cleanup;
+	}
+
+	rc = pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
+	if (rc != 0) {
+		CT_ERROR(rc, "pthread_attr_setdetachstate");
+		goto cleanup;
+	}
+
+	for (uint16_t n = 0; n < opt.o_nthreads_queue; n++) {
+		rc = pthread_create(&threads_queue[n], &attr, thread_queue_worker, NULL);
+		if (rc != 0)
+			CT_ERROR(rc, "cannot create queue worker thread '%d'", n);
+		else {
+			snprintf(thread_queue_name, sizeof(thread_queue_name),
+				 "fsd_queue/%d", n);
+			pthread_setname_np(threads_queue[n], thread_queue_name);
+			CT_MESSAGE("created queue worker thread '%s'",
+				   thread_queue_name);
+		}
+	}
+	pthread_attr_destroy(&attr);
+
+	return rc;
+
+cleanup:
+	free(threads_queue);
+	threads_queue = NULL;
+
+	return rc;
+}
+
 int main(int argc, char *argv[])
 {
 	int rc;
@@ -703,7 +817,7 @@ int main(int argc, char *argv[])
 	struct sockaddr_in sockaddr_srv;
 	pthread_t *threads_sock = NULL;
 	pthread_attr_t attr;
-	char thread_name[16] = {0};
+	char thread_sock_name[16] = {0};
 	int reuse = 1;
 	struct sigaction sig_act;
 
@@ -759,6 +873,7 @@ int main(int argc, char *argv[])
 	CT_MESSAGE("listening on port: %d with %d serving socket threads",
 		   opt.o_port, opt.o_nthreads_sock);
 
+	/* Initialize socket processing threads. */
 	threads_sock = calloc(opt.o_nthreads_sock, sizeof(pthread_t));
 	if (threads_sock == NULL) {
 		rc = errno;
@@ -776,6 +891,10 @@ int main(int argc, char *argv[])
 		CT_ERROR(rc, "pthread_attr_setdetachstate");
 		goto cleanup_attr;
 	}
+
+	rc = start_queue_threads();
+	if (rc != 0)
+		goto cleanup_attr;
 
 	while (keep_running) {
 
@@ -806,7 +925,7 @@ int main(int argc, char *argv[])
 			}
 			*fd_sock = fd;
 
-			pthread_mutex_lock(&cnt_mutex);
+			pthread_mutex_lock(&mutex_sock_cnt);
 			rc = pthread_create(&threads_sock[thread_sock_cnt], &attr,
 					    thread_handle_client, fd_sock);
 			if (rc != 0)
@@ -814,16 +933,18 @@ int main(int argc, char *argv[])
 					 "client '%s'",
 					 inet_ntoa(sockaddr_cli.sin_addr));
 			else {
-				snprintf(thread_name, sizeof(thread_name),
-					 "ltsmfsd/%d", thread_sock_cnt);
+				snprintf(thread_sock_name, sizeof(thread_sock_name),
+					 "fsd_sock/%d", thread_sock_cnt);
 				pthread_setname_np(threads_sock[thread_sock_cnt],
-						   thread_name);
-				CT_MESSAGE("created thread '%s' for client '%s' and fd %d",
-					   thread_name,
-					   inet_ntoa(sockaddr_cli.sin_addr), *fd_sock);
+						   thread_sock_name);
+				CT_MESSAGE("created socket thread '%s' for "
+					   "client '%s' and fd %d",
+					   thread_sock_name,
+					   inet_ntoa(sockaddr_cli.sin_addr),
+					   *fd_sock);
 				thread_sock_cnt++;
 			}
-			pthread_mutex_unlock(&cnt_mutex);
+			pthread_mutex_unlock(&mutex_sock_cnt);
 		}
 	}
 
@@ -834,12 +955,14 @@ cleanup:
 	if (threads_sock)
 		free(threads_sock);
 
+	if (threads_queue)
+		free(threads_queue);
+
 	if (sock_fd > -1)
 		close(sock_fd);
 
 	list_destroy(&ident_list);
 	queue_destroy(&queue);
-	pthread_mutex_destroy(&queue_mutex);
 
 	return rc;
 }
