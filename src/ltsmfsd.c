@@ -77,6 +77,7 @@ static struct options opt = {
 };
 
 static list_t		ident_list;
+/* Socket handling. */
 static uint16_t		thread_sock_cnt = 0;
 static pthread_mutex_t	mutex_sock_cnt	= PTHREAD_MUTEX_INITIALIZER;
 static bool		keep_running	= true;
@@ -114,6 +115,16 @@ static void usage(const char *cmd_name, const int rc)
 		N_THREADS_QUEUE_DEFAULT,
 		PACKAGE_VERSION);
 	exit(rc);
+}
+
+static char *char_ctime(const time_t *t)
+{
+	static char ctime_buf[32] = {0};
+
+	if (ctime_r(t, ctime_buf))
+		ctime_buf[strlen(ctime_buf) - 1] = '\0'; /* Remove '\n' at end. */
+
+	return ctime_buf;
 }
 
 static void print_ident(void *data)
@@ -453,10 +464,6 @@ static int enqueue_fsd_item(const size_t bytes_recv_total,
 	/* Enqueue FSD action item in queue. */
 	rc = queue_enqueue(&queue, fsd_action_item);
 
-	char ctime_buf[32] = {0};
-	if (ctime_r(&fsd_action_item->ts[0], ctime_buf))
-		ctime_buf[strlen(ctime_buf) - 1] = '\0'; /* Remove '\n' at end. */
-
 	if (rc) {
 		rc = -EFAILED;
 		CT_ERROR(rc, "enqueue action failed: state='%s', fs='%s', fpath='%s', size=%lu, ts='%s'",
@@ -464,15 +471,15 @@ static int enqueue_fsd_item(const size_t bytes_recv_total,
 			 fsd_action_item->fsd_info.fs,
 			 fsd_action_item->fsd_info.fpath,
 			 fsd_action_item->size,
-			 ctime_buf);
+			 char_ctime(&fsd_action_item->ts[0]));
 		free(fsd_action_item);
 	} else {
 		CT_INFO("enqueue action: state='%s', fs='%s', fpath='%s', size=%lu, ts='%s'",
-		FSD_QUEUE_STR(fsd_action_item->fsd_action_state),
-		fsd_action_item->fsd_info.fs,
-		fsd_action_item->fsd_info.fpath,
-		fsd_action_item->size,
-		ctime_buf);
+			FSD_QUEUE_STR(fsd_action_item->fsd_action_state),
+			fsd_action_item->fsd_info.fs,
+			fsd_action_item->fsd_info.fpath,
+			fsd_action_item->size,
+			char_ctime(&fsd_action_item->ts[0]));
 	}
 
 	/* Free the lock of the queue. */
@@ -742,16 +749,12 @@ static void *thread_queue_worker(void *data)
 			rc = -EFAILED;
 			CT_ERROR(rc, "queue_dequeue");
 		} else {
-			char ctime_buf[32] = {0};
-			if (ctime_r(&fsd_action_item->ts[0], ctime_buf))
-				ctime_buf[strlen(ctime_buf) - 1] = '\0'; /* Remove '\n' at end. */
-
 			CT_INFO("dequeue action: state='%s', fs='%s', fpath='%s', size=%lu, ts='%s'",
 				FSD_QUEUE_STR(fsd_action_item->fsd_action_state),
 				fsd_action_item->fsd_info.fs,
 				fsd_action_item->fsd_info.fpath,
 				fsd_action_item->size,
-				ctime_buf);
+				char_ctime(&fsd_action_item->ts[0]));
 		}
 
 		/* Unlock. */
