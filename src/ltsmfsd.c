@@ -42,8 +42,8 @@ MSRT_DECLARE(fsd_recv_data);
 MSRT_DECLARE(fsd_send_data);
 
 #define PORT_DEFAULT_FSD	7625
-#define N_THREADS_DEFAULT	4
-#define N_THREADS_MAX		1024
+#define N_THREADS_SOCK_DEFAULT	4
+#define N_THREADS_SOCK_MAX	1024
 #define BACKLOG			32
 
 struct ident_map_t {
@@ -58,22 +58,22 @@ struct options {
 	char o_local_mount[PATH_MAX + 1];
 	char o_file_ident[PATH_MAX + 1];
 	int o_port;
-	int o_nthreads;
+	int o_nthreads_sock;
 	int o_daemonize;
 	int o_verbose;
 };
 
 static struct options opt = {
-	.o_local_mount = {0},
-	.o_file_ident  = {0},
-	.o_port	       = PORT_DEFAULT_FSD,
-	.o_nthreads    = N_THREADS_DEFAULT,
-	.o_daemonize   = 0,
-	.o_verbose     = API_MSG_NORMAL
+	.o_local_mount	  = {0},
+	.o_file_ident	  = {0},
+	.o_port		  = PORT_DEFAULT_FSD,
+	.o_nthreads_sock  = N_THREADS_SOCK_DEFAULT,
+	.o_daemonize	  = 0,
+	.o_verbose	  = API_MSG_NORMAL
 };
 
 static list_t ident_list;
-static uint16_t thread_cnt = 0;
+static uint16_t thread_sock_cnt = 0;
 static pthread_mutex_t cnt_mutex = PTHREAD_MUTEX_INITIALIZER;
 static bool keep_running = true;
 
@@ -90,8 +90,8 @@ static void usage(const char *cmd_name, const int rc)
 		"\t\t""filename of identifier mapping\n"
 		"\t-p, --port <int>\n"
 		"\t\t""port accepting connections [default: %d]\n"
-		"\t-t, --threads <int>\n"
-		"\t\t""number of processing threads [default: %d]\n"
+		"\t-s, --sthreads <int>\n"
+		"\t\t""number of socket threads [default: %d]\n"
 		"\t--daemon\n"
 		"\t\t""daemon mode run in background\n"
 		"\t-v, --verbose {error, warn, message, info, debug}"
@@ -102,7 +102,7 @@ static void usage(const char *cmd_name, const int rc)
 		"version: %s © 2019 by GSI Helmholtz Centre for Heavy Ion Research\n",
 		cmd_name,
 		PORT_DEFAULT_FSD,
-		N_THREADS_DEFAULT,
+		N_THREADS_SOCK_DEFAULT,
 		PACKAGE_VERSION);
 	exit(rc);
 }
@@ -245,9 +245,9 @@ static void sanity_arg_check(const struct options *opts, const char *argv)
 		fprintf(stdout, "missing argument -i, --identmap <file>\n\n");
 		usage(argv, 1);
 	}
-	if (opt.o_nthreads > N_THREADS_MAX) {
-		fprintf(stdout, "maximum number of threads %d exceeded\n\n",
-			N_THREADS_MAX);
+	if (opt.o_nthreads_sock > N_THREADS_SOCK_MAX) {
+		fprintf(stdout, "maximum number of socket threads %d exceeded\n\n",
+			N_THREADS_SOCK_MAX);
 		usage(argv, 1);
 	}
 }
@@ -258,7 +258,7 @@ static int parseopts(int argc, char *argv[])
 		{"localfs",	required_argument, 0,		     'l'},
 		{"identmap",	required_argument, 0,		     'i'},
 		{"port",	required_argument, 0,		     'p'},
-		{"threads",	required_argument, 0,		     't'},
+		{"sthreads",	required_argument, 0,		     's'},
 		{"daemon",	no_argument,	   &opt.o_daemonize,   1},
 		{"verbose",	required_argument, 0,		     'v'},
 		{"help",	no_argument,	   0,		     'h'},
@@ -268,7 +268,7 @@ static int parseopts(int argc, char *argv[])
 	int c, rc;
 	optind = 0;
 
-	while ((c = getopt_long(argc, argv, "l:i:p:t:v:h",
+	while ((c = getopt_long(argc, argv, "l:i:p:s:v:h",
 				long_opts, NULL)) != -1) {
 		switch (c) {
 		case 'l': {
@@ -287,12 +287,12 @@ static int parseopts(int argc, char *argv[])
 			opt.o_port = (int)p;
 			break;
 		}
-		case 't': {
+		case 's': {
 			long int t;
 			rc = parse_valid_num(optarg, &t);
 			if (rc)
 				return rc;
-			opt.o_nthreads = (int)t;
+			opt.o_nthreads_sock = (int)t;
 			break;
 		}
 		case 'v': {
@@ -652,8 +652,8 @@ out:
 	}
 
 	pthread_mutex_lock(&cnt_mutex);
-	if (thread_cnt > 0)
-		thread_cnt--;
+	if (thread_sock_cnt > 0)
+		thread_sock_cnt--;
 	pthread_mutex_unlock(&cnt_mutex);
 
 	return NULL;
@@ -701,7 +701,7 @@ int main(int argc, char *argv[])
 	int rc;
 	int sock_fd = -1;
 	struct sockaddr_in sockaddr_srv;
-	pthread_t *threads = NULL;
+	pthread_t *threads_sock = NULL;
 	pthread_attr_t attr;
 	char thread_name[16] = {0};
 	int reuse = 1;
@@ -756,11 +756,11 @@ int main(int argc, char *argv[])
 		CT_ERROR(rc, "listen");
 		goto cleanup;
 	}
-	CT_MESSAGE("listening on port: %d with %d serving threads",
-		   opt.o_port, opt.o_nthreads);
+	CT_MESSAGE("listening on port: %d with %d serving socket threads",
+		   opt.o_port, opt.o_nthreads_sock);
 
-	threads = calloc(opt.o_nthreads, sizeof(pthread_t));
-	if (threads == NULL) {
+	threads_sock = calloc(opt.o_nthreads_sock, sizeof(pthread_t));
+	if (threads_sock == NULL) {
 		rc = errno;
 		CT_ERROR(rc, "calloc");
 		goto cleanup;
@@ -790,10 +790,10 @@ int main(int argc, char *argv[])
 		if (fd < 0)
 			CT_ERROR(errno, "accept");
 		else {
-			if (thread_cnt >= opt.o_nthreads) {
+			if (thread_sock_cnt >= opt.o_nthreads_sock) {
 				CT_WARN("maximum number of serving "
-					"threads %d exceeded",
-					opt.o_nthreads);
+					"socket threads %d exceeded",
+					opt.o_nthreads_sock);
 				close(fd);
 				continue;
 			}
@@ -807,7 +807,7 @@ int main(int argc, char *argv[])
 			*fd_sock = fd;
 
 			pthread_mutex_lock(&cnt_mutex);
-			rc = pthread_create(&threads[thread_cnt], &attr,
+			rc = pthread_create(&threads_sock[thread_sock_cnt], &attr,
 					    thread_handle_client, fd_sock);
 			if (rc != 0)
 				CT_ERROR(rc, "cannot create thread for "
@@ -815,13 +815,13 @@ int main(int argc, char *argv[])
 					 inet_ntoa(sockaddr_cli.sin_addr));
 			else {
 				snprintf(thread_name, sizeof(thread_name),
-					 "ltsmfsd/%d", thread_cnt);
-				pthread_setname_np(threads[thread_cnt],
+					 "ltsmfsd/%d", thread_sock_cnt);
+				pthread_setname_np(threads_sock[thread_sock_cnt],
 						   thread_name);
 				CT_MESSAGE("created thread '%s' for client '%s' and fd %d",
 					   thread_name,
 					   inet_ntoa(sockaddr_cli.sin_addr), *fd_sock);
-				thread_cnt++;
+				thread_sock_cnt++;
 			}
 			pthread_mutex_unlock(&cnt_mutex);
 		}
@@ -831,8 +831,8 @@ cleanup_attr:
 	pthread_attr_destroy(&attr);
 
 cleanup:
-	if (threads)
-		free(threads);
+	if (threads_sock)
+		free(threads_sock);
 
 	if (sock_fd > -1)
 		close(sock_fd);
