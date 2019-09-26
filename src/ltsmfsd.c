@@ -905,7 +905,7 @@ static void *thread_queue_worker(void *data)
 				fsd_action_item->fsd_action_state = STATE_LUSTRE_COPY_DONE;
 			}
 		}
-
+		/* TODO: Handle all cases and free memory fsd_action_item. */
 	}
 
 	return NULL;
