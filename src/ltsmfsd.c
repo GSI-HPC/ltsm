@@ -464,7 +464,7 @@ static int enqueue_fsd_item(const size_t bytes_recv_total,
 	if (rc) {
 		rc = -EFAILED;
 		CT_ERROR(rc, "enqueue action failed: state='%s', fs='%s', fpath='%s', size=%lu, ts='%s'",
-			 FSD_QUEUE_STR(fsd_action_item->fsd_action_state),
+			 FSD_ACTION_STR(fsd_action_item->fsd_action_state),
 			 fsd_action_item->fsd_info.fs,
 			 fsd_action_item->fsd_info.fpath,
 			 fsd_action_item->size,
@@ -472,7 +472,7 @@ static int enqueue_fsd_item(const size_t bytes_recv_total,
 		free(fsd_action_item);
 	} else {
 		CT_INFO("enqueue action: state='%s', fs='%s', fpath='%s', size=%lu, ts='%s'",
-			FSD_QUEUE_STR(fsd_action_item->fsd_action_state),
+			FSD_ACTION_STR(fsd_action_item->fsd_action_state),
 			fsd_action_item->fsd_info.fs,
 			fsd_action_item->fsd_info.fpath,
 			fsd_action_item->size,
@@ -859,6 +859,60 @@ out:
 	return rc;
 }
 
+static int process_fsd_action_time(struct fsd_action_item_t *fsd_action_item)
+{
+	/* TODO: Free memory fsd_action_item. */
+	int rc;
+
+	switch (fsd_action_item->fsd_action_state) {
+	case STATE_FSD_COPY_DONE: {
+		rc = write_to_lustre(fsd_action_item);
+		if (rc) {
+			CT_WARN("file '%s' writing to '%s' failed, will "
+				"try again",
+				fsd_action_item->fpath_local,
+				fsd_action_item->fsd_info.fpath);
+			fsd_action_item->fsd_action_state = STATE_LUSTRE_COPY_ERROR;
+		} else {
+			CT_MESSAGE("file '%s' writing to '%s' was successful",
+				   fsd_action_item->fpath_local,
+				   fsd_action_item->fsd_info.fpath);
+			fsd_action_item->fsd_action_state = STATE_LUSTRE_COPY_DONE;
+		}
+		break;
+	}
+	case STATE_LUSTRE_COPY_RUN: {
+		rc = -ENOSYS;
+		break;
+	}
+	case STATE_LUSTRE_COPY_ERROR: {
+		rc = -ENOSYS;
+		break;
+	}
+	case STATE_LUSTRE_COPY_DONE: {
+		rc = -ENOSYS;
+		break;
+	}
+	case STATE_TSM_COPY_RUN: {
+		rc = -ENOSYS;
+		break;
+	}
+	case STATE_TSM_COPY_ERROR: {
+		rc = -ENOSYS;
+		break;
+	}
+	case STATE_TSM_COPY_DONE: {
+		rc = -ENOSYS;
+		break;
+	}
+	default:
+		rc = -ERANGE;
+		break;
+	}
+
+	return rc;
+}
+
 static void *thread_queue_worker(void *data)
 {
 	int rc;
@@ -873,39 +927,23 @@ static void *thread_queue_worker(void *data)
 			pthread_cond_wait(&queue_cond, &queue_mutex);
 
 		rc = queue_dequeue(&queue, (void **)&fsd_action_item);
+
+		/* Unlock. */
+		pthread_mutex_unlock(&queue_mutex);
+
 		if (rc) {
 			rc = -EFAILED;
 			CT_ERROR(rc, "queue_dequeue");
 		} else {
 			CT_INFO("dequeue action: state='%s', fs='%s', fpath='%s', size=%lu, ts='%s'",
-				FSD_QUEUE_STR(fsd_action_item->fsd_action_state),
+				FSD_ACTION_STR(fsd_action_item->fsd_action_state),
 				fsd_action_item->fsd_info.fs,
 				fsd_action_item->fsd_info.fpath,
 				fsd_action_item->size,
 				char_ctime(&fsd_action_item->ts[0]));
-		}
 
-		/* Unlock. */
-		pthread_mutex_unlock(&queue_mutex);
-
-		if (fsd_action_item->fsd_action_state == STATE_TSM_COPY_DONE)
-			continue;
-		if (fsd_action_item->fsd_action_state == STATE_FSD_COPY_DONE) {
-			rc = write_to_lustre(fsd_action_item);
-			if (rc) {
-				CT_WARN("file '%s' writing to '%s' failed, will "
-					"try again",
-					fsd_action_item->fpath_local,
-					fsd_action_item->fsd_info.fpath);
-				fsd_action_item->fsd_action_state = STATE_LUSTRE_COPY_ERROR;
-			} else {
-				CT_MESSAGE("file '%s' writing to '%s' was successful",
-					   fsd_action_item->fpath_local,
-					   fsd_action_item->fsd_info.fpath);
-				fsd_action_item->fsd_action_state = STATE_LUSTRE_COPY_DONE;
-			}
+			rc = process_fsd_action_time(fsd_action_item);
 		}
-		/* TODO: Handle all cases and free memory fsd_action_item. */
 	}
 
 	return NULL;

@@ -314,7 +314,10 @@ void run_all_tests(void)
 
 int main(void)
 {
-	srand(time(NULL));
+	struct timespec tspec = {0};
+
+	clock_gettime(CLOCK_MONOTONIC, &tspec);
+	srand(time(NULL) + tspec.tv_nsec);
 	run_all_tests();
 
 	return 0;

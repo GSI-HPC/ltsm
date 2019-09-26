@@ -82,7 +82,7 @@
 	s == (FSD_DATA | FSD_CLOSE) ? "FSD_DATA | FSD_CLOSE" :                     \
 	s == (FSD_DISCONNECT | FSD_OPEN) ? "FSD_DISCONNECT | FSD_OPEN" : "UNKNOWN" \
 
-#define FSD_QUEUE_STR(s)						     \
+#define FSD_ACTION_STR(s)						     \
 	s == STATE_FSD_COPY_DONE     ? "STATE_FSD_COPY_DONE"     :	     \
 	s == STATE_LUSTRE_COPY_RUN   ? "STATE_LUSTRE_COPY_RUN"   :	     \
 	s == STATE_LUSTRE_COPY_ERROR ? "STATE_LUSTRE_COPY_ERROR" :	     \

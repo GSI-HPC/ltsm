@@ -13,7 +13,7 @@
  */
 
 /*
- * Copyright (c) 2017, GSI Helmholtz Centre for Heavy Ion Research
+ * Copyright (c) 2017-2019, GSI Helmholtz Centre for Heavy Ion Research
  */
 
 #ifndef MEASUREMENT_H
