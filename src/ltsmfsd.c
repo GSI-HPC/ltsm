@@ -36,10 +36,6 @@
 #include <lustre/lustreapi.h>
 #include "tsmapi.h"
 #include "queue.h"
-#include "measurement.h"
-
-MSRT_DECLARE(fsd_recv_data);
-MSRT_DECLARE(fsd_send_data);
 
 #define PORT_DEFAULT_FSD	7625
 #define N_THREADS_SOCK_DEFAULT	4
@@ -47,6 +43,7 @@ MSRT_DECLARE(fsd_send_data);
 #define N_THREADS_QUEUE_DEFAULT	4
 #define N_THREADS_QUEUE_MAX	64
 #define BACKLOG			32
+#define BUF_SIZE		0xfffff	/* 0xfffff = 1MiB, 0x400000 = 4MiB */
 
 struct ident_map_t {
 	char node[DSM_MAX_NODE_LENGTH + 1];
@@ -491,25 +488,154 @@ static int enqueue_fsd_item(const size_t bytes_recv_total,
 	return rc;
 }
 
+static int init_fsd_local(char **fpath_local, int *fd_local,
+			  const uid_t uid, const gid_t gid,
+			  const struct fsd_protocol_t *fsd_protocol)
+{
+	int rc;
+	char hl[DSM_MAX_HL_LENGTH + 1] = {0};
+	char ll[DSM_MAX_LL_LENGTH + 1] = {0};
+
+	rc = extract_hl_ll(fsd_protocol->fsd_info.fpath, fsd_protocol->fsd_info.fs,
+			   hl, ll);
+	if (rc) {
+		rc = -EFAILED;
+		CT_ERROR(rc, "extract_hl_ll");
+		return rc;
+	}
+
+	const size_t L = strlen(opt.o_local_mount) + strlen(hl) + strlen(ll);
+	const size_t L_MAX = PATH_MAX + DSM_MAX_HL_LENGTH +
+		DSM_MAX_LL_LENGTH + 1;
+	if (L > PATH_MAX) {
+		rc = -ENAMETOOLONG;
+		CT_ERROR(rc, "fpath name '%s/%s/%s'",
+			 opt.o_local_mount, hl, ll);
+		return rc;
+	}
+	/* This twist is necessary to avoid error:
+	   ‘%s’ directive output may be truncated writing up to ... */
+	*fpath_local = calloc(1, L_MAX);
+	if (!*fpath_local) {
+		rc = -errno;
+		CT_ERROR(rc, "calloc");
+		return rc;
+	}
+	snprintf(*fpath_local, L_MAX, "%s/%s", opt.o_local_mount, hl);
+
+	/* Make sure the directory exists where to store the file. */
+	rc = mkdir_p(*fpath_local, S_IRWXU | S_IRGRP | S_IXGRP
+		     | S_IROTH | S_IXOTH);
+	CT_DEBUG("[rc=%d] mkdir_p '%s'", rc, *fpath_local);
+	if (rc) {
+		CT_ERROR(rc, "mkdir_p '%s'", *fpath_local);
+		return rc;
+	}
+
+	snprintf(*fpath_local + strlen(*fpath_local), PATH_MAX, "/%s", ll);
+
+	*fd_local = open(*fpath_local, O_WRONLY | O_TRUNC | O_CREAT,
+			 S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+	CT_DEBUG("[fd=%d] open '%s'", *fd_local, *fpath_local);
+	if (*fd_local < 0) {
+		rc = -errno;
+		CT_ERROR(rc, "open '%s'", *fpath_local);
+		return rc;
+	}
+
+	/* Change owner and group. */
+	rc = fchown(*fd_local, uid, gid);
+	CT_DEBUG("[rc=%d,fd=%d] fchown uid %zu gid %zu", rc, *fd_local,
+		 uid, gid);
+	if (rc) {
+		rc = -errno;
+		CT_ERROR(rc, "fchown uid %zu gid %zu", uid, gid);
+	}
+
+	return rc;
+}
+
+static int recv_fsd_data(int *fd_sock, int *fd_local,
+			 struct fsd_protocol_t *fsd_protocol,
+			 size_t *bytes_recv_total, size_t *bytes_send_total)
+{
+	int rc;
+	uint8_t buf[BUF_SIZE];
+	ssize_t bytes_recv, bytes_to_recv;
+	ssize_t bytes_send;
+
+	do {
+		rc = recv_fsd_protocol(*fd_sock, fsd_protocol, (FSD_DATA | FSD_CLOSE));
+		CT_DEBUG("[rc=%d,fd=%d] recv_fsd_protocol, size %zu", rc, *fd_sock,
+			 fsd_protocol->size);
+		if (rc) {
+			CT_ERROR(rc, "recv_fsd_protocol failed");
+			goto out;
+		}
+
+		if (fsd_protocol->state & FSD_CLOSE)
+			goto out;
+
+		size_t bytes_total = 0;
+		bytes_recv = bytes_send = 0;
+		memset(buf, 0, sizeof(buf));
+		do {
+			bytes_to_recv = fsd_protocol->size < sizeof(buf) ?
+				fsd_protocol->size : sizeof(buf);
+			if (fsd_protocol->size - bytes_total < bytes_to_recv)
+				bytes_to_recv = fsd_protocol->size - bytes_total;
+
+			bytes_recv = read_size(*fd_sock, buf, bytes_to_recv);
+			CT_DEBUG("[fd=%d] read_size %zd, expected %zd, max possible %zd",
+				 *fd_sock, bytes_recv, bytes_to_recv, sizeof(buf));
+			if (bytes_recv < 0) {
+				CT_ERROR(errno, "recv");
+				goto out;
+			}
+			if (bytes_recv == 0) {
+				CT_INFO("bytes_read: %zu, bytes_recv_total: %zu",
+					bytes_recv, *bytes_recv_total);
+				break;
+			}
+			*bytes_recv_total += bytes_recv;
+			bytes_total += bytes_recv;
+
+			bytes_send = write_size(*fd_local, buf, bytes_recv);
+			CT_DEBUG("[fd=%d] write_size %zd, expected %zd, max possible %zd",
+				 *fd_local, bytes_send, bytes_recv, sizeof(buf));
+			if (bytes_send < 0) {
+				CT_ERROR(errno, "send");
+				goto out;
+			}
+			*bytes_send_total += bytes_send;
+		} while (bytes_total != fsd_protocol->size);
+		CT_DEBUG("[fd=%d,fd=%d] total read %zu, total written %zu",
+			 *fd_sock, *fd_local, *bytes_recv_total, *bytes_send_total);
+	} while (fsd_protocol->state & FSD_DATA);
+
+out:
+	return rc;
+}
+
 static void *thread_handle_client(void *arg)
 {
-	int rc, *fd  = NULL;
+	int rc;
+	int *fd_sock  = NULL;
 	struct fsd_protocol_t fsd_protocol;
-	char *fpath_local = NULL;
-	int fd_local = -1;
-	uid_t uid = 0;
-	gid_t gid = 0;
 
-	fd = (int *)arg;
+	fd_sock = (int *)arg;
 	memset(&fsd_protocol, 0, sizeof(struct fsd_protocol_t));
 
 	/* State 1: Client calls fsd_tsm_fconnect(...). */
-	rc = recv_fsd_protocol(*fd, &fsd_protocol, FSD_CONNECT);
-	CT_DEBUG("[rc=%d,fd=%d] recv_fsd_protocol", rc, *fd);
+	rc = recv_fsd_protocol(*fd_sock, &fsd_protocol, FSD_CONNECT);
+	CT_DEBUG("[rc=%d,fd=%d] recv_fsd_protocol", rc, *fd_sock);
 	if (rc) {
 		CT_ERROR(rc, "recv_fsd_protocol failed");
 		goto out;
 	}
+
+	uid_t uid = 65534;	/* User: Nobody. */
+	gid_t gid = 65534;	/* Group: Nobody. */
 
 	rc = verify_node(&fsd_protocol.login, &uid, &gid);
 	CT_DEBUG("[rc=%d] verify_node", rc);
@@ -518,10 +644,12 @@ static void *thread_handle_client(void *arg)
 		goto out;
 	}
 
+	char *fpath_local = NULL;
+	int fd_local = -1;
 	do {
 		/* State 2: Client calls fsd_tsm_fopen(...) or fsd_tsm_disconnect(...). */
-		rc = recv_fsd_protocol(*fd, &fsd_protocol, (FSD_OPEN | FSD_DISCONNECT));
-		CT_DEBUG("[rc=%d,fd=%d] recv_fsd_protocol", rc, *fd);
+		rc = recv_fsd_protocol(*fd_sock, &fsd_protocol, (FSD_OPEN | FSD_DISCONNECT));
+		CT_DEBUG("[rc=%d,fd=%d] recv_fsd_protocol", rc, *fd_sock);
 		if (rc) {
 			CT_ERROR(rc, "recv_fsd_protocol failed");
 			goto out;
@@ -530,149 +658,57 @@ static void *thread_handle_client(void *arg)
 		if (fsd_protocol.state & FSD_DISCONNECT)
 			goto out;
 
-		CT_INFO("[fd=%d] receiving buffer from node: '%s' with fpath: '%s'",
-			*fd, fsd_protocol.login.node, fsd_protocol.fsd_info.fpath);
+		CT_INFO("[fd=%d] recv_fsd_protocol node: '%s' with fpath: '%s'",
+			*fd_sock, fsd_protocol.login.node, fsd_protocol.fsd_info.fpath);
 
-		char hl[DSM_MAX_HL_LENGTH + 1] = {0};
-		char ll[DSM_MAX_LL_LENGTH + 1] = {0};
-		rc = extract_hl_ll(fsd_protocol.fsd_info.fpath, fsd_protocol.fsd_info.fs,
-				   hl, ll);
+		rc = init_fsd_local(&fpath_local, &fd_local, uid, gid, &fsd_protocol);
 		if (rc) {
+			CT_ERROR(rc, "init_fsd_local");
+			goto out;
+		}
+
+		size_t  bytes_recv_total = 0;
+		size_t bytes_send_total = 0;
+		/* State 3: Client calls fsd_tsm_fwrite(...) or fsd_tsm_fclose(...). */
+		rc = recv_fsd_data(fd_sock,
+				   &fd_local,
+				   &fsd_protocol,
+				   &bytes_recv_total,
+				   &bytes_send_total);
+
+		if (bytes_recv_total != bytes_send_total) {
 			rc = -EFAILED;
-			CT_ERROR(rc, "extract_hl_ll");
+			CT_ERROR(rc, "total number of bytes recv and send "
+				 "differs, recv: %lu and send: %lu",
+				 bytes_recv_total, bytes_send_total);
 			goto out;
 		}
+		CT_INFO("[fd=%d,fd=%d] data buffer of size: %zd successfully "
+			"received and sent", *fd_sock, fd_local, bytes_recv_total);
 
-		const size_t L = strlen(opt.o_local_mount) + strlen(hl) + strlen(ll);
-		const size_t L_MAX = PATH_MAX + DSM_MAX_HL_LENGTH +
-			DSM_MAX_LL_LENGTH + 1;
-		if (L > PATH_MAX) {
-			rc = -ENAMETOOLONG;
-			CT_ERROR(rc, "fpath name '%s/%s/%s'",
-				 opt.o_local_mount, hl, ll);
+		rc = xattr_set_fsd(fd_local, fpath_local,
+				   &fsd_protocol.fsd_info,
+				   STATE_FSD_COPY_DONE);
+		if (rc)
 			goto out;
-		}
-		/* This twist is necessary to avoid error:
-		   ‘%s’ directive output may be truncated writing up to ... */
-		fpath_local = calloc(1, L_MAX);
-		if (!fpath_local) {
-			rc = -errno;
-			CT_ERROR(rc, "calloc");
+
+		rc = enqueue_fsd_item(bytes_recv_total, &fsd_protocol, fpath_local);
+		if (rc)
 			goto out;
-		}
-		snprintf(fpath_local, L_MAX, "%s/%s", opt.o_local_mount, hl);
-
-		/* Make sure the directory exists where to store the file. */
-		rc = mkdir_p(fpath_local, S_IRWXU | S_IRGRP | S_IXGRP
-			     | S_IROTH | S_IXOTH);
-		CT_DEBUG("[rc=%d] mkdir_p '%s'", rc, fpath_local);
-		if (rc) {
-			CT_ERROR(rc, "mkdir_p '%s'", fpath_local);
-			goto out;
-		}
-
-		snprintf(fpath_local + strlen(fpath_local), PATH_MAX, "/%s", ll);
-
-		fd_local = open(fpath_local, O_WRONLY | O_TRUNC | O_CREAT,
-				S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
-		CT_DEBUG("[fd=%d] open '%s'", fd_local, fpath_local);
-		if (fd_local < 0) {
-			rc = -errno;
-			CT_ERROR(rc, "open '%s'", fpath_local);
-			goto out;
-		}
-
-		/* Change owner and group. */
-		rc = fchown(fd_local, uid, gid);
-		CT_DEBUG("[rc=%d,fd=%d] fchown uid %zu gid %zu", rc, fd_local,
-			 uid, gid);
-		if (rc) {
-			rc = -errno;
-			CT_ERROR(rc, "fchown uid %zu gid %zu", uid, gid);
-			goto out;
-		}
-
-		uint8_t buf[0xfffff]; /* 0xfffff = 1MiB, 0x400000 = 4MiB */
-		ssize_t bytes_recv, bytes_to_recv, bytes_recv_total = 0;
-		ssize_t bytes_send, bytes_send_total = 0;
-		MSRT_START(fsd_recv_data);
-		MSRT_START(fsd_send_data);
-		do {
-			rc = recv_fsd_protocol(*fd, &fsd_protocol, (FSD_DATA | FSD_CLOSE));
-			CT_DEBUG("[rc=%d,fd=%d] recv_fsd_protocol, size: %zu", rc, *fd,
-				 fsd_protocol.size);
-			if (rc) {
-				CT_ERROR(rc, "recv_fsd_protocol failed");
-				goto out;
-			}
-
-			if (fsd_protocol.state & FSD_CLOSE)
-				goto out_close;
-
-			bytes_recv_total = bytes_send_total = 0;
-			memset(buf, 0, sizeof(buf));
-			do {
-				bytes_to_recv = fsd_protocol.size < sizeof(buf) ? fsd_protocol.size : sizeof(buf);
-				if (fsd_protocol.size - bytes_recv_total < bytes_to_recv)
-					bytes_to_recv = fsd_protocol.size - bytes_recv_total;
-
-				bytes_recv = read_size(*fd, buf, bytes_to_recv);
-				bytes_recv_total += bytes_recv;
-				MSRT_DATA(fsd_recv_data, bytes_recv);
-				CT_DEBUG("[fd=%d] read_size %zd, max expected %zd, total recv size: %zd, to recv: %zd",
-					 *fd, bytes_recv, sizeof(buf), bytes_recv_total, bytes_to_recv);
-				if (bytes_recv < 0) {
-					CT_ERROR(errno, "recv");
-					goto out;
-				}
-				if (bytes_recv == 0) {
-					CT_INFO("bytes_recv: %zu, bytes_recv_total: %zu",
-						bytes_recv, bytes_recv_total);
-					break;
-				}
-				bytes_send = write_size(fd_local, buf, bytes_recv);
-				bytes_send_total += bytes_send;
-				MSRT_DATA(fsd_send_data, bytes_send);
-				CT_DEBUG("[fd=%d] write_size %zd, max expected %zd, total recv size: %zd",
-					 fd_local, bytes_send, sizeof(buf), bytes_send_total);
-				if (bytes_send < 0) {
-					CT_ERROR(errno, "send");
-					goto out;
-				}
-			} while (bytes_recv_total != fsd_protocol.size);
-		} while (fsd_protocol.state & FSD_DATA);
-		MSRT_STOP(fsd_recv_data);
-		MSRT_STOP(fsd_send_data);
-		MSRT_DISPLAY_RESULT(fsd_recv_data);
-		MSRT_DISPLAY_RESULT(fsd_send_data);
-
-out_close:
-		if (bytes_recv_total != bytes_send_total)
-			CT_WARN("total number of bytes recv and send differs, "
-				"recv: %lu and send: %lu", bytes_recv_total, bytes_send_total);
-		else {
-			CT_INFO("[fd=%d,fd_local=%d] data buffer of size: %zd successfully "
-				"received and sent", *fd, fd_local, bytes_recv_total);
-
-			rc = xattr_set_fsd(fd_local, fpath_local,
-					   &fsd_protocol.fsd_info,
-					   STATE_FSD_COPY_DONE);
-			if (rc)
-				goto out;
-
-			rc = enqueue_fsd_item(bytes_recv_total, &fsd_protocol, fpath_local);
-			if (rc)
-				goto out;
-		}
 
 		rc = close(fd_local);
-		CT_DEBUG("[rc=%d,fd_local=%d] close", rc, fd_local);
+		CT_DEBUG("[rc=%d,fd=%d] close", rc, fd_local);
 		if (rc < 0) {
 			rc = -errno;
 			CT_ERROR(rc, "close");
 			goto out;
 		}
 		fd_local = -1;
+
+		if (fpath_local) {
+			free(fpath_local);
+			fpath_local = NULL;
+		}
 	} while (fsd_protocol.state != FSD_DISCONNECT);
 
 out:
@@ -680,12 +716,14 @@ out:
 		free(fpath_local);
 		fpath_local = NULL;
 	}
+
 	if (!(fd_local < 0))
 		close(fd_local);
-	if (fd) {
-		close(*fd);
-		free(fd);
-		fd = NULL;
+
+	if (fd_sock) {
+		close(*fd_sock);
+		free(fd_sock);
+		fd_sock = NULL;
 	}
 
 	pthread_mutex_lock(&mutex_sock_cnt);
@@ -732,6 +770,95 @@ static void signal_handler(int signal)
 	keep_running = false;
 }
 
+static int write_to_lustre(struct fsd_action_item_t *fsd_action_item)
+{
+	int fd_read = -1;
+	int fd_write = -1;
+	int rc;
+
+	fsd_action_item->fsd_action_state = STATE_LUSTRE_COPY_RUN;
+
+	fd_read = open(fsd_action_item->fpath_local, O_RDONLY);
+	if (fd_read < 0) {
+		rc = -errno;
+		CT_ERROR(rc, "open '%s'", fsd_action_item->fpath_local);
+		return rc;
+	}
+	fd_write = open(fsd_action_item->fsd_info.fpath, O_WRONLY | O_CREAT | O_TRUNC, 00664);
+	if (fd_write < 0) {
+		rc = -errno;
+		CT_ERROR(rc, "open '%s'", fsd_action_item->fsd_info.fpath);
+		goto out;
+	}
+
+	/* Sanity check. */
+	struct stat statbuf = {0};
+	rc = fstat(fd_read, &statbuf);
+	if (rc) {
+		rc = -errno;
+		CT_ERROR(rc, "stat");
+		goto out;
+	}
+	if (statbuf.st_size != fsd_action_item->size) {
+		rc = -ERANGE;
+		CT_ERROR(rc, "fsd_action_item->size %zu != fstat.st_size %zu",
+			 fsd_action_item->size, statbuf.st_size);
+		goto out;
+	}
+
+	uint8_t buf[BUF_SIZE];
+	ssize_t bytes_read, bytes_read_total = 0;
+	ssize_t bytes_write, bytes_write_total = 0;
+	do {
+		bytes_read = read_size(fd_read, buf, sizeof(buf));
+		bytes_read_total += bytes_read;
+		CT_DEBUG("[fd=%d] read_size %zd, total read size",
+			 fd_read, bytes_read, bytes_read_total);
+		if (bytes_read < 0) {
+			rc = -errno;
+			CT_ERROR(rc, "read_size");
+			goto out;
+		}
+		if (bytes_read == 0) {
+			CT_INFO("[fd=%d] bytes_read: %zu, bytes_read_total: %zu",
+				fd_read, bytes_read, bytes_read_total);
+			break;
+		}
+
+		bytes_write = write_size(fd_write, buf, bytes_read);
+		bytes_write_total += bytes_write;
+		CT_DEBUG("[fd=%d] write_size %zd, total write size",
+			 fd_write, bytes_write, bytes_write_total);
+		if (bytes_write < 0) {
+			rc = -errno;
+			CT_ERROR(rc, "write_size");
+			goto out;
+		}
+	} while (statbuf.st_size != bytes_read_total);
+
+	/* Sanity check. */
+	if (bytes_read_total != bytes_write_total) {
+		rc = -ERANGE;
+		CT_ERROR(rc, "total number of bytes read and written differs, "
+			 "read: %zu and send: %zu", bytes_read_total, bytes_write_total);
+		goto out;
+	}
+	CT_INFO("[fd_read=(%d,'%s'),fd_write=(%d,'%s')] data buffer of "
+		"size: %zd successfully read and written",
+		fd_read, fsd_action_item->fpath_local,
+		fd_write, fsd_action_item->fsd_info.fpath,
+		bytes_read_total);
+
+out:
+	if (fd_read != -1)
+		close(fd_read);
+
+	if (fd_write != -1)
+		close(fd_write);
+
+	return rc;
+}
+
 static void *thread_queue_worker(void *data)
 {
 	int rc;
@@ -741,6 +868,7 @@ static void *thread_queue_worker(void *data)
 		/* Critical region, lock. */
 		pthread_mutex_lock(&queue_mutex);
 
+		/* While queue is empty wait for new FSD action item. */
 		while (queue_size(&queue) == 0)
 			pthread_cond_wait(&queue_cond, &queue_mutex);
 
@@ -759,6 +887,25 @@ static void *thread_queue_worker(void *data)
 
 		/* Unlock. */
 		pthread_mutex_unlock(&queue_mutex);
+
+		if (fsd_action_item->fsd_action_state == STATE_TSM_COPY_DONE)
+			continue;
+		if (fsd_action_item->fsd_action_state == STATE_FSD_COPY_DONE) {
+			rc = write_to_lustre(fsd_action_item);
+			if (rc) {
+				CT_WARN("file '%s' writing to '%s' failed, will "
+					"try again",
+					fsd_action_item->fpath_local,
+					fsd_action_item->fsd_info.fpath);
+				fsd_action_item->fsd_action_state = STATE_LUSTRE_COPY_ERROR;
+			} else {
+				CT_MESSAGE("file '%s' writing to '%s' was successful",
+					   fsd_action_item->fpath_local,
+					   fsd_action_item->fsd_info.fpath);
+				fsd_action_item->fsd_action_state = STATE_LUSTRE_COPY_DONE;
+			}
+		}
+
 	}
 
 	return NULL;

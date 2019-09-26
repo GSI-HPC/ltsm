@@ -155,7 +155,7 @@ void test_fsd_fcalls(CuTest *tc)
 		char hl_ll[PATH_MAX + 1] = {0};
 
 		rnd_str(rnd_s, LEN_RND_STR);
-		snprintf(fpath[r], PATH_MAX, "/tmp/%s", rnd_s);
+		snprintf(fpath[r], PATH_MAX, "/lustre/%s", rnd_s);
 
 		rc = fsd_tsm_fopen("/", fpath[r], NULL, &session);
 		CuAssertIntEquals(tc, 0, rc);
@@ -186,7 +186,7 @@ void test_fsd_fcalls(CuTest *tc)
 		rc = fsd_tsm_fclose(&session);
 		CuAssertIntEquals(tc, 0, rc);
 
-		snprintf(fpath[r], PATH_MAX, "/fsddata/tmp/%s", rnd_s);
+		snprintf(fpath[r], PATH_MAX, "/fsddata/lustre/%s", rnd_s);
 		CT_DEBUG("fpath fsd '%s'", fpath[r]);
 
 		sleep(1); /* Give Linux some time to flush data to disk. */
