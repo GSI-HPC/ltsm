@@ -2582,11 +2582,6 @@ int recv_fsd_protocol(int fd, struct fsd_protocol_t *fsd_protocol,
 		CT_ERROR(rc, "read_size");
 		goto out;
 	}
-	CT_INFO("[fd=%d] recv_fsd_protocol state: '%s', expected: '%s'",
-		fd,
-		FSD_PROTOCOL_STR(fsd_protocol->state),
-		FSD_PROTOCOL_STR(fsd_protocol_state));
-
 	if (!(fsd_protocol->state & fsd_protocol_state))
 		rc = -EPROTO;
 
