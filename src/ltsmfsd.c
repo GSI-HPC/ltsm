@@ -722,6 +722,7 @@ static void *thread_handle_client(void *arg)
 		if (rc)
 			goto out;
 
+		/* Producer. */
 		rc = enqueue_fsd_item(bytes_recv_total, &fsd_protocol, fpath_local);
 		if (rc)
 			goto out;
@@ -951,7 +952,7 @@ static int process_fsd_action_item(struct fsd_action_item_t *fsd_action_item)
 	return rc;
 }
 
-static void *thread_queue_worker(void *data)
+static void *thread_queue_consumer(void *data)
 {
 	int rc;
 	struct fsd_action_item_t *fsd_action_item;
@@ -989,7 +990,7 @@ static void *thread_queue_worker(void *data)
 	return NULL;
 }
 
-static int start_queue_threads(void)
+static int start_queue_consumer_threads(void)
 {
 	int rc;
 	pthread_attr_t attr;
@@ -1016,14 +1017,14 @@ static int start_queue_threads(void)
 	}
 
 	for (uint16_t n = 0; n < opt.o_nthreads_queue; n++) {
-		rc = pthread_create(&threads_queue[n], &attr, thread_queue_worker, NULL);
+		rc = pthread_create(&threads_queue[n], &attr, thread_queue_consumer, NULL);
 		if (rc != 0)
-			CT_ERROR(rc, "cannot create queue worker thread '%d'", n);
+			CT_ERROR(rc, "cannot create queue consumer thread '%d'", n);
 		else {
 			snprintf(thread_queue_name, sizeof(thread_queue_name),
 				 "fsd_queue/%d", n);
 			pthread_setname_np(threads_queue[n], thread_queue_name);
-			CT_MESSAGE("created queue worker thread '%s'",
+			CT_MESSAGE("created queue consumer thread '%s'",
 				   thread_queue_name);
 		}
 	}
@@ -1120,7 +1121,7 @@ int main(int argc, char *argv[])
 		goto cleanup_attr;
 	}
 
-	rc = start_queue_threads();
+	rc = start_queue_consumer_threads();
 	if (rc != 0)
 		goto cleanup_attr;
 
