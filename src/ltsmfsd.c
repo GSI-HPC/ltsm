@@ -79,11 +79,14 @@ static uint16_t		thread_sock_cnt = 0;
 static pthread_mutex_t	mutex_sock_cnt	= PTHREAD_MUTEX_INITIALIZER;
 static bool		keep_running	= true;
 
-/* Work queue */
+/* Work queue. */
 static queue_t		 queue;
 static pthread_t	*threads_queue = NULL;
 static pthread_mutex_t	 queue_mutex   = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t	 queue_cond    = PTHREAD_COND_INITIALIZER;
+
+/* Extended attributes handling. */
+static pthread_mutex_t xattr_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 static void usage(const char *cmd_name, const int rc)
 {
@@ -406,29 +409,52 @@ static int verify_node(struct login_t *login, uid_t *uid, gid_t *gid)
 	return rc;
 }
 
-static int xattr_set_fsd(const int fd,
-			 const char *fpath_local,
-			 const struct fsd_info_t *fsd_info,
-			 const uint32_t fsd_action_state)
+static int xattr_set_fsd_desc(const char *fpath_local,
+			      const char *desc)
 {
 	int rc;
 
-	rc = fsetxattr(fd, XATTR_FSD_DESC,
-		      (char *)fsd_info->desc, sizeof(fsd_info->desc), 0);
+	pthread_mutex_lock(&xattr_mutex);
+	rc = setxattr(fpath_local, XATTR_FSD_DESC, desc,
+		      DSM_MAX_DESCR_LENGTH, 0);
+	pthread_mutex_unlock(&xattr_mutex);
 	if (rc < 0) {
 		rc = -errno;
-		CT_ERROR(rc, "fsetxattr %d '%s %s'", fd, fpath_local,
-			 XATTR_FSD_DESC);
-		return rc;
+		CT_ERROR(rc, "setxattr '%s %s'", fpath_local, XATTR_FSD_DESC);
 	}
 
-	rc = fsetxattr(fd, XATTR_FSD_FLAGS,
+	return rc;
+}
+
+static int xattr_set_fsd_state(const char *fpath_local,
+			       const uint32_t fsd_action_state)
+{
+	int rc;
+
+	pthread_mutex_lock(&xattr_mutex);
+	rc = setxattr(fpath_local, XATTR_FSD_FLAGS,
 		      (uint32_t *)&fsd_action_state, sizeof(uint32_t), 0);
+	pthread_mutex_unlock(&xattr_mutex);
 	if (rc < 0) {
 		rc = -errno;
-		CT_ERROR(rc, "fsetxattr %d '%s %s'", fd, fpath_local,
-			 XATTR_FSD_FLAGS);
+		CT_ERROR(rc, "setxattr '%s %s'", fpath_local, XATTR_FSD_FLAGS);
 	}
+
+	return rc;
+}
+
+
+static int xattr_set_fsd_desc_state(const char *fpath_local,
+				    const char *desc,
+				    const uint32_t fsd_action_state)
+{
+	int rc;
+
+	rc = xattr_set_fsd_desc(fpath_local, desc);
+	if (rc)
+		return rc;
+
+	rc = xattr_set_fsd_state(fpath_local, fsd_action_state);
 
 	return rc;
 }
@@ -463,20 +489,24 @@ static int enqueue_fsd_item(const size_t bytes_recv_total,
 
 	if (rc) {
 		rc = -EFAILED;
-		CT_ERROR(rc, "enqueue action failed: state='%s', fs='%s', fpath='%s', size=%lu, ts='%s'",
+		CT_ERROR(rc, "enqueue action failed: state='%s', fs='%s', "
+			 "fpath='%s', size=%lu, ts='%s', queue size=%lu",
 			 FSD_ACTION_STR(fsd_action_item->fsd_action_state),
 			 fsd_action_item->fsd_info.fs,
 			 fsd_action_item->fsd_info.fpath,
 			 fsd_action_item->size,
-			 char_ctime(&fsd_action_item->ts[0]));
+			 char_ctime(&fsd_action_item->ts[0]),
+			 queue_size(&queue));
 		free(fsd_action_item);
 	} else {
-		CT_INFO("enqueue action: state='%s', fs='%s', fpath='%s', size=%lu, ts='%s'",
+		CT_INFO("enqueue action: state='%s', fs='%s', fpath='%s', "
+			"size=%lu, ts='%s', queue size=%lu",
 			FSD_ACTION_STR(fsd_action_item->fsd_action_state),
 			fsd_action_item->fsd_info.fs,
 			fsd_action_item->fsd_info.fpath,
 			fsd_action_item->size,
-			char_ctime(&fsd_action_item->ts[0]));
+			char_ctime(&fsd_action_item->ts[0]),
+			queue_size(&queue));
 	}
 
 	/* Free the lock of the queue. */
@@ -686,9 +716,9 @@ static void *thread_handle_client(void *arg)
 		CT_INFO("[fd=%d,fd=%d] data buffer of size: %zd successfully "
 			"received and sent", *fd_sock, fd_local, bytes_recv_total);
 
-		rc = xattr_set_fsd(fd_local, fpath_local,
-				   &fsd_protocol.fsd_info,
-				   STATE_FSD_COPY_DONE);
+		rc = xattr_set_fsd_desc_state(fpath_local,
+					      fsd_protocol.fsd_info.desc,
+					      STATE_FSD_COPY_DONE);
 		if (rc)
 			goto out;
 
@@ -776,8 +806,6 @@ static int write_to_lustre(struct fsd_action_item_t *fsd_action_item)
 	int fd_write = -1;
 	int rc;
 
-	fsd_action_item->fsd_action_state = STATE_LUSTRE_COPY_RUN;
-
 	fd_read = open(fsd_action_item->fpath_local, O_RDONLY);
 	if (fd_read < 0) {
 		rc = -errno;
@@ -859,13 +887,20 @@ out:
 	return rc;
 }
 
-static int process_fsd_action_time(struct fsd_action_item_t *fsd_action_item)
+static int process_fsd_action_item(struct fsd_action_item_t *fsd_action_item)
 {
 	/* TODO: Free memory fsd_action_item. */
 	int rc;
 
 	switch (fsd_action_item->fsd_action_state) {
 	case STATE_FSD_COPY_DONE: {
+
+		fsd_action_item->fsd_action_state = STATE_LUSTRE_COPY_RUN;
+		rc = xattr_set_fsd_state(fsd_action_item->fpath_local,
+					 fsd_action_item->fsd_action_state);
+		if (rc)
+			break;
+
 		rc = write_to_lustre(fsd_action_item);
 		if (rc) {
 			CT_WARN("file '%s' writing to '%s' failed, will "
@@ -879,6 +914,9 @@ static int process_fsd_action_time(struct fsd_action_item_t *fsd_action_item)
 				   fsd_action_item->fsd_info.fpath);
 			fsd_action_item->fsd_action_state = STATE_LUSTRE_COPY_DONE;
 		}
+		fsd_action_item->ts[1] = time(NULL);
+		rc = xattr_set_fsd_state(fsd_action_item->fpath_local,
+					 fsd_action_item->fsd_action_state);
 		break;
 	}
 	case STATE_LUSTRE_COPY_RUN: {
@@ -935,14 +973,16 @@ static void *thread_queue_worker(void *data)
 			rc = -EFAILED;
 			CT_ERROR(rc, "queue_dequeue");
 		} else {
-			CT_INFO("dequeue action: state='%s', fs='%s', fpath='%s', size=%lu, ts='%s'",
+			CT_INFO("dequeue action: state='%s', fs='%s', fpath='%s', "
+				"size=%lu, ts='%s', queue size=%lu",
 				FSD_ACTION_STR(fsd_action_item->fsd_action_state),
 				fsd_action_item->fsd_info.fs,
 				fsd_action_item->fsd_info.fpath,
 				fsd_action_item->size,
-				char_ctime(&fsd_action_item->ts[0]));
+				char_ctime(&fsd_action_item->ts[0]),
+				queue_size(&queue));
 
-			rc = process_fsd_action_time(fsd_action_item);
+			rc = process_fsd_action_item(fsd_action_item);
 		}
 	}
 
