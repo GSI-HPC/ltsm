@@ -42,6 +42,7 @@
 #define N_THREADS_SOCK_MAX	64
 #define N_THREADS_QUEUE_DEFAULT	4
 #define N_THREADS_QUEUE_MAX	64
+#define N_TOL_FILE_ERRORS   64
 #define BACKLOG			32
 #define BUF_SIZE		0xfffff	/* 0xfffff = 1MiB, 0x400000 = 4MiB */
 
@@ -59,18 +60,20 @@ struct options {
 	int o_port;
 	int o_nthreads_sock;
 	int o_nthreads_queue;
+	int o_ntol_file_errors;
 	int o_daemonize;
 	int o_verbose;
 };
 
-static struct options opt = {
-	.o_local_mount	  = {0},
-	.o_file_ident	  = {0},
-	.o_port		  = PORT_DEFAULT_FSD,
-	.o_nthreads_sock  = N_THREADS_SOCK_DEFAULT,
-	.o_nthreads_queue = N_THREADS_QUEUE_DEFAULT,
-	.o_daemonize	  = 0,
-	.o_verbose	  = API_MSG_NORMAL
+static struct options opt   = {
+	.o_local_mount	    = {0},
+	.o_file_ident	    = {0},
+	.o_port		    = PORT_DEFAULT_FSD,
+	.o_nthreads_sock    = N_THREADS_SOCK_DEFAULT,
+	.o_nthreads_queue   = N_THREADS_QUEUE_DEFAULT,
+	.o_ntol_file_errors = N_TOL_FILE_ERRORS,
+	.o_daemonize	    = 0,
+	.o_verbose	    = API_MSG_NORMAL
 };
 
 static list_t		ident_list;
@@ -101,6 +104,9 @@ static void usage(const char *cmd_name, const int rc)
 		"\t\t""number of socket threads [default: %d]\n"
 		"\t-q, --qthreads <int>\n"
 		"\t\t""number of queue worker threads [default: %d]\n"
+		"\t-t, --tolerr <int>\n"
+		"\t\t""number of tolerated file errors before file is "
+		"omitted [default: %d]\n"
 		"\t--daemon\n"
 		"\t\t""daemon mode run in background\n"
 		"\t-v, --verbose {error, warn, message, info, debug}"
@@ -113,6 +119,7 @@ static void usage(const char *cmd_name, const int rc)
 		PORT_DEFAULT_FSD,
 		N_THREADS_SOCK_DEFAULT,
 		N_THREADS_QUEUE_DEFAULT,
+		N_TOL_FILE_ERRORS,
 		PACKAGE_VERSION);
 	exit(rc);
 }
@@ -285,6 +292,7 @@ static int parseopts(int argc, char *argv[])
 		{"port",	required_argument, 0,		     'p'},
 		{"sthreads",	required_argument, 0,		     's'},
 		{"qthreads",	required_argument, 0,		     'q'},
+		{"tolerr",	required_argument, 0,		     't'},
 		{"daemon",	no_argument,	   &opt.o_daemonize,   1},
 		{"verbose",	required_argument, 0,		     'v'},
 		{"help",	no_argument,	   0,		     'h'},
@@ -294,7 +302,7 @@ static int parseopts(int argc, char *argv[])
 	int c, rc;
 	optind = 0;
 
-	while ((c = getopt_long(argc, argv, "l:i:p:s:q:v:h",
+	while ((c = getopt_long(argc, argv, "l:i:p:s:q:t:v:h",
 				long_opts, NULL)) != -1) {
 		switch (c) {
 		case 'l': {
@@ -327,6 +335,14 @@ static int parseopts(int argc, char *argv[])
 			if (rc)
 				return rc;
 			opt.o_nthreads_queue = (int)t;
+			break;
+		}
+		case 't': {
+			long int t;
+			rc = parse_valid_num(optarg, &t);
+			if (rc)
+				return rc;
+			opt.o_ntol_file_errors = (int)t;
 			break;
 		}
 		case 'v': {
@@ -443,7 +459,6 @@ static int xattr_set_fsd_state(const char *fpath_local,
 	return rc;
 }
 
-
 static int xattr_set_fsd_desc_state(const char *fpath_local,
 				    const char *desc,
 				    const uint32_t fsd_action_state)
@@ -455,6 +470,19 @@ static int xattr_set_fsd_desc_state(const char *fpath_local,
 		return rc;
 
 	rc = xattr_set_fsd_state(fpath_local, fsd_action_state);
+
+	return rc;
+}
+
+static int xattr_set_fsd_state_sync(struct fsd_action_item_t *fsd_action_item,
+				    const uint32_t fsd_action_state)
+{
+	int rc;
+
+	rc = xattr_set_fsd_state(fsd_action_item->fpath_local,
+				 fsd_action_state);
+	if (rc == 0)
+		fsd_action_item->fsd_action_state = fsd_action_state;
 
 	return rc;
 }
@@ -479,9 +507,11 @@ static int enqueue_fsd_item(const size_t bytes_recv_total,
 	memcpy(&fsd_action_item->fsd_info, &fsd_protocol->fsd_info,
 	       sizeof(struct fsd_info_t));
 	fsd_action_item->ts[0] = time(NULL);
+	fsd_action_item->ts[1] = fsd_action_item->ts[0];
+	fsd_action_item->ts[2] = fsd_action_item->ts[0];
 	strncpy(fsd_action_item->fpath_local, fpath_local, PATH_MAX);
 
-	/* Lock queue to avoid thread access. */
+	/* Lock queue to avoid concurrent thread access. */
 	pthread_mutex_lock(&queue_mutex);
 
 	/* Enqueue FSD action item in queue. */
@@ -490,22 +520,28 @@ static int enqueue_fsd_item(const size_t bytes_recv_total,
 	if (rc) {
 		rc = -EFAILED;
 		CT_ERROR(rc, "enqueue action failed: state='%s', fs='%s', "
-			 "fpath='%s', size=%lu, ts='%s', queue size=%lu",
+			 "fpath='%s', size=%lu, ts[0]='%s', ts[1]='%s', "
+			 "ts[2]='%s', queue size=%lu",
 			 FSD_ACTION_STR(fsd_action_item->fsd_action_state),
 			 fsd_action_item->fsd_info.fs,
 			 fsd_action_item->fsd_info.fpath,
 			 fsd_action_item->size,
 			 char_ctime(&fsd_action_item->ts[0]),
+			 char_ctime(&fsd_action_item->ts[1]),
+			 char_ctime(&fsd_action_item->ts[2]),
 			 queue_size(&queue));
 		free(fsd_action_item);
 	} else {
 		CT_INFO("enqueue action: state='%s', fs='%s', fpath='%s', "
-			"size=%lu, ts='%s', queue size=%lu",
+			"size=%lu, ts[0]='%s', ts[1]='%s', ts[2]='%s', "
+			"queue size=%lu",
 			FSD_ACTION_STR(fsd_action_item->fsd_action_state),
 			fsd_action_item->fsd_info.fs,
 			fsd_action_item->fsd_info.fpath,
 			fsd_action_item->size,
 			char_ctime(&fsd_action_item->ts[0]),
+			char_ctime(&fsd_action_item->ts[1]),
+			char_ctime(&fsd_action_item->ts[2]),
 			queue_size(&queue));
 	}
 
@@ -697,7 +733,7 @@ static void *thread_handle_client(void *arg)
 			goto out;
 		}
 
-		size_t  bytes_recv_total = 0;
+		size_t bytes_recv_total = 0;
 		size_t bytes_send_total = 0;
 		/* State 3: Client calls fsd_tsm_fwrite(...) or fsd_tsm_fclose(...). */
 		rc = recv_fsd_data(fd_sock,
@@ -888,66 +924,231 @@ out:
 	return rc;
 }
 
+static int write_to_tsm(struct fsd_action_item_t *fsd_action_item)
+{
+	int rc = 0;
+
+	return rc;
+}
+
+/*
+  The following state diagram is implemented.
+
+  +---------------------+        +-----------------------+
+  | STATE_FSD_COPY_DONE +------->+ STATE_LUSTRE_COPY_RUN |
+  +--------+------------+        +------------+----------+
+           ^                                  |
+           |   +-------------------------+    |
+           +---+ STATE_LUSTRE_COPY_ERROR +<---+
+               +-------------------------+    |
+                                              v
+  +--------------------+         +------------+-----------+
+  | STATE_TSM_COPY_RUN +<--------+ STATE_LUSTRE_COPY_DONE |
+  +--------+-----------+         +-----------+------------+
+           |                                 ^
+           |     +----------------------+    |
+           +---->+ STATE_TSM_COPY_ERROR +----+
+           |     +----------------------+
+           v
+ +---------+-----------+
+ | STATE_TSM_COPY_DONE |
+ +---------------------+
+ */
 static int process_fsd_action_item(struct fsd_action_item_t *fsd_action_item)
 {
-	/* TODO: Free memory fsd_action_item. */
-	int rc;
+	int rc = 0;
+
+	if (fsd_action_item->action_error_cnt > opt.o_ntol_file_errors) {
+		CT_WARN("file '%s' reached maximum number of tolerated errors, "
+			"and is omitted",
+			fsd_action_item->fpath_local);
+		rc = xattr_set_fsd_state_sync(fsd_action_item,
+					      STATE_FILE_OMITTED);
+
+		free(fsd_action_item);
+
+		return 0;
+	}
 
 	switch (fsd_action_item->fsd_action_state) {
 	case STATE_FSD_COPY_DONE: {
-
-		fsd_action_item->fsd_action_state = STATE_LUSTRE_COPY_RUN;
-		rc = xattr_set_fsd_state(fsd_action_item->fpath_local,
-					 fsd_action_item->fsd_action_state);
-		if (rc)
+		rc = xattr_set_fsd_state_sync(fsd_action_item,
+					      STATE_LUSTRE_COPY_RUN);
+		if (rc) {
+			fsd_action_item->action_error_cnt++;
+			fsd_action_item->fsd_action_state = STATE_FSD_COPY_DONE;
+			CT_WARN("setting state from '%s' to '%s' failed, "
+				"going back to state '%s'",
+				FSD_ACTION_STR(STATE_FSD_COPY_DONE),
+				FSD_ACTION_STR(STATE_LUSTRE_COPY_RUN),
+				FSD_ACTION_STR(fsd_action_item->fsd_action_state));
 			break;
-
+		}
 		rc = write_to_lustre(fsd_action_item);
 		if (rc) {
 			CT_WARN("file '%s' writing to '%s' failed, will "
 				"try again",
 				fsd_action_item->fpath_local,
 				fsd_action_item->fsd_info.fpath);
+			fsd_action_item->action_error_cnt++;
 			fsd_action_item->fsd_action_state = STATE_LUSTRE_COPY_ERROR;
-		} else {
-			CT_MESSAGE("file '%s' writing to '%s' was successful",
-				   fsd_action_item->fpath_local,
-				   fsd_action_item->fsd_info.fpath);
-			fsd_action_item->fsd_action_state = STATE_LUSTRE_COPY_DONE;
+			break;
+		}
+		rc = xattr_set_fsd_state_sync(fsd_action_item,
+					      STATE_LUSTRE_COPY_DONE);
+		if (rc) {
+			fsd_action_item->action_error_cnt++;
+			fsd_action_item->fsd_action_state = STATE_FSD_COPY_DONE;
+			CT_WARN("setting state from '%s' to '%s' failed, "
+				"going back to state '%s'",
+				FSD_ACTION_STR(STATE_FSD_COPY_DONE),
+				FSD_ACTION_STR(STATE_LUSTRE_COPY_DONE),
+				FSD_ACTION_STR(fsd_action_item->fsd_action_state));
+			break;
 		}
 		fsd_action_item->ts[1] = time(NULL);
-		rc = xattr_set_fsd_state(fsd_action_item->fpath_local,
-					 fsd_action_item->fsd_action_state);
+		CT_MESSAGE("file '%s' written to '%s' of size %zu in seconds %.3f",
+			   fsd_action_item->fpath_local,
+			   fsd_action_item->fsd_info.fpath,
+			   fsd_action_item->size,
+			   difftime(fsd_action_item->ts[1],
+				    fsd_action_item->ts[0]));
 		break;
 	}
 	case STATE_LUSTRE_COPY_RUN: {
-		rc = -ENOSYS;
+		/* TODO: Update fsd_action_item->progress_size. */
 		break;
 	}
 	case STATE_LUSTRE_COPY_ERROR: {
-		rc = -ENOSYS;
+		CT_WARN("FSD to Lustre copy error, try to copy "
+			"file '%s' to '%s' again",
+			fsd_action_item->fpath_local,
+			fsd_action_item->fsd_info.fpath);
+		rc = xattr_set_fsd_state_sync(fsd_action_item,
+					      STATE_FSD_COPY_DONE);
+		if (rc)
+			fsd_action_item->action_error_cnt++;
 		break;
 	}
 	case STATE_LUSTRE_COPY_DONE: {
-		rc = -ENOSYS;
+		rc = xattr_set_fsd_state(fsd_action_item->fpath_local,
+					 STATE_TSM_COPY_RUN);
+		if (rc) {
+			fsd_action_item->action_error_cnt++;
+			fsd_action_item->fsd_action_state = STATE_LUSTRE_COPY_DONE;
+			CT_WARN("setting state from '%s' to '%s' failed, "
+				"going back to state '%s'",
+				FSD_ACTION_STR(STATE_LUSTRE_COPY_DONE),
+				FSD_ACTION_STR(STATE_TSM_COPY_RUN),
+				FSD_ACTION_STR(fsd_action_item->fsd_action_state));
+			break;
+		}
+		rc = write_to_tsm(fsd_action_item);
+		if (rc) {
+			CT_WARN("file '%s' archiving failed, will try again",
+				fsd_action_item->fpath_local);
+			fsd_action_item->action_error_cnt++;
+			fsd_action_item->fsd_action_state = STATE_TSM_COPY_ERROR;
+			break;
+		}
+		rc = xattr_set_fsd_state_sync(fsd_action_item,
+					      STATE_TSM_COPY_DONE);
+		if (rc) {
+			fsd_action_item->action_error_cnt++;
+			fsd_action_item->fsd_action_state = STATE_LUSTRE_COPY_DONE;
+			CT_WARN("setting state from '%s' to '%s' failed, "
+				"going back to state '%s'",
+				FSD_ACTION_STR(STATE_LUSTRE_COPY_DONE),
+				FSD_ACTION_STR(STATE_TSM_COPY_DONE),
+				FSD_ACTION_STR(fsd_action_item->fsd_action_state));
+			break;
+		}
+		fsd_action_item->ts[2] = time(NULL);
+		CT_MESSAGE("file '%s' written to '%s' of size %zu in seconds %.3f",
+			   fsd_action_item->fpath_local,
+			   fsd_action_item->fsd_info.fpath,
+			   fsd_action_item->size,
+			   difftime(fsd_action_item->ts[2],
+				    fsd_action_item->ts[1]));
 		break;
 	}
 	case STATE_TSM_COPY_RUN: {
-		rc = -ENOSYS;
 		break;
 	}
 	case STATE_TSM_COPY_ERROR: {
-		rc = -ENOSYS;
+		CT_WARN("TSM archive error, try to archive file '%s' again",
+			fsd_action_item->fpath_local);
+		rc = xattr_set_fsd_state_sync(fsd_action_item,
+					      STATE_LUSTRE_COPY_DONE);
+		if (rc)
+			fsd_action_item->action_error_cnt++;
+
 		break;
 	}
 	case STATE_TSM_COPY_DONE: {
-		rc = -ENOSYS;
-		break;
+		CT_MESSAGE("file '%s' of size %zu successfully written in "
+			   "seconds %.3f to Lustre and TSM archive",
+			   fsd_action_item->fpath_local,
+			   fsd_action_item->size,
+			   difftime(fsd_action_item->ts[2],
+				    fsd_action_item->ts[1]));
+		rc = unlink(fsd_action_item->fpath_local);
+		CT_DEBUG("[rc=%d] unlink '%s'", rc, fsd_action_item->fpath_local);
+		if (rc < 0) {
+			rc = -errno;
+			CT_ERROR(rc, "unlink '%s'", fsd_action_item->fpath_local);
+			break;
+		}
+		CT_INFO("unlink '%s' and remove action item",
+			fsd_action_item->fpath_local);
+		free(fsd_action_item);
+
+		return 0;
 	}
-	default:
+	case STATE_FILE_OMITTED: {
+		CT_MESSAGE("file '%s' is omitted and removed from queue",
+			   fsd_action_item->fpath_local);
+		free(fsd_action_item);
+
+		return 0;
+	}
+	default:		/* We should never be here. */
 		rc = -ERANGE;
 		break;
 	}
+
+	/* Lock queue to avoid thread access. */
+	pthread_mutex_lock(&queue_mutex);
+
+	rc = queue_enqueue(&queue, fsd_action_item);
+
+	if (rc) {
+		rc = -EFAILED;
+		CT_ERROR(rc, "enqueue action failed: state='%s', fs='%s', "
+			 "fpath='%s', size=%lu, ts='%s', queue size=%lu",
+			 FSD_ACTION_STR(fsd_action_item->fsd_action_state),
+			 fsd_action_item->fsd_info.fs,
+			 fsd_action_item->fsd_info.fpath,
+			 fsd_action_item->size,
+			 char_ctime(&fsd_action_item->ts[0]),
+			 queue_size(&queue));
+		free(fsd_action_item);
+	} else {
+		CT_INFO("enqueue action: state='%s', fs='%s', fpath='%s', "
+			"size=%lu, ts='%s', queue size=%lu",
+			FSD_ACTION_STR(fsd_action_item->fsd_action_state),
+			fsd_action_item->fsd_info.fs,
+			fsd_action_item->fsd_info.fpath,
+			fsd_action_item->size,
+			char_ctime(&fsd_action_item->ts[0]),
+			queue_size(&queue));
+	}
+
+	/* Free the lock of the queue. */
+	pthread_mutex_unlock(&queue_mutex);
+
+	/* Wakeup sleeping consumer (worker threads). */
+	pthread_cond_signal(&queue_cond);
 
 	return rc;
 }
@@ -974,13 +1175,16 @@ static void *thread_queue_consumer(void *data)
 			rc = -EFAILED;
 			CT_ERROR(rc, "queue_dequeue");
 		} else {
-			CT_INFO("dequeue action: state='%s', fs='%s', fpath='%s', "
-				"size=%lu, ts='%s', queue size=%lu",
+			CT_INFO("dequeue action: state='%s', fs='%s', "
+				"fpath='%s', size=%lu, ts[0]='%s', ts[1]='%s', "
+				"ts[2]='%s', queue size=%lu",
 				FSD_ACTION_STR(fsd_action_item->fsd_action_state),
 				fsd_action_item->fsd_info.fs,
 				fsd_action_item->fsd_info.fpath,
 				fsd_action_item->size,
 				char_ctime(&fsd_action_item->ts[0]),
+				char_ctime(&fsd_action_item->ts[1]),
+				char_ctime(&fsd_action_item->ts[2]),
 				queue_size(&queue));
 
 			rc = process_fsd_action_item(fsd_action_item);

@@ -89,7 +89,8 @@
 	s == STATE_LUSTRE_COPY_DONE  ? "STATE_LUSTRE_COPY_DONE"  :	     \
 	s == STATE_TSM_COPY_RUN      ? "STATE_TSM_COPY_RUN"      :	     \
 	s == STATE_TSM_COPY_ERROR    ? "STATE_TSM_COPY_ERROR"    :           \
-	s == STATE_TSM_COPY_DONE     ? "STATE_TSM_COPY_DONE"     : "UNKNOWN" \
+	s == STATE_TSM_COPY_DONE     ? "STATE_TSM_COPY_DONE"     :           \
+	s == STATE_FILE_OMITTED      ? "STATE_FILE_OMITTED"      : "UNKNOWN" \
 
 enum sort_by_t {
 	SORT_NONE	     = 0,
@@ -105,7 +106,8 @@ enum fsd_action_state_t {
 	STATE_LUSTRE_COPY_DONE  = 0x8,
 	STATE_TSM_COPY_RUN	= 0x10,
 	STATE_TSM_COPY_ERROR	= 0x20,
-	STATE_TSM_COPY_DONE	= 0x40
+	STATE_TSM_COPY_DONE	= 0x40,
+	STATE_FILE_OMITTED      = 0x80
 };
 
 enum fsd_protocol_state_t {
@@ -151,6 +153,7 @@ struct fsd_action_item_t {
 	size_t size;
 	size_t progress_size;
 	time_t ts[3];
+	size_t action_error_cnt;
 };
 
 struct fid_t {
