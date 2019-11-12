@@ -185,15 +185,25 @@ void test_fsd_fcalls(CuTest *tc)
 
 		rc = fsd_tsm_fclose(&session);
 		CuAssertIntEquals(tc, 0, rc);
-
+#if 0
+		/* Verify data is correctly copied to fsd server. */
 		snprintf(fpath[r], PATH_MAX, "/fsddata/lustre/%s", rnd_s);
 		CT_DEBUG("fpath fsd '%s'", fpath[r]);
-
+		sleep(2); /* Give Linux some time to flush data to disk. */
+		rc = crc32file(fpath[r], &crc32sum_file);
+		CT_INFO("buf crc32 %lu, file crc32 %lu", crc32sum_buf, crc32sum_file);
+		CuAssertIntEquals(tc, 0, rc);
+		CuAssertTrue(tc, crc32sum_buf == crc32sum_file);
+#endif
+		/* Verify data is correctly copied to lustre. */
+		snprintf(fpath[r], PATH_MAX, "/lustre/%s", rnd_s);
+		CT_DEBUG("fpath lustre '%s'", fpath[r]);
 		sleep(1); /* Give Linux some time to flush data to disk. */
 		rc = crc32file(fpath[r], &crc32sum_file);
 		CT_INFO("buf crc32 %lu, file crc32 %lu", crc32sum_buf, crc32sum_file);
 		CuAssertIntEquals(tc, 0, rc);
 		CuAssertTrue(tc, crc32sum_buf == crc32sum_file);
+
 	}
 
 	fsd_tsm_fdisconnect(&session);
