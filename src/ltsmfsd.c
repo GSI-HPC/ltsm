@@ -124,16 +124,6 @@ static void usage(const char *cmd_name, const int rc)
 	exit(rc);
 }
 
-static char *ctime_no_nl(const time_t t)
-{
-	static char ctime_buf[32] = {0};
-
-	if (ctime_r(&t, ctime_buf))
-		ctime_buf[strlen(ctime_buf) - 1] = '\0'; /* Remove '\n' at end. */
-
-	return ctime_buf;
-}
-
 static void print_ident(void *data)
 {
 	struct ident_map_t *ident_map =
@@ -696,6 +686,8 @@ static void *thread_sock_client(void *arg)
 	int rc;
 	int *fd_sock  = NULL;
 	struct fsd_protocol_t fsd_protocol;
+	char *fpath_local = NULL;
+	int fd_local = -1;
 	char thread_name[16] = {0};
 
 	fd_sock = (int *)arg;
@@ -726,8 +718,6 @@ static void *thread_sock_client(void *arg)
 		goto out;
 	}
 
-	char *fpath_local = NULL;
-	int fd_local = -1;
 	do {
 		/* State 2: Client calls fsd_tsm_fopen(...) or fsd_tsm_disconnect(...). */
 		rc = recv_fsd_protocol(*fd_sock, &fsd_protocol, (FSD_OPEN | FSD_DISCONNECT));
