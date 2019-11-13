@@ -480,12 +480,6 @@ static int xattr_set_fsd_state_sync(struct fsd_action_item_t *fsd_action_item,
 static int enqueue_fsd_item(struct fsd_action_item_t *fsd_action_item)
 {
 	int rc;
-	char thread_queue_name[16] = {0};
-
-	rc = pthread_getname_np(pthread_self(), thread_queue_name,
-				sizeof(thread_queue_name));
-	if (rc)
-		CT_WARN("pthread_getname_np failed");
 
 	/* Lock queue to avoid thread access. */
 	pthread_mutex_lock(&queue_mutex);
@@ -494,9 +488,8 @@ static int enqueue_fsd_item(struct fsd_action_item_t *fsd_action_item)
 
 	if (rc) {
 		rc = -EFAILED;
-		CT_ERROR(rc, "failed enqueue operation: thread='%s', state='%s', fs='%s', "
+		CT_ERROR(rc, "failed enqueue operation: state='%s', fs='%s', "
 			 "fpath='%s', size=%lu, queue size=%lu, ptr=%p",
-			 thread_queue_name,
 			 FSD_ACTION_STR(fsd_action_item->fsd_action_state),
 			 fsd_action_item->fsd_info.fs,
 			 fsd_action_item->fsd_info.fpath,
@@ -505,9 +498,8 @@ static int enqueue_fsd_item(struct fsd_action_item_t *fsd_action_item)
 			 fsd_action_item);
 		free(fsd_action_item);
 	} else {
-		CT_INFO("enqueue operation: thread='%s', state='%s', fs='%s', fpath='%s', "
+		CT_INFO("enqueue operation: state='%s', fs='%s', fpath='%s', "
 			"size=%lu, queue size=%lu, ptr=%p",
-			thread_queue_name,
 			FSD_ACTION_STR(fsd_action_item->fsd_action_state),
 			fsd_action_item->fsd_info.fs,
 			fsd_action_item->fsd_info.fpath,
@@ -688,21 +680,13 @@ static void *thread_sock_client(void *arg)
 	struct fsd_protocol_t fsd_protocol;
 	char *fpath_local = NULL;
 	int fd_local = -1;
-	char thread_name[16] = {0};
 
 	fd_sock = (int *)arg;
 	memset(&fsd_protocol, 0, sizeof(struct fsd_protocol_t));
 
-	rc = pthread_getname_np(pthread_self(), thread_name,
-				sizeof(thread_name));
-	if (rc)
-		CT_WARN("pthread_getname_np failed");
-
-
 	/* State 1: Client calls fsd_tsm_fconnect(...). */
 	rc = recv_fsd_protocol(*fd_sock, &fsd_protocol, FSD_CONNECT);
-	CT_DEBUG("[rc=%d,fd=%d,thread='%s'] recv_fsd_protocol", rc, *fd_sock,
-		 thread_name);
+	CT_DEBUG("[rc=%d,fd=%d] recv_fsd_protocol", rc, *fd_sock);
 	if (rc) {
 		CT_ERROR(rc, "recv_fsd_protocol failed");
 		goto out;
@@ -712,7 +696,7 @@ static void *thread_sock_client(void *arg)
 	gid_t gid = 65534;	/* Group: Nobody. */
 
 	rc = verify_node(&fsd_protocol.login, &uid, &gid);
-	CT_DEBUG("[rc=%d,thread='%s'] verify_node", rc, thread_name);
+	CT_DEBUG("[rc=%d] verify_node", rc);
 	if (rc) {
 		CT_ERROR(rc, "verify_node");
 		goto out;
@@ -721,8 +705,7 @@ static void *thread_sock_client(void *arg)
 	do {
 		/* State 2: Client calls fsd_tsm_fopen(...) or fsd_tsm_disconnect(...). */
 		rc = recv_fsd_protocol(*fd_sock, &fsd_protocol, (FSD_OPEN | FSD_DISCONNECT));
-		CT_DEBUG("[rc=%d,fd=%d,thread='%s'] recv_fsd_protocol", rc,
-			 *fd_sock, thread_name);
+		CT_DEBUG("[rc=%d,fd=%d] recv_fsd_protocol", rc, *fd_sock);
 		if (rc) {
 			CT_ERROR(rc, "recv_fsd_protocol failed");
 			goto out;
@@ -731,9 +714,8 @@ static void *thread_sock_client(void *arg)
 		if (fsd_protocol.state & FSD_DISCONNECT)
 			goto out;
 
-		CT_INFO("[fd=%d,thread='%s'] recv_fsd_protocol node: '%s' with fpath: '%s'",
-			*fd_sock, thread_name, fsd_protocol.login.node,
-			fsd_protocol.fsd_info.fpath);
+		CT_INFO("[fd=%d] recv_fsd_protocol node: '%s' with fpath: '%s'",
+			*fd_sock, fsd_protocol.login.node, fsd_protocol.fsd_info.fpath);
 
 		rc = init_fsd_local(&fpath_local, &fd_local, uid, gid, &fsd_protocol);
 		if (rc) {
@@ -757,9 +739,8 @@ static void *thread_sock_client(void *arg)
 				 bytes_recv_total, bytes_send_total);
 			goto out;
 		}
-		CT_INFO("[fd=%d,fd=%d,thread='%s'] data buffer of size: %zd successfully "
-			"received and sent", *fd_sock, fd_local, thread_name,
-			bytes_recv_total);
+		CT_INFO("[fd=%d,fd=%d] data buffer of size: %zd successfully "
+			"received and sent", *fd_sock, fd_local, bytes_recv_total);
 
 		rc = xattr_set_fsd_desc_state(fpath_local,
 					      fsd_protocol.fsd_info.desc,
@@ -781,7 +762,7 @@ static void *thread_sock_client(void *arg)
 		}
 
 		rc = close(fd_local);
-		CT_DEBUG("[rc=%d,fd=%d,thread='%s'] close", rc, fd_local,thread_name);
+		CT_DEBUG("[rc=%d,fd=%d] close", rc, fd_local);
 		if (rc < 0) {
 			rc = -errno;
 			CT_ERROR(rc, "close");
@@ -971,15 +952,13 @@ static int write_to_tsm(struct fsd_action_item_t *fsd_action_item)
  | STATE_TSM_COPY_DONE |
  +---------------------+
  */
-static int process_fsd_action_item(struct fsd_action_item_t *fsd_action_item,
-				   const char *thread_name)
+static int process_fsd_action_item(struct fsd_action_item_t *fsd_action_item)
 {
 	int rc = 0;
 
 	if (fsd_action_item->action_error_cnt > opt.o_ntol_file_errors) {
-		CT_WARN("[thread='%s'] file '%s' reached maximum number of tolerated errors, "
-			"and is omitted", thread_name,
-			fsd_action_item->fpath_local);
+		CT_WARN("file '%s' reached maximum number of tolerated errors, "
+			"and is omitted", fsd_action_item->fpath_local);
 		rc = xattr_set_fsd_state_sync(fsd_action_item,
 					      STATE_FILE_OMITTED);
 
@@ -995,9 +974,8 @@ static int process_fsd_action_item(struct fsd_action_item_t *fsd_action_item,
 		if (rc) {
 			fsd_action_item->action_error_cnt++;
 			fsd_action_item->fsd_action_state = STATE_FSD_COPY_DONE;
-			CT_WARN("[thread='%s'] setting state from '%s' to '%s' failed, "
+			CT_WARN("setting state from '%s' to '%s' failed, "
 				"going back to state '%s'",
-				thread_name,
 				FSD_ACTION_STR(STATE_FSD_COPY_DONE),
 				FSD_ACTION_STR(STATE_LUSTRE_COPY_RUN),
 				FSD_ACTION_STR(fsd_action_item->fsd_action_state));
@@ -1005,8 +983,8 @@ static int process_fsd_action_item(struct fsd_action_item_t *fsd_action_item,
 		}
 		rc = write_to_lustre(fsd_action_item);
 		if (rc) {
-			CT_WARN("[thread='%s'] file '%s' copying to '%s' failed, will "
-				"try again", thread_name,
+			CT_WARN("file '%s' copying to '%s' failed, will "
+				"try again",
 				fsd_action_item->fpath_local,
 				fsd_action_item->fsd_info.fpath);
 			fsd_action_item->action_error_cnt++;
@@ -1018,17 +996,15 @@ static int process_fsd_action_item(struct fsd_action_item_t *fsd_action_item,
 		if (rc) {
 			fsd_action_item->action_error_cnt++;
 			fsd_action_item->fsd_action_state = STATE_FSD_COPY_DONE;
-			CT_WARN("[thread='%s'] setting state from '%s' to '%s' failed, "
+			CT_WARN("setting state from '%s' to '%s' failed, "
 				"going back to state '%s'",
-				thread_name,
 				FSD_ACTION_STR(STATE_FSD_COPY_DONE),
 				FSD_ACTION_STR(STATE_LUSTRE_COPY_DONE),
 				FSD_ACTION_STR(fsd_action_item->fsd_action_state));
 			break;
 		}
 		fsd_action_item->ts[1] = time(NULL);
-		CT_MESSAGE("[thread='%s'] file '%s' copied to '%s' of size %zu in seconds %.3f",
-			   thread_name,
+		CT_MESSAGE("file '%s' copied to '%s' of size %zu in seconds %.3f",
 			   fsd_action_item->fpath_local,
 			   fsd_action_item->fsd_info.fpath,
 			   fsd_action_item->size,
@@ -1041,9 +1017,8 @@ static int process_fsd_action_item(struct fsd_action_item_t *fsd_action_item,
 		break;
 	}
 	case STATE_LUSTRE_COPY_ERROR: {
-		CT_WARN("[thread='%s'] fsd to lustre copy error, try to copy "
+		CT_WARN("fsd to lustre copy error, try to copy "
 			"file '%s' to '%s' again",
-			thread_name,
 			fsd_action_item->fpath_local,
 			fsd_action_item->fsd_info.fpath);
 		rc = xattr_set_fsd_state_sync(fsd_action_item,
@@ -1058,9 +1033,8 @@ static int process_fsd_action_item(struct fsd_action_item_t *fsd_action_item,
 		if (rc) {
 			fsd_action_item->action_error_cnt++;
 			fsd_action_item->fsd_action_state = STATE_LUSTRE_COPY_DONE;
-			CT_WARN("[thread='%s'] setting state from '%s' to '%s' failed, "
+			CT_WARN("setting state from '%s' to '%s' failed, "
 				"going back to state '%s'",
-				thread_name,
 				FSD_ACTION_STR(STATE_LUSTRE_COPY_DONE),
 				FSD_ACTION_STR(STATE_TSM_COPY_RUN),
 				FSD_ACTION_STR(fsd_action_item->fsd_action_state));
@@ -1068,8 +1042,7 @@ static int process_fsd_action_item(struct fsd_action_item_t *fsd_action_item,
 		}
 		rc = write_to_tsm(fsd_action_item);
 		if (rc) {
-			CT_WARN("[thread='%s'] file '%s' archiving failed, will try again",
-				thread_name,
+			CT_WARN("file '%s' archiving failed, will try again",
 				fsd_action_item->fpath_local);
 			fsd_action_item->action_error_cnt++;
 			fsd_action_item->fsd_action_state = STATE_TSM_COPY_ERROR;
@@ -1080,17 +1053,15 @@ static int process_fsd_action_item(struct fsd_action_item_t *fsd_action_item,
 		if (rc) {
 			fsd_action_item->action_error_cnt++;
 			fsd_action_item->fsd_action_state = STATE_LUSTRE_COPY_DONE;
-			CT_WARN("[thread='%s'] setting state from '%s' to '%s' failed, "
+			CT_WARN("setting state from '%s' to '%s' failed, "
 				"going back to state '%s'",
-				thread_name,
 				FSD_ACTION_STR(STATE_LUSTRE_COPY_DONE),
 				FSD_ACTION_STR(STATE_TSM_COPY_DONE),
 				FSD_ACTION_STR(fsd_action_item->fsd_action_state));
 			break;
 		}
 		fsd_action_item->ts[2] = time(NULL);
-		CT_MESSAGE("[thread='%s'] file '%s' archived of size %zu in seconds %.3f",
-			   thread_name,
+		CT_MESSAGE("file '%s' archived of size %zu in seconds %.3f",
 			   fsd_action_item->fpath_local,
 			   fsd_action_item->size,
 			   difftime(fsd_action_item->ts[2],
@@ -1101,8 +1072,7 @@ static int process_fsd_action_item(struct fsd_action_item_t *fsd_action_item,
 		break;
 	}
 	case STATE_TSM_COPY_ERROR: {
-		CT_WARN("[thread='%s'] tsm archive error, try to archive file '%s' again",
-			thread_name,
+		CT_WARN("tsm archive error, try to archive file '%s' again",
 			fsd_action_item->fpath_local);
 		rc = xattr_set_fsd_state_sync(fsd_action_item,
 					      STATE_LUSTRE_COPY_DONE);
@@ -1112,30 +1082,28 @@ static int process_fsd_action_item(struct fsd_action_item_t *fsd_action_item,
 		break;
 	}
 	case STATE_TSM_COPY_DONE: {
-		CT_MESSAGE("[thread='%s'] file '%s' of size %zu successfully copied and archived in "
+		CT_MESSAGE("file '%s' of size %zu successfully copied and archived in "
 			   "seconds %.3f to Lustre and TSM archive",
-			   thread_name,
 			   fsd_action_item->fpath_local,
 			   fsd_action_item->size,
 			   difftime(fsd_action_item->ts[2],
 				    fsd_action_item->ts[1]));
 		rc = unlink(fsd_action_item->fpath_local);
-		CT_DEBUG("[rc=%d,thread='%s'] unlink '%s'", rc, thread_name,
-			 fsd_action_item->fpath_local);
+		CT_DEBUG("[rc=%d] unlink '%s'", rc, fsd_action_item->fpath_local);
 		if (rc < 0) {
 			rc = -errno;
 			CT_ERROR(rc, "unlink '%s'", fsd_action_item->fpath_local);
 			break;
 		}
-		CT_INFO("[thread='%s'] unlink '%s' and remove action item",
-			thread_name, fsd_action_item->fpath_local);
+		CT_INFO("unlink '%s' and remove action item",
+			fsd_action_item->fpath_local);
 		free(fsd_action_item);
 
 		return 0;
 	}
 	case STATE_FILE_OMITTED: {
-		CT_MESSAGE("[thread='%s'] file '%s' is omitted and removed from queue",
-			   thread_name, fsd_action_item->fpath_local);
+		CT_MESSAGE("file '%s' is omitted and removed from queue",
+			   fsd_action_item->fpath_local);
 		free(fsd_action_item);
 
 		return 0;
@@ -1153,13 +1121,7 @@ static int process_fsd_action_item(struct fsd_action_item_t *fsd_action_item,
 static void *thread_queue_consumer(void *data)
 {
 	int rc;
-	char thread_name[16] = {0};
 	struct fsd_action_item_t *fsd_action_item;
-
-	rc = pthread_getname_np(pthread_self(), thread_name,
-				sizeof(thread_name));
-	if (rc)
-		CT_WARN("pthread_getname_np failed");
 
 	for (;;) {
 		/* Critical region, lock. */
@@ -1176,9 +1138,8 @@ static void *thread_queue_consumer(void *data)
 
 		if (rc) {
 			rc = -EFAILED;
-			CT_ERROR(rc, "failed dequeue operation: thread='%s', state='%s', fs='%s', "
+			CT_ERROR(rc, "failed dequeue operation: state='%s', fs='%s', "
 				 "fpath='%s', size=%lu, queue size=%lu, ptr=%p",
-				 thread_name,
 				 FSD_ACTION_STR(fsd_action_item->fsd_action_state),
 				 fsd_action_item->fsd_info.fs,
 				 fsd_action_item->fsd_info.fpath,
@@ -1186,9 +1147,8 @@ static void *thread_queue_consumer(void *data)
 				 queue_size(&queue),
 				 fsd_action_item);
 		} else {
-			CT_INFO("dequeue operation: thread='%s', state='%s', fs='%s', "
+			CT_INFO("dequeue operation: state='%s', fs='%s', "
 				"fpath='%s', size=%lu, queue size=%lu, ptr=%p",
-				thread_name,
 				FSD_ACTION_STR(fsd_action_item->fsd_action_state),
 				fsd_action_item->fsd_info.fs,
 				fsd_action_item->fsd_info.fpath,
@@ -1196,8 +1156,7 @@ static void *thread_queue_consumer(void *data)
 				queue_size(&queue),
 				fsd_action_item);
 
-			rc = process_fsd_action_item(fsd_action_item,
-						     thread_name);
+			rc = process_fsd_action_item(fsd_action_item);
 		}
 	}
 
@@ -1208,7 +1167,6 @@ static int start_queue_consumer_threads(void)
 {
 	int rc;
 	pthread_attr_t attr;
-	char thread_queue_name[16];
 
 	/* Initialize queue worker threads. */
 	threads_queue = calloc(opt.o_nthreads_queue, sizeof(pthread_t));
@@ -1234,16 +1192,8 @@ static int start_queue_consumer_threads(void)
 		rc = pthread_create(&threads_queue[n], &attr, thread_queue_consumer, NULL);
 		if (rc != 0)
 			CT_ERROR(rc, "cannot create queue consumer thread '%d'", n);
-		else {
-			snprintf(thread_queue_name, sizeof(thread_queue_name),
-				 "fsd_queue/%d", n);
-			rc = pthread_setname_np(threads_queue[n], thread_queue_name);
-			if (rc)
-				CT_WARN("pthread_setname_np '%s' failed",
-					thread_queue_name);
-			CT_MESSAGE("created queue consumer thread '%s'",
-				   thread_queue_name);
-		}
+		else
+			CT_MESSAGE("created queue consumer thread fsd_queue/%d", n);
 	}
 	pthread_attr_destroy(&attr);
 
@@ -1263,7 +1213,6 @@ int main(int argc, char *argv[])
 	struct sockaddr_in sockaddr_srv;
 	pthread_t *threads_sock = NULL;
 	pthread_attr_t attr;
-	char thread_sock_name[16] = {0};
 	int reuse = 1;
 	struct sigaction sig_act;
 
@@ -1379,13 +1328,9 @@ int main(int argc, char *argv[])
 					 "client '%s'",
 					 inet_ntoa(sockaddr_cli.sin_addr));
 			else {
-				snprintf(thread_sock_name, sizeof(thread_sock_name),
-					 "fsd_sock/%d", thread_sock_cnt);
-				pthread_setname_np(threads_sock[thread_sock_cnt],
-						   thread_sock_name);
-				CT_MESSAGE("created socket thread '%s' for "
+				CT_MESSAGE("created socket thread 'fsd_sock/%d' for "
 					   "client '%s' and fd %d",
-					   thread_sock_name,
+					   thread_sock_cnt,
 					   inet_ntoa(sockaddr_cli.sin_addr),
 					   *fd_sock);
 				thread_sock_cnt++;
