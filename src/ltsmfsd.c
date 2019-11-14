@@ -148,6 +148,7 @@ static int parse_line_ident(char *line, struct ident_map_t *ident_map)
 {
 	const char *delim = " \t\r\n";
 	char *token;
+	char *saveptr;
 	uint16_t cnt_token = 0;
 	int rc;
 	long int val;
@@ -156,10 +157,10 @@ static int parse_line_ident(char *line, struct ident_map_t *ident_map)
 		return -EINVAL;
 
 	/* Parse node name. */
-	token = strtok(line, delim);
+	token = strtok_r(line, delim, &saveptr);
 	strncpy(ident_map->node, token, 16);
 	cnt_token++;
-	token = strtok(NULL, delim);
+	token = strtok_r(NULL, delim, &saveptr);
 	/* Parse archive ID. */
 	if (token && cnt_token++) {
 		rc = parse_valid_num(token, &val);
@@ -168,7 +169,7 @@ static int parse_line_ident(char *line, struct ident_map_t *ident_map)
 		ident_map->archive_id = (uint16_t)val;
 	}
 	/* Parse uid. */
-	token = strtok(NULL, delim);
+	token = strtok_r(NULL, delim, &saveptr);
 	if (token && cnt_token++) {
 		rc = parse_valid_num(token, &val);
 		if (rc || val > UINT32_MAX)
@@ -176,7 +177,7 @@ static int parse_line_ident(char *line, struct ident_map_t *ident_map)
 		ident_map->uid = (uid_t)val;
 	}
 	/* Parse gid. */
-	token = strtok(NULL, delim);
+	token = strtok_r(NULL, delim, &saveptr);
 	if (token && cnt_token++) {
 		rc = parse_valid_num(token, &val);
 		if (rc || val > UINT32_MAX)
@@ -184,7 +185,7 @@ static int parse_line_ident(char *line, struct ident_map_t *ident_map)
 		ident_map->gid = (gid_t)val;
 	}
 	/* Final verification. */
-	token = strtok(NULL, delim);
+	token = strtok_r(NULL, delim, &saveptr);
 	if (token || cnt_token != 4)
 		return -EINVAL;
 
