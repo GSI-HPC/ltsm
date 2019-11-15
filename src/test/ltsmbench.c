@@ -409,7 +409,7 @@ int main(int argc, char *argv[])
 		goto cleanup;
 
 	struct login_t login;
-	login_fill(&login, opt.o_servername,
+	login_init(&login, opt.o_servername,
 		   opt.o_node, opt.o_password,
 		   NULL, LINUX_PLATFORM,
 		   opt.o_fsname, DEFAULT_FSTYPE);

@@ -51,7 +51,7 @@ void test_tsm_fcalls(CuTest *tc)
 		snprintf(fpath[r], PATH_MAX, "/tmp/%s", rnd_s);
 	}
 
-	login_fill(&login, SERVERNAME, NODE, PASSWORD,
+	login_init(&login, SERVERNAME, NODE, PASSWORD,
 		   OWNER, LINUX_PLATFORM, DEFAULT_FSNAME,
 		   DEFAULT_FSTYPE);
 
@@ -129,86 +129,6 @@ void test_tsm_fcalls(CuTest *tc)
 	tsm_cleanup(DSM_SINGLETHREAD);
 }
 
-void test_fsd_fcalls(CuTest *tc)
-{
-	int rc;
-	struct login_t login;
-	struct session_t session;
-	char rnd_chars[0xffff] = {0};
-	char fpath[NUM_FILES][PATH_MAX];
-
-	memset(fpath, 0, sizeof(char) * NUM_FILES * PATH_MAX);
-
-	fsd_login_fill(&login, SERVERNAME, NODE, PASSWORD,
-		       OWNER, LINUX_PLATFORM, DEFAULT_FSNAME,
-		       DEFAULT_FSTYPE, FSD_HOSTNAME, FSD_PORT);
-	memset(&session, 0, sizeof(struct session_t));
-
-	rc = fsd_tsm_fconnect(&login, &session);
-	CuAssertIntEquals(tc, 0, rc);
-
-	for (uint8_t r = 0; r < NUM_FILES; r++) {
-
-		char rnd_s[LEN_RND_STR + 1] = {0};
-		uint32_t crc32sum_buf = 0;
-		uint32_t crc32sum_file = 0;
-		char hl_ll[PATH_MAX + 1] = {0};
-
-		rnd_str(rnd_s, LEN_RND_STR);
-		snprintf(fpath[r], PATH_MAX, "/lustre/%s", rnd_s);
-
-		rc = fsd_tsm_fopen("/", fpath[r], NULL, &session);
-		CuAssertIntEquals(tc, 0, rc);
-		CT_DEBUG("fpath '%s', tsm_file fs '%s', hl '%s', ll '%s'",
-			 fpath[r],
-			 session.tsm_file->archive_info.obj_name.fs,
-			 session.tsm_file->archive_info.obj_name.hl,
-			 session.tsm_file->archive_info.obj_name.ll);
-
-		snprintf(hl_ll, PATH_MAX, "%s%s",
-			 session.tsm_file->archive_info.obj_name.hl,
-			 session.tsm_file->archive_info.obj_name.ll);
-		CuAssertStrEquals(tc, (const char *)&fpath[r], (const char *) hl_ll);
-
-		for (uint8_t b = 0; b < rand() % 0xff; b++) {
-
-			const size_t len = rand() % sizeof(rnd_chars);
-			ssize_t bytes_written;
-
-			rnd_str(rnd_chars, len);
-
-			bytes_written = fsd_tsm_fwrite(rnd_chars, len, 1, &session);
-			CuAssertIntEquals(tc, len, bytes_written);
-
-			crc32sum_buf = crc32(crc32sum_buf, (const unsigned char *)rnd_chars, len);
-		}
-
-		rc = fsd_tsm_fclose(&session);
-		CuAssertIntEquals(tc, 0, rc);
-#if 0
-		/* Verify data is correctly copied to fsd server. */
-		snprintf(fpath[r], PATH_MAX, "/fsddata/lustre/%s", rnd_s);
-		CT_DEBUG("fpath fsd '%s'", fpath[r]);
-		sleep(2); /* Give Linux some time to flush data to disk. */
-		rc = crc32file(fpath[r], &crc32sum_file);
-		CT_INFO("buf crc32 %lu, file crc32 %lu", crc32sum_buf, crc32sum_file);
-		CuAssertIntEquals(tc, 0, rc);
-		CuAssertTrue(tc, crc32sum_buf == crc32sum_file);
-#endif
-		/* Verify data is correctly copied to lustre. */
-		snprintf(fpath[r], PATH_MAX, "/lustre/%s", rnd_s);
-		CT_DEBUG("fpath lustre '%s'", fpath[r]);
-		sleep(1); /* Give Linux some time to flush data to disk. */
-		rc = crc32file(fpath[r], &crc32sum_file);
-		CT_INFO("buf crc32 %lu, file crc32 %lu", crc32sum_buf, crc32sum_file);
-		CuAssertIntEquals(tc, 0, rc);
-		CuAssertTrue(tc, crc32sum_buf == crc32sum_file);
-
-	}
-
-	fsd_tsm_fdisconnect(&session);
-}
-
 void test_extract_hl_ll(CuTest *tc)
 {
 	const char *fpath = "/fs/hl/ll";
@@ -223,10 +143,10 @@ void test_extract_hl_ll(CuTest *tc)
 	CuAssertStrEquals(tc, "/ll", ll);
 }
 
-void test_login_fill(CuTest *tc)
+void test_login_init(CuTest *tc)
 {
 	struct login_t login;
-	login_fill(&login, "servername", "node", "password",
+	login_init(&login, "servername", "node", "password",
 		   "owner", "platform", "fsname", "fstype");
 
 	CuAssertStrEquals(tc, "-se=servername", login.options);
@@ -237,7 +157,7 @@ void test_login_fill(CuTest *tc)
 	CuAssertStrEquals(tc, "fsname", login.fsname);
 	CuAssertStrEquals(tc, "fstype", login.fstype);
 
-	login_fill(&login, NULL, "node", "",
+	login_init(&login, NULL, "node", "",
 		   "owner", "platform", "", NULL);
 	CuAssertStrEquals(tc, "", login.options);
 	CuAssertStrEquals(tc, "node", login.node);
@@ -247,7 +167,7 @@ void test_login_fill(CuTest *tc)
 	CuAssertStrEquals(tc, "", login.fsname);
 	CuAssertStrEquals(tc, "", login.fstype);
 
-	login_fill(&login, NULL, NULL, NULL,
+	login_init(&login, NULL, NULL, NULL,
 		   NULL, NULL, NULL, NULL);
 	CuAssertStrEquals(tc, "", login.options);
 	CuAssertStrEquals(tc, "", login.node);
@@ -291,11 +211,8 @@ CuSuite* tsmapi_get_suite()
 #ifdef TEST_TSM_CALLS
     SUITE_ADD_TEST(suite, test_tsm_fcalls);
 #endif
-#ifdef TEST_FSD_CALLS
-    SUITE_ADD_TEST(suite, test_fsd_fcalls);
-#endif
     SUITE_ADD_TEST(suite, test_extract_hl_ll);
-    SUITE_ADD_TEST(suite, test_login_fill);
+    SUITE_ADD_TEST(suite, test_login_init);
     SUITE_ADD_TEST(suite, test_set_prefix);
 
     return suite;

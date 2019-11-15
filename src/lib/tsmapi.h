@@ -42,6 +42,7 @@
 #include "dsmapips.h"
 #include "dsmrc.h"
 #include "dapint64.h"
+#include "common.h"
 #include "log.h"
 #include "chashtable.h"
 
@@ -49,111 +50,18 @@
 #define PACKAGE_VERSION "NA"
 #endif
 
-#define DEFAULT_FSNAME "/"
-#define DEFAULT_FSTYPE "ltsm"
-#define LINUX_PLATFORM "GNU/Linux"
-
-#define TSM_BUF_LENGTH 32764 /* (32768 - 4) gives best transfer performance. */
-#define MAX_OPTIONS_LENGTH 64
 #define MAGIC_ID_V1 71147
 #define DEFAULT_NUM_BUCKETS 64
-
-#ifndef DSM_MAX_FSNAME_LENGTH
-#define DSM_MAX_FSNAME_LENGTH 1024
-#endif
-#ifndef DSM_MAX_DESCR_LENGTH
-#define DSM_MAX_DESCR_LENGTH 255
-#endif
-
-#define XATTR_FSD_PREFIX	"user.fsd"
-#define XATTR_FSD_DESC		XATTR_FSD_PREFIX".desc"
-#define XATTR_FSD_FLAGS		XATTR_FSD_PREFIX".flags"
 
 #define OPTNCMP(str1, str2)			\
 	((strlen(str1) == strlen(str2)) &&	\
 	 (strncmp(str1, str2, strlen(str1)) == 0))
-
-#define FSD_PROTOCOL_STR(s)							   \
-	s == FSD_CONNECT    ? "FSD_CONNECT"    :				   \
-	s == FSD_OPEN       ? "FSD_OPEN"       :				   \
-	s == FSD_DATA       ? "FSD_DATA"       :				   \
-	s == FSD_CLOSE      ? "FSD_CLOSE"      :				   \
-	s == FSD_DISCONNECT ? "FSD_DISCONNECT" :				   \
-	s == (FSD_DATA | FSD_CLOSE) ? "FSD_DATA | FSD_CLOSE" :                     \
-	s == (FSD_DISCONNECT | FSD_OPEN) ? "FSD_DISCONNECT | FSD_OPEN" : "UNKNOWN" \
-
-#define FSD_ACTION_STR(s)						     \
-	s == STATE_FSD_COPY_DONE     ? "STATE_FSD_COPY_DONE"     :	     \
-	s == STATE_LUSTRE_COPY_RUN   ? "STATE_LUSTRE_COPY_RUN"   :	     \
-	s == STATE_LUSTRE_COPY_ERROR ? "STATE_LUSTRE_COPY_ERROR" :	     \
-	s == STATE_LUSTRE_COPY_DONE  ? "STATE_LUSTRE_COPY_DONE"  :	     \
-	s == STATE_TSM_COPY_RUN      ? "STATE_TSM_COPY_RUN"      :	     \
-	s == STATE_TSM_COPY_ERROR    ? "STATE_TSM_COPY_ERROR"    :           \
-	s == STATE_TSM_COPY_DONE     ? "STATE_TSM_COPY_DONE"     :           \
-	s == STATE_FILE_OMITTED      ? "STATE_FILE_OMITTED"      : "UNKNOWN" \
 
 enum sort_by_t {
 	SORT_NONE	     = 0,
 	SORT_DATE_ASCENDING  = 1,
 	SORT_DATE_DESCENDING = 2,
 	SORT_RESTORE_ORDER   = 3
-};
-
-enum fsd_action_state_t {
-	STATE_FSD_COPY_DONE	= 0x1,
-	STATE_LUSTRE_COPY_RUN	= 0x2,
-	STATE_LUSTRE_COPY_ERROR = 0x4,
-	STATE_LUSTRE_COPY_DONE  = 0x8,
-	STATE_TSM_COPY_RUN	= 0x10,
-	STATE_TSM_COPY_ERROR	= 0x20,
-	STATE_TSM_COPY_DONE	= 0x40,
-	STATE_FILE_OMITTED      = 0x80
-};
-
-enum fsd_protocol_state_t {
-	FSD_CONNECT    = 0x1,
-	FSD_OPEN       = 0x2,
-	FSD_DATA       = 0x4,
-	FSD_CLOSE      = 0x8,
-	FSD_DISCONNECT = 0x10
-};
-
-struct login_t {
-	/* TSM */
-	char node[DSM_MAX_NODE_LENGTH + 1];
-	char password[DSM_MAX_VERIFIER_LENGTH + 1];
-	char owner[DSM_MAX_OWNER_LENGTH + 1];
-	char platform[DSM_MAX_PLATFORM_LENGTH + 1];
-	char options[MAX_OPTIONS_LENGTH + 1];
-	char fsname[DSM_MAX_FSNAME_LENGTH + 1];
-	char fstype[DSM_MAX_FSTYPE_LENGTH + 1];
-	/* FSD */
-	char hostname[HOST_NAME_MAX + 1];
-	int port;
-};
-
-struct fsd_info_t {
-	char fs[DSM_MAX_FSNAME_LENGTH + 1];
-	char fpath[PATH_MAX + 1];
-	char desc[DSM_MAX_DESCR_LENGTH + 1];
-};
-
-struct fsd_protocol_t {
-	enum fsd_protocol_state_t state;
-	struct login_t login;
-	struct fsd_info_t fsd_info;
-	int sock_fd;
-	size_t size;
-};
-
-struct fsd_action_item_t {
-	uint32_t fsd_action_state;
-	struct fsd_info_t fsd_info;
-	char fpath_local[PATH_MAX + 1];
-	size_t size;
-	size_t progress_size;
-	time_t ts[3];
-	size_t action_error_cnt;
 };
 
 struct fid_t {
@@ -228,7 +136,6 @@ struct session_t {
 			struct session_t *session);
 
 	struct tsm_file_t *tsm_file;
-	struct fsd_protocol_t fsd_protocol;
 };
 
 struct kv {
@@ -280,7 +187,6 @@ dsInt16_t tsm_retrieve_fpath(const char *fs, const char *fpath,
 			     const char *desc, int fd,
 			     struct session_t *session);
 
-int crc32file(const char *filename, uint32_t *crc32result);
 int parse_conf(const char *filename, struct kv_opt *kv_opt);
 ssize_t read_size(int fd, void *ptr, size_t n);
 ssize_t write_size(int fd, const void *ptr, size_t n);
@@ -299,23 +205,5 @@ int tsm_fopen(const char *fs, const char *fpath, const char *desc,
 ssize_t tsm_fwrite(const void *ptr, size_t size, size_t nmemb,
 		   struct session_t *session);
 int tsm_fclose(struct session_t *session);
-
-void fsd_login_fill(struct login_t *login, const char *servername,
-		    const char *node, const char *password,
-		    const char *owner, const char *platform,
-		    const char *fsname, const char *fstype,
-		    const char *hostname, const int port);
-int fsd_tsm_fconnect(struct login_t *login, struct session_t *session);
-void fsd_tsm_fdisconnect(struct session_t *session);
-int fsd_tsm_fopen(const char *fs, const char *fpath, const char *desc,
-                  struct session_t *session);
-ssize_t fsd_tsm_fwrite(const void *ptr, size_t size, size_t nmemb,
-                       struct session_t *session);
-int fsd_tsm_fclose(struct session_t *session);
-
-int send_fsd_protocol(struct fsd_protocol_t *fsd_protocol,
-		      const enum fsd_protocol_state_t protocol_state);
-int recv_fsd_protocol(int fd, struct fsd_protocol_t *fsd_protocol,
-		      enum fsd_protocol_state_t fsd_protocol_state);
 
 #endif /* TSMAPI_H */

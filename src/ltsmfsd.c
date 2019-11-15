@@ -35,6 +35,7 @@
 #include <arpa/inet.h>
 #include <lustre/lustreapi.h>
 #include "tsmapi.h"
+#include "fsdapi.h"
 #include "queue.h"
 
 #define PORT_DEFAULT_FSD	7625
@@ -48,6 +49,7 @@
 
 struct ident_map_t {
 	char node[DSM_MAX_NODE_LENGTH + 1];
+	char servername[MAX_OPTIONS_LENGTH + 1];
 	uint16_t archive_id;
 	uid_t uid;
 	gid_t gid;
@@ -128,8 +130,9 @@ static void print_ident(void *data)
 {
 	struct ident_map_t *ident_map =
 		(struct ident_map_t *)data;
-	CT_INFO("node: '%s', archive_id: %d, uid: %lu, gid: %lu",
-		ident_map->node, ident_map->archive_id,
+	CT_INFO("node: '%s', servername: '%s', archive_id: %d, "
+		"uid: %lu, gid: %lu",
+		ident_map->node, ident_map->servername, ident_map->archive_id,
 		ident_map->uid, ident_map->gid);
 }
 
@@ -158,10 +161,19 @@ static int parse_line_ident(char *line, struct ident_map_t *ident_map)
 
 	/* Parse node name. */
 	token = strtok_r(line, delim, &saveptr);
-	strncpy(ident_map->node, token, 16);
-	cnt_token++;
+	if (token) {
+		strncpy(ident_map->node, token, sizeof(ident_map->node));
+		cnt_token++;
+	}
+
+	/* Parse servername. */
 	token = strtok_r(NULL, delim, &saveptr);
+	if (token && cnt_token++) {
+		strncpy(ident_map->servername,
+			token, sizeof(ident_map->servername));
+	}
 	/* Parse archive ID. */
+	token = strtok_r(NULL, delim, &saveptr);
 	if (token && cnt_token++) {
 		rc = parse_valid_num(token, &val);
 		if (rc || val > UINT16_MAX)
@@ -186,7 +198,7 @@ static int parse_line_ident(char *line, struct ident_map_t *ident_map)
 	}
 	/* Final verification. */
 	token = strtok_r(NULL, delim, &saveptr);
-	if (token || cnt_token != 4)
+	if (token || cnt_token != 5)
 		return -EINVAL;
 
 	return 0;
@@ -384,7 +396,9 @@ static int parseopts(int argc, char *argv[])
 	return rc;
 }
 
-static int verify_node(struct login_t *login, uid_t *uid, gid_t *gid)
+static int identmap_entry(struct fsd_login_t *fsd_login,
+			  char *servername,
+			  uid_t *uid, gid_t *gid)
 {
 	int rc = 0;
 
@@ -395,22 +409,25 @@ static int verify_node(struct login_t *login, uid_t *uid, gid_t *gid)
 
 	while (node) {
 		ident_map = (struct ident_map_t *)list_data(node);
-		if (!strncmp(login->node, ident_map->node, DSM_MAX_NODE_LENGTH)) {
+		if (!strncmp(fsd_login->node, ident_map->node,
+			     DSM_MAX_NODE_LENGTH)) {
 			found = true;
 			break;
 		}
 		node = list_next(node);
 	}
 	if (found) {
-		CT_INFO("found node '%s' in identmap, using archive_id %d, "
-			"uid: %d, guid: %d", node->data,
-			ident_map->archive_id, ident_map->uid, ident_map->gid);
+		CT_INFO("found node '%s' in identmap, using servername '%s', "
+			"archive_id %d, uid %d, gid %d", node->data,
+			ident_map->servername, ident_map->archive_id,
+			ident_map->uid, ident_map->gid);
+		strncpy(servername, ident_map->servername, MAX_OPTIONS_LENGTH);
 		*uid = ident_map->uid;
 		*gid = ident_map->gid;
 	} else {
 		CT_ERROR(0, "identifier mapping for node '%s' not found",
-			 login->node);
-		rc = -EPERM;
+			 fsd_login->node);
+		rc = -EACCES;
 	}
 
 	return rc;
@@ -519,7 +536,7 @@ static int enqueue_fsd_item(struct fsd_action_item_t *fsd_action_item)
 }
 
 static struct fsd_action_item_t* create_fsd_item(const size_t bytes_recv_total,
-						 struct fsd_protocol_t *fsd_protocol,
+						 struct fsd_session_t *fsd_session,
 						 char *fpath_local)
 {
 	int rc;
@@ -535,7 +552,7 @@ static struct fsd_action_item_t* create_fsd_item(const size_t bytes_recv_total,
 
 	fsd_action_item->fsd_action_state = STATE_FSD_COPY_DONE;
 	fsd_action_item->size = bytes_recv_total;
-	memcpy(&fsd_action_item->fsd_info, &fsd_protocol->fsd_info,
+	memcpy(&fsd_action_item->fsd_info, &fsd_session->fsd_info,
 	       sizeof(struct fsd_info_t));
 	fsd_action_item->ts[0] = time(NULL);
 	fsd_action_item->ts[1] = 0;
@@ -547,13 +564,13 @@ static struct fsd_action_item_t* create_fsd_item(const size_t bytes_recv_total,
 
 static int init_fsd_local(char **fpath_local, int *fd_local,
 			  const uid_t uid, const gid_t gid,
-			  const struct fsd_protocol_t *fsd_protocol)
+			  const struct fsd_session_t *fsd_session)
 {
 	int rc;
 	char hl[DSM_MAX_HL_LENGTH + 1] = {0};
 	char ll[DSM_MAX_LL_LENGTH + 1] = {0};
 
-	rc = extract_hl_ll(fsd_protocol->fsd_info.fpath, fsd_protocol->fsd_info.fs,
+	rc = extract_hl_ll(fsd_session->fsd_info.fpath, fsd_session->fsd_info.fs,
 			   hl, ll);
 	if (rc) {
 		rc = -EFAILED;
@@ -613,7 +630,7 @@ static int init_fsd_local(char **fpath_local, int *fd_local,
 }
 
 static int recv_fsd_data(int *fd_sock, int *fd_local,
-			 struct fsd_protocol_t *fsd_protocol,
+			 struct fsd_session_t *fsd_session,
 			 size_t *bytes_recv_total, size_t *bytes_send_total)
 {
 	int rc;
@@ -622,25 +639,25 @@ static int recv_fsd_data(int *fd_sock, int *fd_local,
 	ssize_t bytes_send;
 
 	do {
-		rc = recv_fsd_protocol(*fd_sock, fsd_protocol, (FSD_DATA | FSD_CLOSE));
-		CT_DEBUG("[rc=%d,fd=%d] recv_fsd_protocol, size %zu", rc, *fd_sock,
-			 fsd_protocol->size);
+		rc = fsd_recv(*fd_sock, fsd_session, (FSD_DATA | FSD_CLOSE));
+		CT_DEBUG("[rc=%d,fd=%d] fsd_recv, size %zu", rc, *fd_sock,
+			 fsd_session->size);
 		if (rc) {
-			CT_ERROR(rc, "recv_fsd_protocol failed");
+			CT_ERROR(rc, "fsd_recv failed");
 			goto out;
 		}
 
-		if (fsd_protocol->state & FSD_CLOSE)
+		if (fsd_session->state & FSD_CLOSE)
 			goto out;
 
 		size_t bytes_total = 0;
 		bytes_recv = bytes_send = 0;
 		memset(buf, 0, sizeof(buf));
 		do {
-			bytes_to_recv = fsd_protocol->size < sizeof(buf) ?
-				fsd_protocol->size : sizeof(buf);
-			if (fsd_protocol->size - bytes_total < bytes_to_recv)
-				bytes_to_recv = fsd_protocol->size - bytes_total;
+			bytes_to_recv = fsd_session->size < sizeof(buf) ?
+				fsd_session->size : sizeof(buf);
+			if (fsd_session->size - bytes_total < bytes_to_recv)
+				bytes_to_recv = fsd_session->size - bytes_total;
 
 			bytes_recv = read_size(*fd_sock, buf, bytes_to_recv);
 			CT_DEBUG("[fd=%d] read_size %zd, expected %zd, max possible %zd",
@@ -665,10 +682,10 @@ static int recv_fsd_data(int *fd_sock, int *fd_local,
 				goto out;
 			}
 			*bytes_send_total += bytes_send;
-		} while (bytes_total != fsd_protocol->size);
+		} while (bytes_total != fsd_session->size);
 		CT_DEBUG("[fd=%d,fd=%d] total read %zu, total written %zu",
 			 *fd_sock, *fd_local, *bytes_recv_total, *bytes_send_total);
-	} while (fsd_protocol->state & FSD_DATA);
+	} while (fsd_session->state & FSD_DATA);
 
 out:
 	return rc;
@@ -678,47 +695,71 @@ static void *thread_sock_client(void *arg)
 {
 	int rc;
 	int *fd_sock  = NULL;
-	struct fsd_protocol_t fsd_protocol;
+	struct fsd_session_t fsd_session;
 	char *fpath_local = NULL;
 	int fd_local = -1;
 
 	fd_sock = (int *)arg;
-	memset(&fsd_protocol, 0, sizeof(struct fsd_protocol_t));
+	memset(&fsd_session, 0, sizeof(struct fsd_session_t));
 
 	/* State 1: Client calls fsd_tsm_fconnect(...). */
-	rc = recv_fsd_protocol(*fd_sock, &fsd_protocol, FSD_CONNECT);
-	CT_DEBUG("[rc=%d,fd=%d] recv_fsd_protocol", rc, *fd_sock);
+	rc = fsd_recv(*fd_sock, &fsd_session, FSD_CONNECT);
+	CT_DEBUG("[rc=%d,fd=%d] fsd_recv", rc, *fd_sock);
 	if (rc) {
-		CT_ERROR(rc, "recv_fsd_protocol failed");
+		CT_ERROR(rc, "fsd_recv failed");
 		goto out;
 	}
 
+	char servername[MAX_OPTIONS_LENGTH + 1] = {0};
 	uid_t uid = 65534;	/* User: Nobody. */
 	gid_t gid = 65534;	/* Group: Nobody. */
 
-	rc = verify_node(&fsd_protocol.login, &uid, &gid);
-	CT_DEBUG("[rc=%d] verify_node", rc);
+	/* Verify node exists in identmap file. */
+	rc = identmap_entry(&fsd_session.fsd_login, servername, &uid, &gid);
+	CT_DEBUG("[rc=%d] identmap_entry", rc);
 	if (rc) {
-		CT_ERROR(rc, "verify_node");
+		CT_ERROR(rc, "identmap_entry");
 		goto out;
 	}
 
+#if 0
+	/* Verify node has granted permissions on tsm server. */
+	struct login_t login;
+	struct session_t session;
+
+	memset(&login, 0, sizeof(struct login_t));
+	memset(&session, 0, sizeof(struct session_t));
+	login_init(&login, servername, fsd_session.fsd_login.node,
+		   fsd_session.fsd_login.password, "",
+		   LINUX_PLATFORM, DEFAULT_FSNAME, DEFAULT_FSTYPE);
+
+	rc = tsm_connect(&login, &session);
+	CT_DEBUG("[rc=%d] tsm_connect", rc);
+	if (rc) {
+		CT_ERROR(rc, "tsm_connect");
+		tsm_disconnect(&session);
+		goto out;
+	}
+	tsm_disconnect(&session);
+#endif
+
 	do {
 		/* State 2: Client calls fsd_tsm_fopen(...) or fsd_tsm_disconnect(...). */
-		rc = recv_fsd_protocol(*fd_sock, &fsd_protocol, (FSD_OPEN | FSD_DISCONNECT));
-		CT_DEBUG("[rc=%d,fd=%d] recv_fsd_protocol", rc, *fd_sock);
+		rc = fsd_recv(*fd_sock, &fsd_session, (FSD_OPEN | FSD_DISCONNECT));
+		CT_DEBUG("[rc=%d,fd=%d] recv_fsd_session", rc, *fd_sock);
 		if (rc) {
-			CT_ERROR(rc, "recv_fsd_protocol failed");
+			CT_ERROR(rc, "recv_fsd_session failed");
 			goto out;
 		}
 
-		if (fsd_protocol.state & FSD_DISCONNECT)
+		if (fsd_session.state & FSD_DISCONNECT)
 			goto out;
 
-		CT_INFO("[fd=%d] recv_fsd_protocol node: '%s' with fpath: '%s'",
-			*fd_sock, fsd_protocol.login.node, fsd_protocol.fsd_info.fpath);
+		CT_INFO("[fd=%d] fsd_recv node: '%s' with fpath: '%s'",
+			*fd_sock, fsd_session.fsd_login.node,
+			fsd_session.fsd_info.fpath);
 
-		rc = init_fsd_local(&fpath_local, &fd_local, uid, gid, &fsd_protocol);
+		rc = init_fsd_local(&fpath_local, &fd_local, uid, gid, &fsd_session);
 		if (rc) {
 			CT_ERROR(rc, "init_fsd_local");
 			goto out;
@@ -729,7 +770,7 @@ static void *thread_sock_client(void *arg)
 		/* State 3: Client calls fsd_tsm_fwrite(...) or fsd_tsm_fclose(...). */
 		rc = recv_fsd_data(fd_sock,
 				   &fd_local,
-				   &fsd_protocol,
+				   &fsd_session,
 				   &bytes_recv_total,
 				   &bytes_send_total);
 
@@ -744,14 +785,14 @@ static void *thread_sock_client(void *arg)
 			"received and sent", *fd_sock, fd_local, bytes_recv_total);
 
 		rc = xattr_set_fsd_desc_state(fpath_local,
-					      fsd_protocol.fsd_info.desc,
+					      fsd_session.fsd_info.desc,
 					      STATE_FSD_COPY_DONE);
 		if (rc)
 			goto out;
 
 		/* Producer. */
 		struct fsd_action_item_t *fsd_action_item = NULL;
-		fsd_action_item = create_fsd_item(bytes_recv_total, &fsd_protocol,
+		fsd_action_item = create_fsd_item(bytes_recv_total, &fsd_session,
 						  fpath_local);
 		if (fsd_action_item == NULL)
 			goto out;
@@ -775,7 +816,7 @@ static void *thread_sock_client(void *arg)
 			free(fpath_local);
 			fpath_local = NULL;
 		}
-	} while (fsd_protocol.state != FSD_DISCONNECT);
+	} while (fsd_session.state != FSD_DISCONNECT);
 
 out:
 	if (fpath_local) {
