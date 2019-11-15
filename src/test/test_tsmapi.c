@@ -159,23 +159,33 @@ void test_login_init(CuTest *tc)
 
 	login_init(&login, NULL, "node", "",
 		   "owner", "platform", "", NULL);
-	CuAssertStrEquals(tc, "", login.options);
+	CuAssertStrEquals(tc, login.options, login.options);
+	CuAssertStrEquals(tc, login.node, login.node);
+	CuAssertStrEquals(tc, login.password, login.password);
+	CuAssertStrEquals(tc, login.owner, login.owner);
+	CuAssertStrEquals(tc, login.platform, login.platform);
+	CuAssertStrEquals(tc, login.fsname, login.fsname);
+	CuAssertStrEquals(tc, login.fstype, login.fstype);
+
+	login_init(&login, "servername", "node", "",
+		   NULL, "platform", "", NULL);
+	CuAssertStrEquals(tc, "-se=servername", login.options);
 	CuAssertStrEquals(tc, "node", login.node);
 	CuAssertStrEquals(tc, "", login.password);
-	CuAssertStrEquals(tc, "owner", login.owner);
+	CuAssertStrEquals(tc, "", login.owner);
 	CuAssertStrEquals(tc, "platform", login.platform);
 	CuAssertStrEquals(tc, "", login.fsname);
 	CuAssertStrEquals(tc, "", login.fstype);
 
 	login_init(&login, NULL, NULL, NULL,
 		   NULL, NULL, NULL, NULL);
-	CuAssertStrEquals(tc, "", login.options);
-	CuAssertStrEquals(tc, "", login.node);
-	CuAssertStrEquals(tc, "", login.password);
-	CuAssertStrEquals(tc, "", login.owner);
-	CuAssertStrEquals(tc, "", login.platform);
-	CuAssertStrEquals(tc, "", login.fsname);
-	CuAssertStrEquals(tc, "", login.fstype);
+	CuAssertStrEquals(tc, login.options, login.options);
+	CuAssertStrEquals(tc, login.node, login.node);
+	CuAssertStrEquals(tc, login.password, login.password);
+	CuAssertStrEquals(tc, login.owner, login.owner);
+	CuAssertStrEquals(tc, login.platform, login.platform);
+	CuAssertStrEquals(tc, login.fsname, login.fsname);
+	CuAssertStrEquals(tc, login.fstype, login.fstype);
 }
 
 void test_set_prefix(CuTest *tc)
