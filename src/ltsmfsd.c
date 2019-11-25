@@ -970,6 +970,16 @@ out:
 static int archive_action(struct fsd_action_item_t *fsd_action_item)
 {
 	int rc = 0;
+	const uint16_t sl = 5 + rand() % 15;
+
+	/* Simulate duration of archiving. */
+	CT_INFO("start archiving file '%s' of size %zd, duration %d secs",
+		fsd_action_item->fsd_info.fpath, fsd_action_item->size, sl);
+
+	sleep(sl);
+
+	CT_INFO("finished archive file '%s' of size %zd",
+		fsd_action_item->fsd_info.fpath, fsd_action_item->size);
 
 	return rc;
 }
@@ -1016,6 +1026,10 @@ static int process_fsd_action_item(struct fsd_action_item_t *fsd_action_item)
 	case STATE_FSD_COPY_DONE: {
 		rc = xattr_set_fsd_state_sync(fsd_action_item,
 					      STATE_LUSTRE_COPY_RUN);
+		CT_INFO("[rc=%d] setting state from '%s' to '%s'",
+			rc,
+			FSD_ACTION_STR(STATE_FSD_COPY_DONE),
+			FSD_ACTION_STR(STATE_LUSTRE_COPY_RUN));
 		if (rc) {
 			fsd_action_item->action_error_cnt++;
 			fsd_action_item->fsd_action_state = STATE_FSD_COPY_DONE;
@@ -1038,6 +1052,10 @@ static int process_fsd_action_item(struct fsd_action_item_t *fsd_action_item)
 		}
 		rc = xattr_set_fsd_state_sync(fsd_action_item,
 					      STATE_LUSTRE_COPY_DONE);
+		CT_INFO("[rc=%d] setting state from '%s' to '%s'",
+			rc,
+			FSD_ACTION_STR(STATE_LUSTRE_COPY_RUN),
+			FSD_ACTION_STR(STATE_LUSTRE_COPY_DONE));
 		if (rc) {
 			fsd_action_item->action_error_cnt++;
 			fsd_action_item->fsd_action_state = STATE_FSD_COPY_DONE;
@@ -1073,8 +1091,12 @@ static int process_fsd_action_item(struct fsd_action_item_t *fsd_action_item)
 		break;
 	}
 	case STATE_LUSTRE_COPY_DONE: {
-		rc = xattr_set_fsd_state(fsd_action_item->fpath_local,
-					 STATE_TSM_ARCHIVE_RUN);
+		rc = xattr_set_fsd_state_sync(fsd_action_item,
+					      STATE_TSM_ARCHIVE_RUN);
+		CT_INFO("[rc=%d] setting state from '%s' to '%s'",
+			rc,
+			FSD_ACTION_STR(STATE_LUSTRE_COPY_DONE),
+			FSD_ACTION_STR(STATE_TSM_ARCHIVE_RUN));
 		if (rc) {
 			fsd_action_item->action_error_cnt++;
 			fsd_action_item->fsd_action_state = STATE_LUSTRE_COPY_DONE;
@@ -1095,6 +1117,10 @@ static int process_fsd_action_item(struct fsd_action_item_t *fsd_action_item)
 		}
 		rc = xattr_set_fsd_state_sync(fsd_action_item,
 					      STATE_TSM_ARCHIVE_DONE);
+		CT_INFO("[rc=%d] setting state from '%s' to '%s'",
+			rc,
+			FSD_ACTION_STR(STATE_TSM_ARCHIVE_RUN),
+			FSD_ACTION_STR(STATE_TSM_ARCHIVE_DONE));
 		if (rc) {
 			fsd_action_item->action_error_cnt++;
 			fsd_action_item->fsd_action_state = STATE_LUSTRE_COPY_DONE;
@@ -1106,7 +1132,7 @@ static int process_fsd_action_item(struct fsd_action_item_t *fsd_action_item)
 			break;
 		}
 		fsd_action_item->ts[2] = time(NULL);
-		CT_MESSAGE("file '%s' archived of size %zu in seconds %.3f",
+		CT_MESSAGE("file '%s' of size %zu archived in seconds %.3f",
 			   fsd_action_item->fpath_local,
 			   fsd_action_item->size,
 			   difftime(fsd_action_item->ts[2],

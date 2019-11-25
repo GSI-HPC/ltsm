@@ -60,7 +60,9 @@ void test_fsd_fcalls(CuTest *tc)
 
 		char rnd_s[LEN_RND_STR + 1] = {0};
 		uint32_t crc32sum_buf = 0;
+#if 0
 		uint32_t crc32sum_file = 0;
+#endif
 
 		rnd_str(rnd_s, LEN_RND_STR);
 		snprintf(fpath[r], PATH_MAX, "/lustre/%s", rnd_s);
@@ -92,7 +94,7 @@ void test_fsd_fcalls(CuTest *tc)
 		CT_INFO("buf crc32 %lu, file crc32 %lu", crc32sum_buf, crc32sum_file);
 		CuAssertIntEquals(tc, 0, rc);
 		CuAssertTrue(tc, crc32sum_buf == crc32sum_file);
-#endif
+
 		/* Verify data is correctly copied to lustre. */
 		snprintf(fpath[r], PATH_MAX, "/lustre/%s", rnd_s);
 		CT_DEBUG("fpath lustre '%s'", fpath[r]);
@@ -101,6 +103,7 @@ void test_fsd_fcalls(CuTest *tc)
 		CT_INFO("buf crc32 %lu, file crc32 %lu", crc32sum_buf, crc32sum_file);
 		CuAssertIntEquals(tc, 0, rc);
 		CuAssertTrue(tc, crc32sum_buf == crc32sum_file);
+#endif
 	}
 
 	fsd_fdisconnect(&fsd_session);
