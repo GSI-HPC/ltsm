@@ -877,7 +877,7 @@ static void signal_handler(int signal)
 	keep_running = false;
 }
 
-static int write_to_lustre(struct fsd_action_item_t *fsd_action_item)
+static int copy_to(struct fsd_action_item_t *fsd_action_item)
 {
 	int fd_read = -1;
 	int fd_write = -1;
@@ -964,7 +964,7 @@ out:
 	return rc;
 }
 
-static int write_to_tsm(struct fsd_action_item_t *fsd_action_item)
+static int archive_to(struct fsd_action_item_t *fsd_action_item)
 {
 	int rc = 0;
 
@@ -982,17 +982,17 @@ static int write_to_tsm(struct fsd_action_item_t *fsd_action_item)
            +---+ STATE_LUSTRE_COPY_ERROR +<---+
                +-------------------------+    |
                                               v
-  +--------------------+         +------------+-----------+
-  | STATE_TSM_COPY_RUN +<--------+ STATE_LUSTRE_COPY_DONE |
-  +--------+-----------+         +-----------+------------+
-           |                                 ^
-           |     +----------------------+    |
-           +---->+ STATE_TSM_COPY_ERROR +----+
-           |     +----------------------+
+  +-----------------------+         +---------+--------------+
+  | STATE_TSM_ARCHIVE_RUN +<--------+ STATE_LUSTRE_COPY_DONE |
+  +--------+--------------+         +-----------+------------+
+           |                                    ^
+           |     +-------------------------+    |
+           +---->+ STATE_TSM_ARCHIVE_ERROR +----+
+           |     +-------------------------+
            v
- +---------+-----------+
- | STATE_TSM_COPY_DONE |
- +---------------------+
+ +---------+--------------+
+ | STATE_TSM_ARCHIVE_DONE |
+ +------------------------+
  */
 static int process_fsd_action_item(struct fsd_action_item_t *fsd_action_item)
 {
@@ -1023,7 +1023,7 @@ static int process_fsd_action_item(struct fsd_action_item_t *fsd_action_item)
 				FSD_ACTION_STR(fsd_action_item->fsd_action_state));
 			break;
 		}
-		rc = write_to_lustre(fsd_action_item);
+		rc = copy_to(fsd_action_item);
 		if (rc) {
 			CT_WARN("file '%s' copying to '%s' failed, will "
 				"try again",
@@ -1071,34 +1071,34 @@ static int process_fsd_action_item(struct fsd_action_item_t *fsd_action_item)
 	}
 	case STATE_LUSTRE_COPY_DONE: {
 		rc = xattr_set_fsd_state(fsd_action_item->fpath_local,
-					 STATE_TSM_COPY_RUN);
+					 STATE_TSM_ARCHIVE_RUN);
 		if (rc) {
 			fsd_action_item->action_error_cnt++;
 			fsd_action_item->fsd_action_state = STATE_LUSTRE_COPY_DONE;
 			CT_WARN("setting state from '%s' to '%s' failed, "
 				"going back to state '%s'",
 				FSD_ACTION_STR(STATE_LUSTRE_COPY_DONE),
-				FSD_ACTION_STR(STATE_TSM_COPY_RUN),
+				FSD_ACTION_STR(STATE_TSM_ARCHIVE_RUN),
 				FSD_ACTION_STR(fsd_action_item->fsd_action_state));
 			break;
 		}
-		rc = write_to_tsm(fsd_action_item);
+		rc = archive_to(fsd_action_item);
 		if (rc) {
 			CT_WARN("file '%s' archiving failed, will try again",
 				fsd_action_item->fpath_local);
 			fsd_action_item->action_error_cnt++;
-			fsd_action_item->fsd_action_state = STATE_TSM_COPY_ERROR;
+			fsd_action_item->fsd_action_state = STATE_TSM_ARCHIVE_ERROR;
 			break;
 		}
 		rc = xattr_set_fsd_state_sync(fsd_action_item,
-					      STATE_TSM_COPY_DONE);
+					      STATE_TSM_ARCHIVE_DONE);
 		if (rc) {
 			fsd_action_item->action_error_cnt++;
 			fsd_action_item->fsd_action_state = STATE_LUSTRE_COPY_DONE;
 			CT_WARN("setting state from '%s' to '%s' failed, "
 				"going back to state '%s'",
 				FSD_ACTION_STR(STATE_LUSTRE_COPY_DONE),
-				FSD_ACTION_STR(STATE_TSM_COPY_DONE),
+				FSD_ACTION_STR(STATE_TSM_ARCHIVE_DONE),
 				FSD_ACTION_STR(fsd_action_item->fsd_action_state));
 			break;
 		}
@@ -1110,10 +1110,10 @@ static int process_fsd_action_item(struct fsd_action_item_t *fsd_action_item)
 				    fsd_action_item->ts[1]));
 		break;
 	}
-	case STATE_TSM_COPY_RUN: {
+	case STATE_TSM_ARCHIVE_RUN: {
 		break;
 	}
-	case STATE_TSM_COPY_ERROR: {
+	case STATE_TSM_ARCHIVE_ERROR: {
 		CT_WARN("tsm archive error, try to archive file '%s' again",
 			fsd_action_item->fpath_local);
 		rc = xattr_set_fsd_state_sync(fsd_action_item,
@@ -1123,7 +1123,7 @@ static int process_fsd_action_item(struct fsd_action_item_t *fsd_action_item)
 
 		break;
 	}
-	case STATE_TSM_COPY_DONE: {
+	case STATE_TSM_ARCHIVE_DONE: {
 		CT_MESSAGE("file '%s' of size %zu successfully copied and archived in "
 			   "seconds %.3f to Lustre and TSM archive",
 			   fsd_action_item->fpath_local,
