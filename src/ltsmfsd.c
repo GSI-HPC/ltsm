@@ -702,7 +702,7 @@ static void *thread_sock_client(void *arg)
 	fd_sock = (int *)arg;
 	memset(&fsd_session, 0, sizeof(struct fsd_session_t));
 
-	/* State 1: Client calls fsd_tsm_fconnect(...). */
+	/* State 1: Client calls fsd_fconnect(...). */
 	rc = fsd_recv(*fd_sock, &fsd_session, FSD_CONNECT);
 	CT_DEBUG("[rc=%d,fd=%d] fsd_recv", rc, *fd_sock);
 	if (rc) {
@@ -722,16 +722,20 @@ static void *thread_sock_client(void *arg)
 		goto out;
 	}
 
-#if 0
 	/* Verify node has granted permissions on tsm server. */
 	struct login_t login;
 	struct session_t session;
 
 	memset(&login, 0, sizeof(struct login_t));
 	memset(&session, 0, sizeof(struct session_t));
-	login_init(&login, servername, fsd_session.fsd_login.node,
-		   fsd_session.fsd_login.password, "",
-		   LINUX_PLATFORM, DEFAULT_FSNAME, DEFAULT_FSTYPE);
+	login_init(&login,
+		   servername,
+		   fsd_session.fsd_login.node,
+		   fsd_session.fsd_login.password,
+		   DEFAULT_OWNER,
+		   LINUX_PLATFORM,
+		   DEFAULT_FSNAME,
+		   DEFAULT_FSTYPE);
 
 	rc = tsm_connect(&login, &session);
 	CT_DEBUG("[rc=%d] tsm_connect", rc);
@@ -741,10 +745,9 @@ static void *thread_sock_client(void *arg)
 		goto out;
 	}
 	tsm_disconnect(&session);
-#endif
 
 	do {
-		/* State 2: Client calls fsd_tsm_fopen(...) or fsd_tsm_disconnect(...). */
+		/* State 2: Client calls fsd_fopen(...) or fsd_disconnect(...). */
 		rc = fsd_recv(*fd_sock, &fsd_session, (FSD_OPEN | FSD_DISCONNECT));
 		CT_DEBUG("[rc=%d,fd=%d] recv_fsd_session", rc, *fd_sock);
 		if (rc) {
@@ -767,7 +770,7 @@ static void *thread_sock_client(void *arg)
 
 		size_t bytes_recv_total = 0;
 		size_t bytes_send_total = 0;
-		/* State 3: Client calls fsd_tsm_fwrite(...) or fsd_tsm_fclose(...). */
+		/* State 3: Client calls fsd_fwrite(...) or fsd_fclose(...). */
 		rc = recv_fsd_data(fd_sock,
 				   &fd_local,
 				   &fsd_session,
@@ -877,7 +880,7 @@ static void signal_handler(int signal)
 	keep_running = false;
 }
 
-static int copy_to(struct fsd_action_item_t *fsd_action_item)
+static int copy_action(struct fsd_action_item_t *fsd_action_item)
 {
 	int fd_read = -1;
 	int fd_write = -1;
@@ -964,7 +967,7 @@ out:
 	return rc;
 }
 
-static int archive_to(struct fsd_action_item_t *fsd_action_item)
+static int archive_action(struct fsd_action_item_t *fsd_action_item)
 {
 	int rc = 0;
 
@@ -1023,7 +1026,7 @@ static int process_fsd_action_item(struct fsd_action_item_t *fsd_action_item)
 				FSD_ACTION_STR(fsd_action_item->fsd_action_state));
 			break;
 		}
-		rc = copy_to(fsd_action_item);
+		rc = copy_action(fsd_action_item);
 		if (rc) {
 			CT_WARN("file '%s' copying to '%s' failed, will "
 				"try again",
@@ -1082,7 +1085,7 @@ static int process_fsd_action_item(struct fsd_action_item_t *fsd_action_item)
 				FSD_ACTION_STR(fsd_action_item->fsd_action_state));
 			break;
 		}
-		rc = archive_to(fsd_action_item);
+		rc = archive_action(fsd_action_item);
 		if (rc) {
 			CT_WARN("file '%s' archiving failed, will try again",
 				fsd_action_item->fpath_local);

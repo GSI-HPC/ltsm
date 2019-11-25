@@ -37,6 +37,10 @@
 #define DEFAULT_FSTYPE	"ltsm"
 #endif
 
+#ifndef DEFAULT_OWNER
+#define DEFAULT_OWNER	""
+#endif
+
 #ifndef LINUX_PLATFORM
 #define LINUX_PLATFORM	"GNU/Linux"
 #endif
