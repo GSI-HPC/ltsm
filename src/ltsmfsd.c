@@ -214,11 +214,11 @@ static int parse_file_ident(const char *filename)
 	int rc = 0;
 	uint16_t n = 0;
 
-	/* Syntax: node archive_id uid gid */
+	/* Syntax: <node> <servername> <archive_id> <uid> <gid> */
 	file = fopen(filename, "r");
 	if (!file) {
 		rc = -errno;
-		CT_ERROR(rc, "fopen");
+		CT_ERROR(rc, "fopen '%s'", filename);
 		return rc;
 	}
 
@@ -398,6 +398,7 @@ static int parseopts(int argc, char *argv[])
 
 static int identmap_entry(struct fsd_login_t *fsd_login,
 			  char *servername,
+			  int *archive_id,
 			  uid_t *uid, gid_t *gid)
 {
 	int rc = 0;
@@ -422,6 +423,7 @@ static int identmap_entry(struct fsd_login_t *fsd_login,
 			ident_map->servername, ident_map->archive_id,
 			ident_map->uid, ident_map->gid);
 		strncpy(servername, ident_map->servername, MAX_OPTIONS_LENGTH);
+		*archive_id = ident_map->archive_id;
 		*uid = ident_map->uid;
 		*gid = ident_map->gid;
 	} else {
@@ -537,7 +539,7 @@ static int enqueue_fsd_item(struct fsd_action_item_t *fsd_action_item)
 
 static struct fsd_action_item_t* create_fsd_item(const size_t bytes_recv_total,
 						 struct fsd_session_t *fsd_session,
-						 char *fpath_local)
+						 char *fpath_local, int archive_id)
 {
 	int rc;
 	struct fsd_action_item_t *fsd_action_item;
@@ -558,6 +560,7 @@ static struct fsd_action_item_t* create_fsd_item(const size_t bytes_recv_total,
 	fsd_action_item->ts[1] = 0;
 	fsd_action_item->ts[2] = 0;
 	strncpy(fsd_action_item->fpath_local, fpath_local, PATH_MAX);
+	fsd_action_item->archive_id = archive_id;
 
 	return fsd_action_item;
 }
@@ -698,6 +701,7 @@ static void *thread_sock_client(void *arg)
 	struct fsd_session_t fsd_session;
 	char *fpath_local = NULL;
 	int fd_local = -1;
+	int archive_id = -1;
 
 	fd_sock = (int *)arg;
 	memset(&fsd_session, 0, sizeof(struct fsd_session_t));
@@ -715,7 +719,8 @@ static void *thread_sock_client(void *arg)
 	gid_t gid = 65534;	/* Group: Nobody. */
 
 	/* Verify node exists in identmap file. */
-	rc = identmap_entry(&fsd_session.fsd_login, servername, &uid, &gid);
+	rc = identmap_entry(&fsd_session.fsd_login, servername,
+			    &archive_id, &uid, &gid);
 	CT_DEBUG("[rc=%d] identmap_entry", rc);
 	if (rc) {
 		CT_ERROR(rc, "identmap_entry");
@@ -795,8 +800,9 @@ static void *thread_sock_client(void *arg)
 
 		/* Producer. */
 		struct fsd_action_item_t *fsd_action_item = NULL;
+
 		fsd_action_item = create_fsd_item(bytes_recv_total, &fsd_session,
-						  fpath_local);
+						  fpath_local, archive_id);
 		if (fsd_action_item == NULL)
 			goto out;
 
@@ -969,17 +975,23 @@ out:
 
 static int archive_action(struct fsd_action_item_t *fsd_action_item)
 {
-	int rc = 0;
-	const uint16_t sl = 5 + rand() % 15;
+	int rc;
+	struct hsm_user_request	*hur = NULL;
 
-	/* Simulate duration of archiving. */
-	CT_INFO("start archiving file '%s' of size %zd, duration %d secs",
-		fsd_action_item->fsd_info.fpath, fsd_action_item->size, sl);
+	hur = llapi_hsm_user_request_alloc(1, fsd_action_item->size);
+	if (hur == NULL) {
+		rc = -errno;
+		CT_ERROR(rc, "llapi_hsm_user_request_alloc failed '%s'",
+			 fsd_action_item->fsd_info.fpath);
+		return rc;
+	}
+	hur->hur_request.hr_action = HUA_ARCHIVE;
+	hur->hur_request.hr_archive_id = fsd_action_item->archive_id;
+	hur->hur_request.hr_flags = 0;
 
-	sleep(sl);
+	rc = llapi_hsm_request(fsd_action_item->fsd_info.fpath, hur);
 
-	CT_INFO("finished archive file '%s' of size %zd",
-		fsd_action_item->fsd_info.fpath, fsd_action_item->size);
+	free(hur);
 
 	return rc;
 }
@@ -988,7 +1000,7 @@ static int archive_action(struct fsd_action_item_t *fsd_action_item)
   The following state diagram is implemented.
 
   +---------------------+        +-----------------------+
-  | STATE_FSD_COPY_DONE +------->+ STATE_LUSTRE_COPY_RUN |
+->| STATE_FSD_COPY_DONE +------->+ STATE_LUSTRE_COPY_RUN |
   +--------+------------+        +------------+----------+
            ^                                  |
            |   +-------------------------+    |
