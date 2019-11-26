@@ -204,5 +204,7 @@ int fsd_fclose(struct fsd_session_t *fsd_session)
 	if (rc)
 		close(fsd_session->sock_fd);
 
+	memset(&fsd_session->fsd_info, 0, sizeof(struct fsd_info_t));
+
 	return rc;
 }
