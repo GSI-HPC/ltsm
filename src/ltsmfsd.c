@@ -977,17 +977,36 @@ static int archive_action(struct fsd_action_item_t *fsd_action_item)
 {
 	int rc;
 	struct hsm_user_request	*hur = NULL;
+	struct hsm_user_item	*hui = NULL;
+	struct lu_fid		fid;
+
+	rc = llapi_path2fid(fsd_action_item->fsd_info.fpath, &fid);
+	CT_DEBUG("[rc=%d] llapi_path2fid '%s' "DFID"",
+		 rc, fsd_action_item->fsd_info.fpath,
+		 PFID(&fid));
+	if (rc) {
+		CT_ERROR(rc, "llapi_path2fid '%s'",
+			 fsd_action_item->fsd_info.fpath);
+
+		return rc;
+	}
 
 	hur = llapi_hsm_user_request_alloc(1, fsd_action_item->size);
 	if (hur == NULL) {
 		rc = -errno;
 		CT_ERROR(rc, "llapi_hsm_user_request_alloc failed '%s'",
 			 fsd_action_item->fsd_info.fpath);
+
 		return rc;
 	}
 	hur->hur_request.hr_action = HUA_ARCHIVE;
 	hur->hur_request.hr_archive_id = fsd_action_item->archive_id;
 	hur->hur_request.hr_flags = 0;
+	hur->hur_request.hr_itemcount++;
+	hur->hur_request.hr_data_len = fsd_action_item->size;
+
+	hui = &hur->hur_user_item[0];
+	hui->hui_fid = fid;
 
 	rc = llapi_hsm_request(fsd_action_item->fsd_info.fpath, hur);
 
@@ -1038,10 +1057,10 @@ static int process_fsd_action_item(struct fsd_action_item_t *fsd_action_item)
 	case STATE_FSD_COPY_DONE: {
 		rc = xattr_set_fsd_state_sync(fsd_action_item,
 					      STATE_LUSTRE_COPY_RUN);
-		CT_INFO("[rc=%d] setting state from '%s' to '%s'",
-			rc,
-			FSD_ACTION_STR(STATE_FSD_COPY_DONE),
-			FSD_ACTION_STR(STATE_LUSTRE_COPY_RUN));
+		CT_DEBUG("[rc=%d] setting state from '%s' to '%s'",
+			 rc,
+			 FSD_ACTION_STR(STATE_FSD_COPY_DONE),
+			 FSD_ACTION_STR(STATE_LUSTRE_COPY_RUN));
 		if (rc) {
 			fsd_action_item->action_error_cnt++;
 			fsd_action_item->fsd_action_state = STATE_FSD_COPY_DONE;
@@ -1064,10 +1083,10 @@ static int process_fsd_action_item(struct fsd_action_item_t *fsd_action_item)
 		}
 		rc = xattr_set_fsd_state_sync(fsd_action_item,
 					      STATE_LUSTRE_COPY_DONE);
-		CT_INFO("[rc=%d] setting state from '%s' to '%s'",
-			rc,
-			FSD_ACTION_STR(STATE_LUSTRE_COPY_RUN),
-			FSD_ACTION_STR(STATE_LUSTRE_COPY_DONE));
+		CT_DEBUG("[rc=%d] setting state from '%s' to '%s'",
+			 rc,
+			 FSD_ACTION_STR(STATE_LUSTRE_COPY_RUN),
+			 FSD_ACTION_STR(STATE_LUSTRE_COPY_DONE));
 		if (rc) {
 			fsd_action_item->action_error_cnt++;
 			fsd_action_item->fsd_action_state = STATE_FSD_COPY_DONE;
@@ -1105,10 +1124,10 @@ static int process_fsd_action_item(struct fsd_action_item_t *fsd_action_item)
 	case STATE_LUSTRE_COPY_DONE: {
 		rc = xattr_set_fsd_state_sync(fsd_action_item,
 					      STATE_TSM_ARCHIVE_RUN);
-		CT_INFO("[rc=%d] setting state from '%s' to '%s'",
-			rc,
-			FSD_ACTION_STR(STATE_LUSTRE_COPY_DONE),
-			FSD_ACTION_STR(STATE_TSM_ARCHIVE_RUN));
+		CT_DEBUG("[rc=%d] setting state from '%s' to '%s'",
+			 rc,
+			 FSD_ACTION_STR(STATE_LUSTRE_COPY_DONE),
+			 FSD_ACTION_STR(STATE_TSM_ARCHIVE_RUN));
 		if (rc) {
 			fsd_action_item->action_error_cnt++;
 			fsd_action_item->fsd_action_state = STATE_LUSTRE_COPY_DONE;
@@ -1129,10 +1148,10 @@ static int process_fsd_action_item(struct fsd_action_item_t *fsd_action_item)
 		}
 		rc = xattr_set_fsd_state_sync(fsd_action_item,
 					      STATE_TSM_ARCHIVE_DONE);
-		CT_INFO("[rc=%d] setting state from '%s' to '%s'",
-			rc,
-			FSD_ACTION_STR(STATE_TSM_ARCHIVE_RUN),
-			FSD_ACTION_STR(STATE_TSM_ARCHIVE_DONE));
+		CT_DEBUG("[rc=%d] setting state from '%s' to '%s'",
+			 rc,
+			 FSD_ACTION_STR(STATE_TSM_ARCHIVE_RUN),
+			 FSD_ACTION_STR(STATE_TSM_ARCHIVE_DONE));
 		if (rc) {
 			fsd_action_item->action_error_cnt++;
 			fsd_action_item->fsd_action_state = STATE_LUSTRE_COPY_DONE;
