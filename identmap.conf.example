@@ -1,5 +1,5 @@
-# node		servername		archive_id	uid	gid
-polaris		centos-7-tsmserver-7	12		1000	2000
-sirius		centos-7-tsmserver-7	13		1001	2001
-spica		centos-7-tsmserver-7	14		1002	2002
-albireo		centos-7-tsmserver-7	15		1003	2003
+# node		servername	archive_id	uid	gid
+polaris		tsmserver-8	12		1000	2000
+sirius		tsmserver-8	13		1001	2001
+spica		tsmserver-8	14		1002	2002
+albireo		tsmserver-8	15		1003	2003

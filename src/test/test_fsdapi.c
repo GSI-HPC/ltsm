@@ -28,7 +28,7 @@
 #include "test_utils.h"
 
 #define NODE		"polaris"
-#define PASSWORD	"polaris"
+#define PASSWORD	"polaris1234"
 #define OWNER           ""
 
 #define FSD_HOSTNAME    "localhost"
