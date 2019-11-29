@@ -867,14 +867,13 @@ static int fsd_setup(void)
 		CT_ERROR(rc, "'%s'", opt.o_local_mount);
 		return rc;
 	}
-#if 0   /* TODO: Deactivated for testing. */
+
 	/* Verify we have a valid Lustre mount point. */
 	rc = llapi_search_fsname(opt.o_mnt_lustre, opt.o_mnt_lustre);
 	if (rc < 0) {
 		CT_ERROR(rc, "cannot find a Lustre filesystem mounted at '%s'",
 			 opt.o_mnt_lustre);
 	}
-#endif
 
 	queue_init(&queue, free);
 
@@ -969,6 +968,26 @@ out:
 
 	if (fd_write != -1)
 		close(fd_write);
+
+	return rc;
+}
+
+static int archive_state(struct fsd_action_item_t *fsd_action_item, uint32_t *states)
+{
+	int rc;
+	struct hsm_user_state hus;
+
+	rc = llapi_hsm_state_get(fsd_action_item->fsd_info.fpath, &hus);
+	CT_DEBUG("[rc=%d] llapi_hsm_state_get '%s'",
+		 fsd_action_item->fsd_info.fpath);
+	if (rc) {
+		CT_ERROR(rc, "llapi_hsm_state_get '%s'",
+			 fsd_action_item->fsd_info.fpath);
+
+		return rc;
+	}
+
+	*states = hus.hus_states;
 
 	return rc;
 }
@@ -1146,31 +1165,51 @@ static int process_fsd_action_item(struct fsd_action_item_t *fsd_action_item)
 			fsd_action_item->fsd_action_state = STATE_TSM_ARCHIVE_ERROR;
 			break;
 		}
-		rc = xattr_set_fsd_state_sync(fsd_action_item,
-					      STATE_TSM_ARCHIVE_DONE);
-		CT_DEBUG("[rc=%d] setting state from '%s' to '%s'",
-			 rc,
-			 FSD_ACTION_STR(STATE_TSM_ARCHIVE_RUN),
-			 FSD_ACTION_STR(STATE_TSM_ARCHIVE_DONE));
-		if (rc) {
-			fsd_action_item->action_error_cnt++;
-			fsd_action_item->fsd_action_state = STATE_LUSTRE_COPY_DONE;
-			CT_WARN("setting state from '%s' to '%s' failed, "
-				"going back to state '%s'",
-				FSD_ACTION_STR(STATE_LUSTRE_COPY_DONE),
-				FSD_ACTION_STR(STATE_TSM_ARCHIVE_DONE),
-				FSD_ACTION_STR(fsd_action_item->fsd_action_state));
-			break;
-		}
-		fsd_action_item->ts[2] = time(NULL);
-		CT_MESSAGE("file '%s' of size %zu archived in seconds %.3f",
-			   fsd_action_item->fpath_local,
-			   fsd_action_item->size,
-			   difftime(fsd_action_item->ts[2],
-				    fsd_action_item->ts[1]));
 		break;
 	}
 	case STATE_TSM_ARCHIVE_RUN: {
+
+		uint32_t states = 0;
+
+		rc = archive_state(fsd_action_item, &states);
+		CT_DEBUG("[rc=%d] archive_state: %d", states);
+		if (rc) {
+			/* If state cannot be obtained, stay in state
+			   STATE_TSM_ARCHIVE_RUN and try again. */
+			fsd_action_item->action_error_cnt++;
+			CT_ERROR(rc, "archive state '%s'",
+				 fsd_action_item->fsd_info.fpath);
+			break;
+		}
+
+		/* Verify whether file is finally archived. */
+		if ((states & HS_EXISTS) && (states && HS_ARCHIVED)) {
+
+			rc = xattr_set_fsd_state_sync(fsd_action_item,
+						      STATE_TSM_ARCHIVE_DONE);
+			CT_DEBUG("[rc=%d] setting state from '%s' to '%s'",
+				 rc,
+				 FSD_ACTION_STR(STATE_TSM_ARCHIVE_RUN),
+				 FSD_ACTION_STR(STATE_TSM_ARCHIVE_DONE));
+			if (rc) {
+				fsd_action_item->action_error_cnt++;
+				fsd_action_item->fsd_action_state = STATE_LUSTRE_COPY_DONE;
+				CT_WARN("setting state from '%s' to '%s' failed, "
+					"going back to state '%s'",
+					FSD_ACTION_STR(STATE_TSM_ARCHIVE_RUN),
+					FSD_ACTION_STR(STATE_TSM_ARCHIVE_DONE),
+					FSD_ACTION_STR(fsd_action_item->fsd_action_state));
+				break;
+			}
+			fsd_action_item->ts[2] = time(NULL);
+			CT_MESSAGE("file '%s' of size %zu archived in  %.3f seconds",
+				   fsd_action_item->fpath_local,
+				   fsd_action_item->size,
+				   difftime(fsd_action_item->ts[2],
+					    fsd_action_item->ts[1]));
+		}
+
+		/* Stay in state STATE_TSM_ARCHIVE_RUN. */
 		break;
 	}
 	case STATE_TSM_ARCHIVE_ERROR: {
