@@ -43,7 +43,7 @@
 #define N_THREADS_SOCK_MAX	64
 #define N_THREADS_QUEUE_DEFAULT	4
 #define N_THREADS_QUEUE_MAX	64
-#define N_TOL_FILE_ERRORS	64
+#define N_TOL_FILE_ERRORS	16
 #define BACKLOG			32
 #define BUF_SIZE		0xfffff	/* 0xfffff = 1MiB, 0x400000 = 4MiB */
 
@@ -969,13 +969,14 @@ out:
 	return rc;
 }
 
-static int archive_state(struct fsd_action_item_t *fsd_action_item, uint32_t *states)
+static int archive_state(const struct fsd_action_item_t *fsd_action_item,
+			 uint32_t *states)
 {
 	int rc;
 	struct hsm_user_state hus;
 
 	rc = llapi_hsm_state_get(fsd_action_item->fsd_info.fpath, &hus);
-	CT_DEBUG("[rc=%d] llapi_hsm_state_get '%s'",
+	CT_DEBUG("[rc=%d] llapi_hsm_state_get '%s'", rc,
 		 fsd_action_item->fsd_info.fpath);
 	if (rc) {
 		CT_ERROR(rc, "llapi_hsm_state_get '%s'",
@@ -1057,6 +1058,18 @@ static int archive_action(struct fsd_action_item_t *fsd_action_item)
 static int process_fsd_action_item(struct fsd_action_item_t *fsd_action_item)
 {
 	int rc = 0;
+
+	CT_INFO("fsd_action_item %p, state '%s', fpath '%s', size %zu "
+		"errors %d, ts[0] %zu, ts[1] %zu, ts[2] %zu, queue size %lu",
+		fsd_action_item,
+		FSD_ACTION_STR(fsd_action_item->fsd_action_state),
+		fsd_action_item->fsd_info.fpath,
+		fsd_action_item->size,
+		fsd_action_item->action_error_cnt,
+		fsd_action_item->ts[0],
+		fsd_action_item->ts[1],
+		fsd_action_item->ts[2],
+		queue_size(&queue));
 
 	if (fsd_action_item->action_error_cnt > opt.o_ntol_file_errors) {
 		CT_WARN("file '%s' reached maximum number of tolerated errors, "
