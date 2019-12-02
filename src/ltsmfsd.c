@@ -436,6 +436,8 @@ static int xattr_set_fsd_desc(const char *fpath_local,
 	int rc;
 
 	pthread_mutex_lock(&xattr_mutex);
+	/* Note: extended attributes can be listed with cmd:
+	   getfattr -d -m ".*" -e hex <FILE> */
 	rc = setxattr(fpath_local, XATTR_FSD_DESC, desc,
 		      DSM_MAX_DESCR_LENGTH, 0);
 	pthread_mutex_unlock(&xattr_mutex);
