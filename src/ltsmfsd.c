@@ -1168,6 +1168,10 @@ static int process_fsd_action_item(struct fsd_action_item_t *fsd_action_item)
 
 		uint32_t states = 0;
 
+		/* The archive_state check is based on polling, thus employ
+		   sleep(50ms) to avoid high CPU load. */
+		nanosleep(&(struct timespec){0, 50000000UL}, NULL);
+
 		rc = archive_state(fsd_action_item, &states);
 		CT_DEBUG("[rc=%d] archive_state: %d", states);
 		if (rc) {
