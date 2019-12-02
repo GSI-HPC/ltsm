@@ -63,7 +63,6 @@ struct options {
 	int o_nthreads_sock;
 	int o_nthreads_queue;
 	int o_ntol_file_errors;
-	int o_daemonize;
 	int o_verbose;
 };
 
@@ -74,7 +73,6 @@ static struct options opt   = {
 	.o_nthreads_sock    = N_THREADS_SOCK_DEFAULT,
 	.o_nthreads_queue   = N_THREADS_QUEUE_DEFAULT,
 	.o_ntol_file_errors = N_TOL_FILE_ERRORS,
-	.o_daemonize	    = 0,
 	.o_verbose	    = API_MSG_NORMAL
 };
 
@@ -109,8 +107,6 @@ static void usage(const char *cmd_name, const int rc)
 		"\t-t, --tolerr <int>\n"
 		"\t\t""number of tolerated file errors before file is "
 		"omitted [default: %d]\n"
-		"\t--daemon\n"
-		"\t\t""daemon mode run in background\n"
 		"\t-v, --verbose {error, warn, message, info, debug}"
 		" [default: message]\n"
 		"\t\t""produce more verbose output\n"
@@ -296,7 +292,6 @@ static int parseopts(int argc, char *argv[])
 		{"sthreads",	required_argument, 0,		     's'},
 		{"qthreads",	required_argument, 0,		     'q'},
 		{"tolerr",	required_argument, 0,		     't'},
-		{"daemon",	no_argument,	   &opt.o_daemonize,   1},
 		{"verbose",	required_argument, 0,		     'v'},
 		{"help",	no_argument,	   0,		     'h'},
 		{0, 0, 0, 0}
