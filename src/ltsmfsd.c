@@ -43,7 +43,7 @@
 #define N_THREADS_SOCK_MAX	64
 #define N_THREADS_QUEUE_DEFAULT	4
 #define N_THREADS_QUEUE_MAX	64
-#define N_TOL_FILE_ERRORS   64
+#define N_TOL_FILE_ERRORS	64
 #define BACKLOG			32
 #define BUF_SIZE		0xfffff	/* 0xfffff = 1MiB, 0x400000 = 4MiB */
 
@@ -1160,7 +1160,6 @@ static int process_fsd_action_item(struct fsd_action_item_t *fsd_action_item)
 				fsd_action_item->fpath_local);
 			fsd_action_item->action_error_cnt++;
 			fsd_action_item->fsd_action_state = STATE_TSM_ARCHIVE_ERROR;
-			break;
 		}
 		break;
 	}
@@ -1203,7 +1202,7 @@ static int process_fsd_action_item(struct fsd_action_item_t *fsd_action_item)
 				break;
 			}
 			fsd_action_item->ts[2] = time(NULL);
-			CT_MESSAGE("file '%s' of size %zu archived in  %.3f seconds",
+			CT_MESSAGE("file '%s' of size %zu archived in %.3f seconds",
 				   fsd_action_item->fpath_local,
 				   fsd_action_item->size,
 				   difftime(fsd_action_item->ts[2],
@@ -1224,8 +1223,8 @@ static int process_fsd_action_item(struct fsd_action_item_t *fsd_action_item)
 		break;
 	}
 	case STATE_TSM_ARCHIVE_DONE: {
-		CT_MESSAGE("file '%s' of size %zu successfully copied and archived in "
-			   "seconds %.3f to Lustre and TSM archive",
+		CT_MESSAGE("file '%s' of size %zu successfully copied "
+			   "and archived in %.3f seconds",
 			   fsd_action_item->fpath_local,
 			   fsd_action_item->size,
 			   difftime(fsd_action_item->ts[2],
