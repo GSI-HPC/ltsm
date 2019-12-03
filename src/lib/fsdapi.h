@@ -26,8 +26,9 @@
 #include "common.h"
 
 #define XATTR_FSD_PREFIX	"user.fsd"
+#define XATTR_FSD_STATE		XATTR_FSD_PREFIX".state"
+#define XATTR_FSD_ARCHIVE_ID	XATTR_FSD_PREFIX".arvid"
 #define XATTR_FSD_DESC		XATTR_FSD_PREFIX".desc"
-#define XATTR_FSD_FLAGS		XATTR_FSD_PREFIX".flags"
 
 #define FSD_PROTOCOL_STR(s)							   \
 	s == FSD_CONNECT    ? "FSD_CONNECT"    :				   \

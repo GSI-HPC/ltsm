@@ -22,9 +22,12 @@
 #include <stdint.h>
 #include <time.h>
 #include <unistd.h>
+#include <pthread.h>
+#include <sys/xattr.h>
 #include "CuTest.h"
 #include "common.h"
 #include "fsdapi.c"
+#include "xattr.h"
 #include "test_utils.h"
 
 #define NODE		"polaris"
@@ -36,6 +39,84 @@
 
 #define NUM_FILES       10
 #define LEN_RND_STR     6
+
+void test_fsd_xattr(CuTest *tc)
+{
+	int rc;
+	char rnd_chars[0xffff] = {0};
+	char fpath[NUM_FILES][PATH_MAX];
+
+	memset(fpath, 0, sizeof(char) * NUM_FILES * PATH_MAX);
+
+	for (uint8_t r = 0; r < NUM_FILES; r++) {
+
+		FILE *file;
+		char rnd_s[LEN_RND_STR + 1] = {0};
+
+		rnd_str(rnd_s, LEN_RND_STR);
+		snprintf(fpath[r], PATH_MAX, "/tmp/%s", rnd_s);
+
+		file = fopen(fpath[r], "w+");
+		CuAssertPtrNotNull(tc, file);
+
+		for (uint8_t b = 0; b < rand() % 0xff; b++) {
+
+			const size_t len = rand() % sizeof(rnd_chars);
+			ssize_t bytes_written;
+
+			rnd_str(rnd_chars, len);
+
+			bytes_written = fwrite(rnd_chars, 1, len, file);
+			CuAssertIntEquals(tc, len, bytes_written);
+		}
+		rc = fclose(file);
+		CuAssertIntEquals(tc, 0, rc);
+
+		const uint32_t fsd_action_states[] = {
+			STATE_FSD_COPY_DONE,
+			STATE_LUSTRE_COPY_RUN,
+			STATE_LUSTRE_COPY_ERROR,
+			STATE_LUSTRE_COPY_DONE,
+			STATE_TSM_ARCHIVE_RUN,
+			STATE_TSM_ARCHIVE_ERROR,
+			STATE_TSM_ARCHIVE_DONE,
+			STATE_FILE_OMITTED
+		};
+		uint32_t fsd_action_state = fsd_action_states[rand() %
+							      (sizeof(fsd_action_states) /
+							       sizeof(fsd_action_states[0]))];
+		const int archive_id = rand() % 0xff;
+		char desc[DSM_MAX_DESCR_LENGTH + 1] = {0};
+		rnd_str(desc, rand() % DSM_MAX_DESCR_LENGTH);
+
+		uint32_t fsd_action_state_ac = 0;
+		int archive_id_ac = 0;
+		char desc_ac[DSM_MAX_DESCR_LENGTH + 1] = {0};
+
+		rc = xattr_set_fsd(fpath[r], fsd_action_state, archive_id, desc);
+		CuAssertIntEquals(tc, 0, rc);
+
+		rc = xattr_get_fsd(fpath[r], &fsd_action_state_ac, &archive_id_ac, desc_ac);
+		CuAssertIntEquals(tc, 0, rc);
+
+		CuAssertIntEquals(tc, fsd_action_state, fsd_action_state_ac);
+		CuAssertIntEquals(tc, archive_id, archive_id_ac);
+		CuAssertStrEquals(tc, desc, desc_ac);
+
+		struct fsd_action_item_t fsd_action_item;
+		memset(&fsd_action_item, 0, sizeof(struct fsd_action_item_t));
+		strncpy(fsd_action_item.fpath_local, fpath[r], PATH_MAX);
+		fsd_action_state = fsd_action_states[rand() %
+						     (sizeof(fsd_action_states) /
+						      sizeof(fsd_action_states[0]))];
+		rc = xattr_update_fsd_state(&fsd_action_item, fsd_action_state);
+		CuAssertIntEquals(tc, 0, rc);
+		CuAssertIntEquals(tc, fsd_action_state, fsd_action_item.fsd_action_state);
+
+		rc = unlink(fpath[r]);
+		CuAssertIntEquals(tc, 0, rc);
+	}
+}
 
 void test_fsd_fcalls(CuTest *tc)
 {
@@ -112,6 +193,7 @@ void test_fsd_fcalls(CuTest *tc)
 CuSuite* fsdapi_get_suite()
 {
     CuSuite* suite = CuSuiteNew();
+    SUITE_ADD_TEST(suite, test_fsd_xattr);
     SUITE_ADD_TEST(suite, test_fsd_fcalls);
 
     return suite;

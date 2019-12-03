@@ -27,15 +27,16 @@
 #include <semaphore.h>
 #include <signal.h>
 #include <stdbool.h>
+#include <dirent.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/socket.h>
-#include <sys/xattr.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <lustre/lustreapi.h>
 #include "tsmapi.h"
 #include "fsdapi.h"
+#include "xattr.h"
 #include "queue.h"
 
 #define PORT_DEFAULT_FSD	7625
@@ -87,9 +88,6 @@ static queue_t		 queue;
 static pthread_t	*threads_queue = NULL;
 static pthread_mutex_t	 queue_mutex   = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t	 queue_cond    = PTHREAD_COND_INITIALIZER;
-
-/* Extended attributes handling. */
-static pthread_mutex_t xattr_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 static void usage(const char *cmd_name, const int rc)
 {
@@ -430,70 +428,6 @@ static int identmap_entry(struct fsd_login_t *fsd_login,
 	return rc;
 }
 
-static int xattr_set_fsd_desc(const char *fpath_local,
-			      const char *desc)
-{
-	int rc;
-
-	pthread_mutex_lock(&xattr_mutex);
-	/* Note: extended attributes can be listed with cmd:
-	   getfattr -d -m ".*" -e hex <FILE> */
-	rc = setxattr(fpath_local, XATTR_FSD_DESC, desc,
-		      DSM_MAX_DESCR_LENGTH, 0);
-	pthread_mutex_unlock(&xattr_mutex);
-	if (rc < 0) {
-		rc = -errno;
-		CT_ERROR(rc, "setxattr '%s %s'", fpath_local, XATTR_FSD_DESC);
-	}
-
-	return rc;
-}
-
-static int xattr_set_fsd_state(const char *fpath_local,
-			       const uint32_t fsd_action_state)
-{
-	int rc;
-
-	pthread_mutex_lock(&xattr_mutex);
-	rc = setxattr(fpath_local, XATTR_FSD_FLAGS,
-		      (uint32_t *)&fsd_action_state, sizeof(uint32_t), 0);
-	pthread_mutex_unlock(&xattr_mutex);
-	if (rc < 0) {
-		rc = -errno;
-		CT_ERROR(rc, "setxattr '%s %s'", fpath_local, XATTR_FSD_FLAGS);
-	}
-
-	return rc;
-}
-
-static int xattr_set_fsd_desc_state(const char *fpath_local,
-				    const char *desc,
-				    const uint32_t fsd_action_state)
-{
-	int rc;
-
-	rc = xattr_set_fsd_desc(fpath_local, desc);
-	if (rc)
-		return rc;
-
-	rc = xattr_set_fsd_state(fpath_local, fsd_action_state);
-
-	return rc;
-}
-
-static int xattr_set_fsd_state_sync(struct fsd_action_item_t *fsd_action_item,
-				    const uint32_t fsd_action_state)
-{
-	int rc;
-
-	rc = xattr_set_fsd_state(fsd_action_item->fpath_local,
-				 fsd_action_state);
-	if (rc == 0)
-		fsd_action_item->fsd_action_state = fsd_action_state;
-
-	return rc;
-}
-
 static int enqueue_fsd_item(struct fsd_action_item_t *fsd_action_item)
 {
 	int rc;
@@ -789,9 +723,10 @@ static void *thread_sock_client(void *arg)
 		CT_INFO("[fd=%d,fd=%d] data buffer of size: %zd successfully "
 			"received and sent", *fd_sock, fd_local, bytes_recv_total);
 
-		rc = xattr_set_fsd_desc_state(fpath_local,
-					      fsd_session.fsd_info.desc,
-					      STATE_FSD_COPY_DONE);
+		rc = xattr_set_fsd(fpath_local,
+				   STATE_FSD_COPY_DONE,
+				   archive_id,
+				   fsd_session.fsd_info.desc);
 		if (rc)
 			goto out;
 
@@ -876,6 +811,63 @@ static int fsd_setup(void)
 
 	return rc;
 }
+
+static void re_enqueue(const char *dpath)
+{
+	DIR *dir;
+	struct dirent *entry;
+	char npath[PATH_MAX] = {0};
+
+	dir = opendir(dpath);
+	if (!dir) {
+		CT_ERROR(-errno, "opendir '%s'", dpath);
+
+		return;
+	}
+	while (1) {
+		errno = 0;
+		entry = readdir(dir);
+
+		if (!entry)
+			break;
+
+		switch (entry->d_type) {
+		case DT_REG: {
+
+			int rc;
+			uint32_t fsd_action_state = 0;
+			int archive_id = 0;
+			char desc[DSM_MAX_DESCR_LENGTH + 1] = {0};
+			char fpath[PATH_MAX + 1] = {0};
+
+			snprintf(fpath, PATH_MAX, "%s/%s", dpath, entry->d_name);
+			rc = xattr_get_fsd(fpath, &fsd_action_state,
+					   &archive_id, desc);
+			if (rc)
+				CT_ERROR(rc, "xattr_get_fsd '%s', "
+					 "file cannot be re-enqueued", fpath);
+			else
+				CT_INFO("re-enqueue '%s'", fpath);
+			break;
+		}
+		case DT_DIR: {
+			if (!strcmp(entry->d_name, ".") ||
+			    !strcmp(entry->d_name, ".."))
+				continue;
+
+			snprintf(npath, PATH_MAX, "%s/%s", dpath, entry->d_name);
+			re_enqueue(npath);
+			break;
+		}
+		default:{
+			CT_WARN("skipping '%s', no regular file or directory",
+				entry->d_name);
+		}
+		}
+	} /* End while. */
+	closedir(dir);
+}
+
 
 static void signal_handler(int signal)
 {
@@ -1074,8 +1066,8 @@ static int process_fsd_action_item(struct fsd_action_item_t *fsd_action_item)
 	if (fsd_action_item->action_error_cnt > opt.o_ntol_file_errors) {
 		CT_WARN("file '%s' reached maximum number of tolerated errors, "
 			"and is omitted", fsd_action_item->fpath_local);
-		rc = xattr_set_fsd_state_sync(fsd_action_item,
-					      STATE_FILE_OMITTED);
+		rc = xattr_update_fsd_state(fsd_action_item,
+					    STATE_FILE_OMITTED);
 
 		free(fsd_action_item);
 
@@ -1084,8 +1076,8 @@ static int process_fsd_action_item(struct fsd_action_item_t *fsd_action_item)
 
 	switch (fsd_action_item->fsd_action_state) {
 	case STATE_FSD_COPY_DONE: {
-		rc = xattr_set_fsd_state_sync(fsd_action_item,
-					      STATE_LUSTRE_COPY_RUN);
+		rc = xattr_update_fsd_state(fsd_action_item,
+					    STATE_LUSTRE_COPY_RUN);
 		CT_DEBUG("[rc=%d] setting state from '%s' to '%s'",
 			 rc,
 			 FSD_ACTION_STR(STATE_FSD_COPY_DONE),
@@ -1110,7 +1102,7 @@ static int process_fsd_action_item(struct fsd_action_item_t *fsd_action_item)
 			fsd_action_item->fsd_action_state = STATE_LUSTRE_COPY_ERROR;
 			break;
 		}
-		rc = xattr_set_fsd_state_sync(fsd_action_item,
+		rc = xattr_update_fsd_state(fsd_action_item,
 					      STATE_LUSTRE_COPY_DONE);
 		CT_DEBUG("[rc=%d] setting state from '%s' to '%s'",
 			 rc,
@@ -1144,15 +1136,15 @@ static int process_fsd_action_item(struct fsd_action_item_t *fsd_action_item)
 			"file '%s' to '%s' again",
 			fsd_action_item->fpath_local,
 			fsd_action_item->fsd_info.fpath);
-		rc = xattr_set_fsd_state_sync(fsd_action_item,
-					      STATE_FSD_COPY_DONE);
+		rc = xattr_update_fsd_state(fsd_action_item,
+					    STATE_FSD_COPY_DONE);
 		if (rc)
 			fsd_action_item->action_error_cnt++;
 		break;
 	}
 	case STATE_LUSTRE_COPY_DONE: {
-		rc = xattr_set_fsd_state_sync(fsd_action_item,
-					      STATE_TSM_ARCHIVE_RUN);
+		rc = xattr_update_fsd_state(fsd_action_item,
+					    STATE_TSM_ARCHIVE_RUN);
 		CT_DEBUG("[rc=%d] setting state from '%s' to '%s'",
 			 rc,
 			 FSD_ACTION_STR(STATE_LUSTRE_COPY_DONE),
@@ -1198,8 +1190,8 @@ static int process_fsd_action_item(struct fsd_action_item_t *fsd_action_item)
 		/* Verify whether file is finally archived. */
 		if ((states & HS_EXISTS) && (states && HS_ARCHIVED)) {
 
-			rc = xattr_set_fsd_state_sync(fsd_action_item,
-						      STATE_TSM_ARCHIVE_DONE);
+			rc = xattr_update_fsd_state(fsd_action_item,
+						    STATE_TSM_ARCHIVE_DONE);
 			CT_DEBUG("[rc=%d] setting state from '%s' to '%s'",
 				 rc,
 				 FSD_ACTION_STR(STATE_TSM_ARCHIVE_RUN),
@@ -1228,8 +1220,8 @@ static int process_fsd_action_item(struct fsd_action_item_t *fsd_action_item)
 	case STATE_TSM_ARCHIVE_ERROR: {
 		CT_WARN("tsm archive error, try to archive file '%s' again",
 			fsd_action_item->fpath_local);
-		rc = xattr_set_fsd_state_sync(fsd_action_item,
-					      STATE_LUSTRE_COPY_DONE);
+		rc = xattr_update_fsd_state(fsd_action_item,
+					    STATE_LUSTRE_COPY_DONE);
 		if (rc)
 			fsd_action_item->action_error_cnt++;
 
@@ -1385,6 +1377,9 @@ int main(int argc, char *argv[])
 	rc = fsd_setup();
 	if (rc < 0)
 		return rc;
+
+	/* Re-enqueue files caused e.g. daemon shutdown. */
+	re_enqueue(opt.o_local_mount);
 
 	memset(&sockaddr_srv, 0, sizeof(sockaddr_srv));
 	sockaddr_srv.sin_family = AF_INET;

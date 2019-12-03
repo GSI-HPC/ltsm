@@ -6,6 +6,6 @@ if HAVE_LUSTRE
 endif
 
 noinst_LIBRARIES = libtsmapi.a libfsdapi.a
-noinst_HEADERS = tsmapi.h fsdapi.h common.h log.h list.h queue.h chashtable.h qtable.h measurement.h
+noinst_HEADERS = tsmapi.h fsdapi.h xattr.h common.h log.h list.h queue.h chashtable.h qtable.h measurement.h
 libtsmapi_a_SOURCES = tsmapi.c common.c log.c list.c queue.c chashtable.c qtable.c
 libfsdapi_a_SOURCES = fsdapi.c common.c log.c
