@@ -37,7 +37,7 @@
 #define FSD_HOSTNAME    "localhost"
 #define FSD_PORT         7625
 
-#define NUM_FILES       10
+#define NUM_FILES       200
 #define LEN_RND_STR     6
 
 void test_fsd_xattr(CuTest *tc)
@@ -86,22 +86,34 @@ void test_fsd_xattr(CuTest *tc)
 							      (sizeof(fsd_action_states) /
 							       sizeof(fsd_action_states[0]))];
 		const int archive_id = rand() % 0xff;
-		char desc[DSM_MAX_DESCR_LENGTH + 1] = {0};
-		rnd_str(desc, rand() % DSM_MAX_DESCR_LENGTH);
+		struct fsd_info_t fsd_info = {
+			.fs		   = {0},
+			.fpath		   = {0},
+			.desc		   = {0}
+		};
+		rnd_str(fsd_info.fs, rand() % DSM_MAX_FSNAME_LENGTH);
+		rnd_str(fsd_info.fpath, rand() % PATH_MAX_COMPAT);
+		rnd_str(fsd_info.desc, rand() % DSM_MAX_DESCR_LENGTH);
 
 		uint32_t fsd_action_state_ac = 0;
 		int archive_id_ac = 0;
-		char desc_ac[DSM_MAX_DESCR_LENGTH + 1] = {0};
+		struct fsd_info_t fsd_info_ac = {
+			.fs		      = {0},
+			.fpath		      = {0},
+			.desc		      = {0}
+		};
 
-		rc = xattr_set_fsd(fpath[r], fsd_action_state, archive_id, desc);
+		rc = xattr_set_fsd(fpath[r], fsd_action_state, archive_id, &fsd_info);
 		CuAssertIntEquals(tc, 0, rc);
 
-		rc = xattr_get_fsd(fpath[r], &fsd_action_state_ac, &archive_id_ac, desc_ac);
+		rc = xattr_get_fsd(fpath[r], &fsd_action_state_ac, &archive_id_ac, &fsd_info_ac);
 		CuAssertIntEquals(tc, 0, rc);
 
 		CuAssertIntEquals(tc, fsd_action_state, fsd_action_state_ac);
 		CuAssertIntEquals(tc, archive_id, archive_id_ac);
-		CuAssertStrEquals(tc, desc, desc_ac);
+		CuAssertStrEquals(tc, fsd_info.fs, fsd_info_ac.fs);
+		CuAssertStrEquals(tc, fsd_info.fpath, fsd_info_ac.fpath);
+		CuAssertStrEquals(tc, fsd_info.desc, fsd_info_ac.desc);
 
 		struct fsd_action_item_t fsd_action_item;
 		memset(&fsd_action_item, 0, sizeof(struct fsd_action_item_t));

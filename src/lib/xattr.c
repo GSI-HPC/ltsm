@@ -25,10 +25,14 @@ static pthread_mutex_t xattr_mutex = PTHREAD_MUTEX_INITIALIZER;
 int xattr_get_fsd(const char *fpath_local,
 		  uint32_t *fsd_action_state,
 		  int *archive_id,
-		  char *desc)
+		  struct fsd_info_t *fsd_info)
 {
 	int rc;
-	char _desc[DSM_MAX_DESCR_LENGTH] = {0};
+	struct fsd_info_t _fsd_info = {
+		.fs		    = {0},
+		.fpath		    = {0},
+		.desc		    = {0}
+	};
 
 	pthread_mutex_lock(&xattr_mutex);
 
@@ -46,12 +50,29 @@ int xattr_get_fsd(const char *fpath_local,
 		goto out;
 	}
 
-	rc = getxattr(fpath_local, XATTR_FSD_DESC,
-		      (char *)_desc, DSM_MAX_DESCR_LENGTH);
-	if (rc < 0)
+	rc = getxattr(fpath_local, XATTR_FSD_FS,
+		      (char *)_fsd_info.fs, DSM_MAX_FSNAME_LENGTH);
+	if (rc < 0) {
 		rc = -errno;
-	else
-		strncpy(desc, _desc, DSM_MAX_DESCR_LENGTH);
+		goto out;
+	} else
+		strncpy(fsd_info->fs, _fsd_info.fs, DSM_MAX_FSNAME_LENGTH);
+
+	rc = getxattr(fpath_local, XATTR_FSD_FPATH,
+		      (char *)_fsd_info.fpath, PATH_MAX_COMPAT);
+	if (rc < 0) {
+		rc = -errno;
+		goto out;
+	} else
+		strncpy(fsd_info->fpath, _fsd_info.fpath, PATH_MAX_COMPAT);
+
+	rc = getxattr(fpath_local, XATTR_FSD_DESC,
+		      (char *)_fsd_info.desc, DSM_MAX_DESCR_LENGTH);
+	if (rc < 0) {
+		rc = -errno;
+		goto out;
+	} else
+		strncpy(fsd_info->desc, _fsd_info.desc, DSM_MAX_DESCR_LENGTH);
 
 out:
 	pthread_mutex_unlock(&xattr_mutex);
@@ -62,7 +83,7 @@ out:
 int xattr_set_fsd(const char *fpath_local,
 		  const uint32_t fsd_action_state,
 		  const int archive_id,
-		  const char *desc)
+		  const struct fsd_info_t *fsd_info)
 {
 	int rc;
 
@@ -84,8 +105,24 @@ int xattr_set_fsd(const char *fpath_local,
 		goto out;
 	}
 
+	rc = setxattr(fpath_local, XATTR_FSD_FS,
+		      (char *)fsd_info->fs, DSM_MAX_FSNAME_LENGTH, 0);
+	if (rc < 0) {
+		rc = -errno;
+		CT_ERROR(rc, "setxattr '%s %s'", fpath_local, XATTR_FSD_FS);
+		goto out;
+	}
+
+	rc = setxattr(fpath_local, XATTR_FSD_FPATH,
+		      (char *)fsd_info->fpath, PATH_MAX_COMPAT, 0);
+	if (rc < 0) {
+		rc = -errno;
+		CT_ERROR(rc, "setxattr '%s %s'", fpath_local, XATTR_FSD_FPATH);
+		goto out;
+	}
+
 	rc = setxattr(fpath_local, XATTR_FSD_DESC,
-		      (char *)desc, DSM_MAX_DESCR_LENGTH, 0);
+		      (char *)fsd_info->desc, DSM_MAX_DESCR_LENGTH, 0);
 	if (rc < 0) {
 		rc = -errno;
 		CT_ERROR(rc, "setxattr '%s %s'", fpath_local, XATTR_FSD_DESC);

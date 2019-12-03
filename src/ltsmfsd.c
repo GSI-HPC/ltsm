@@ -725,7 +725,7 @@ static void *thread_sock_client(void *arg)
 		rc = xattr_set_fsd(fpath_local,
 				   STATE_FSD_COPY_DONE,
 				   archive_id,
-				   fsd_session.fsd_info.desc);
+				   &fsd_session.fsd_info);
 		if (rc)
 			goto out;
 
@@ -837,12 +837,16 @@ static void re_enqueue(const char *dpath)
 			int rc;
 			uint32_t fsd_action_state = 0;
 			int archive_id = 0;
-			char desc[DSM_MAX_DESCR_LENGTH + 1] = {0};
 			char fpath_local[PATH_MAX + 1] = {0};
+			struct fsd_info_t fsd_info = {
+				.fs		   = {0},
+				.fpath		   = {0},
+				.desc		   = {0}
+			};
 
 			snprintf(fpath_local, PATH_MAX, "%s/%s", dpath, entry->d_name);
 			rc = xattr_get_fsd(fpath_local, &fsd_action_state,
-					   &archive_id, desc);
+					   &archive_id, &fsd_info);
 			if (rc)
 				CT_ERROR(rc, "xattr_get_fsd '%s', "
 					 "file cannot be re-enqueued", fpath_local);

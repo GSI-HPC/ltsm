@@ -21,18 +21,22 @@
 
 #include "fsdapi.h"
 
+/* PATH_MAX = 4096 does not work on EXT4. It results in
+   No space left on device (28). PATH_MAX though works on XFS. */
+#define PATH_MAX_COMPAT 2048
+
 /* Note: extended attributes can be listed with cmd:
    getfattr -d -m ".*" -e hex <FILE> */
 
 int xattr_get_fsd(const char *fpath_local,
 		  uint32_t *fsd_action_state,
 		  int *archive_id,
-		  char *desc);
+		  struct fsd_info_t *fsd_info);
 
 int xattr_set_fsd(const char *fpath_local,
 		  const uint32_t fsd_action_state,
 		  const int archive_id,
-		  const char *desc);
+		  const struct fsd_info_t *fsd_info);
 
 int xattr_update_fsd_state(struct fsd_action_item_t *fsd_action_item,
 			   const uint32_t fsd_action_state);
