@@ -469,7 +469,7 @@ static int enqueue_fsd_item(struct fsd_action_item_t *fsd_action_item)
 }
 
 static struct fsd_action_item_t* create_fsd_item(const size_t bytes_recv_total,
-						 struct fsd_session_t *fsd_session,
+						 struct fsd_info_t *fsd_info,
 						 char *fpath_local, int archive_id)
 {
 	int rc;
@@ -485,8 +485,7 @@ static struct fsd_action_item_t* create_fsd_item(const size_t bytes_recv_total,
 
 	fsd_action_item->fsd_action_state = STATE_FSD_COPY_DONE;
 	fsd_action_item->size = bytes_recv_total;
-	memcpy(&fsd_action_item->fsd_info, &fsd_session->fsd_info,
-	       sizeof(struct fsd_info_t));
+	memcpy(&fsd_action_item->fsd_info, fsd_info, sizeof(struct fsd_info_t));
 	fsd_action_item->ts[0] = time(NULL);
 	fsd_action_item->ts[1] = 0;
 	fsd_action_item->ts[2] = 0;
@@ -733,7 +732,8 @@ static void *thread_sock_client(void *arg)
 		/* Producer. */
 		struct fsd_action_item_t *fsd_action_item = NULL;
 
-		fsd_action_item = create_fsd_item(bytes_recv_total, &fsd_session,
+		fsd_action_item = create_fsd_item(bytes_recv_total,
+						  &fsd_session.fsd_info,
 						  fpath_local, archive_id);
 		if (fsd_action_item == NULL)
 			goto out;
@@ -838,16 +838,50 @@ static void re_enqueue(const char *dpath)
 			uint32_t fsd_action_state = 0;
 			int archive_id = 0;
 			char desc[DSM_MAX_DESCR_LENGTH + 1] = {0};
-			char fpath[PATH_MAX + 1] = {0};
+			char fpath_local[PATH_MAX + 1] = {0};
 
-			snprintf(fpath, PATH_MAX, "%s/%s", dpath, entry->d_name);
-			rc = xattr_get_fsd(fpath, &fsd_action_state,
+			snprintf(fpath_local, PATH_MAX, "%s/%s", dpath, entry->d_name);
+			rc = xattr_get_fsd(fpath_local, &fsd_action_state,
 					   &archive_id, desc);
 			if (rc)
 				CT_ERROR(rc, "xattr_get_fsd '%s', "
-					 "file cannot be re-enqueued", fpath);
-			else
-				CT_INFO("re-enqueue '%s'", fpath);
+					 "file cannot be re-enqueued", fpath_local);
+			else {
+#if 0
+				struct stat st;
+				struct fsd_action_item_t *fsd_action_item = NULL;
+				struct fsd_info_t fsd_info;
+
+				rc = stat(fpath_local, &st);
+				if (rc) {
+					CT_ERROR(-errno, "stat '%s'", fpath_local);
+					break;
+				}
+				memset(&fsd_info, 0, sizeof(struct fsd_info_t));
+				strncpy(fsd_info.desc, desc, DSM_MAX_DESCR_LENGTH);
+				/* TODO:
+				   strncpy(fsd_info.fs, fs, DSM_MAX_FS_LENGTH);
+				   strncpy(fsd_info.fpath, fpath, PATH_MAX);
+				 */
+
+				fsd_action_item = create_fsd_item(st.st_size,
+								  &fsd_info,
+								  fpath_local,
+								  archive_id);
+				if (!fsd_action_item) {
+					CT_WARN("create_fsd_item '%s' failed", fpath_local);
+					break;
+				}
+				fsd_action_item->fsd_action_state = fsd_action_state;
+
+				rc = enqueue_fsd_item(fsd_action_item);
+				if (rc) {
+					free(fsd_action_item);
+					break;
+				}
+#endif
+				CT_INFO("re-enqueue '%s'", fpath_local);
+			}
 			break;
 		}
 		case DT_DIR: {
