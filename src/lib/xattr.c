@@ -56,7 +56,7 @@ int xattr_get_fsd(const char *fpath_local,
 		rc = -errno;
 		goto out;
 	} else
-		strncpy(fsd_info->fs, _fsd_info.fs, DSM_MAX_FSNAME_LENGTH);
+		strncpy(fsd_info->fs, _fsd_info.fs, sizeof(fsd_info->fs));
 
 	rc = getxattr(fpath_local, XATTR_FSD_FPATH,
 		      (char *)_fsd_info.fpath, PATH_MAX_COMPAT);
@@ -64,7 +64,7 @@ int xattr_get_fsd(const char *fpath_local,
 		rc = -errno;
 		goto out;
 	} else
-		strncpy(fsd_info->fpath, _fsd_info.fpath, PATH_MAX_COMPAT);
+		strncpy(fsd_info->fpath, _fsd_info.fpath, sizeof(fsd_info->fpath));
 
 	rc = getxattr(fpath_local, XATTR_FSD_DESC,
 		      (char *)_fsd_info.desc, DSM_MAX_DESCR_LENGTH);
@@ -72,7 +72,7 @@ int xattr_get_fsd(const char *fpath_local,
 		rc = -errno;
 		goto out;
 	} else
-		strncpy(fsd_info->desc, _fsd_info.desc, DSM_MAX_DESCR_LENGTH);
+		strncpy(fsd_info->desc, _fsd_info.desc, sizeof(fsd_info->desc));
 
 out:
 	pthread_mutex_unlock(&xattr_mutex);

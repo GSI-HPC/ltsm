@@ -156,7 +156,7 @@ static int parse_line_ident(char *line, struct ident_map_t *ident_map)
 	/* Parse node name. */
 	token = strtok_r(line, delim, &saveptr);
 	if (token) {
-		strncpy(ident_map->node, token, sizeof(ident_map->node));
+		strncpy(ident_map->node, token, sizeof(ident_map->node) - 1);
 		cnt_token++;
 	}
 
@@ -164,7 +164,7 @@ static int parse_line_ident(char *line, struct ident_map_t *ident_map)
 	token = strtok_r(NULL, delim, &saveptr);
 	if (token && cnt_token++) {
 		strncpy(ident_map->servername,
-			token, sizeof(ident_map->servername));
+			token, sizeof(ident_map->servername) - 1);
 	}
 	/* Parse archive ID. */
 	token = strtok_r(NULL, delim, &saveptr);
@@ -415,7 +415,7 @@ static int identmap_entry(struct fsd_login_t *fsd_login,
 			"archive_id %d, uid %d, gid %d", node->data,
 			ident_map->servername, ident_map->archive_id,
 			ident_map->uid, ident_map->gid);
-		strncpy(servername, ident_map->servername, MAX_OPTIONS_LENGTH);
+		strncpy(servername, ident_map->servername, sizeof(ident_map->servername) + 0);
 		*archive_id = ident_map->archive_id;
 		*uid = ident_map->uid;
 		*gid = ident_map->gid;
