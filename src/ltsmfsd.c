@@ -851,22 +851,14 @@ static void re_enqueue(const char *dpath)
 				CT_ERROR(rc, "xattr_get_fsd '%s', "
 					 "file cannot be re-enqueued", fpath_local);
 			else {
-#if 0
 				struct stat st;
 				struct fsd_action_item_t *fsd_action_item = NULL;
-				struct fsd_info_t fsd_info;
 
 				rc = stat(fpath_local, &st);
 				if (rc) {
 					CT_ERROR(-errno, "stat '%s'", fpath_local);
 					break;
 				}
-				memset(&fsd_info, 0, sizeof(struct fsd_info_t));
-				strncpy(fsd_info.desc, desc, DSM_MAX_DESCR_LENGTH);
-				/* TODO:
-				   strncpy(fsd_info.fs, fs, DSM_MAX_FS_LENGTH);
-				   strncpy(fsd_info.fpath, fpath, PATH_MAX);
-				 */
 
 				fsd_action_item = create_fsd_item(st.st_size,
 								  &fsd_info,
@@ -876,6 +868,9 @@ static void re_enqueue(const char *dpath)
 					CT_WARN("create_fsd_item '%s' failed", fpath_local);
 					break;
 				}
+				if (fsd_action_state & STATE_FILE_OMITTED) {
+					fsd_action_state = STATE_FSD_COPY_DONE;
+				}
 				fsd_action_item->fsd_action_state = fsd_action_state;
 
 				rc = enqueue_fsd_item(fsd_action_item);
@@ -883,7 +878,6 @@ static void re_enqueue(const char *dpath)
 					free(fsd_action_item);
 					break;
 				}
-#endif
 				CT_INFO("re-enqueue '%s'", fpath_local);
 			}
 			break;
