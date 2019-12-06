@@ -24,6 +24,6 @@ if HAVE_TSM_LUSTRE
 
     ltsmfsd_CFLAGS = -I@LUSTRE_SRC_DIR@/lustre/include -I@LUSTRE_SRC_DIR@/lustre/include/uapi -I@TSM_SRC_DIR@/ -I$(top_srcdir)/src/lib
     sbin_PROGRAMS += ltsmfsd
-    ltsmfsd_SOURCES = ltsmfsd.c $(top_srcdir)/src/lib/xattr.c
+    ltsmfsd_SOURCES = ltsmfsd.c
     ltsmfsd_LDADD = $(top_srcdir)/src/lib/libtsmapi.a $(top_srcdir)/src/lib/libfsdapi.a
 endif
