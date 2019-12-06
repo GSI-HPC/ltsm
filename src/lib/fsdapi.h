@@ -23,6 +23,7 @@
 #include <config.h>
 #endif
 
+#include <limits.h>
 #include "common.h"
 
 #define XATTR_FSD_PREFIX	"user.fsd"
