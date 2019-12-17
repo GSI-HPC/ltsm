@@ -904,9 +904,11 @@ static void signal_handler(int signal)
 
 static int copy_action(struct fsd_action_item_t *fsd_action_item)
 {
+	int rc;
 	int fd_read = -1;
 	int fd_write = -1;
-	int rc;
+	char fpath_sub[PATH_MAX + 1] = {0};
+	uint16_t i = 0;
 
 	fd_read = open(fsd_action_item->fpath_local, O_RDONLY);
 	if (fd_read < 0) {
@@ -915,29 +917,29 @@ static int copy_action(struct fsd_action_item_t *fsd_action_item)
 		return rc;
 	}
 
-	char *fpath_dup = strdup(fsd_action_item->fsd_info.fpath);
-	if (!fpath_dup) {
-		rc = -EINVAL;
-		CT_ERROR(rc, "strdup '%s'", fsd_action_item->fsd_info.fpath);
-		goto out;
-	}
-	uint16_t i = 0;
-	uint16_t j = 0;
-	while (fpath_dup[i] != '\0') {
-		if (fpath_dup[i] == '/')
-			j = i;
+	while (fsd_action_item->fsd_info.fpath[i] != '\0') {
+		if (fsd_action_item->fsd_info.fpath[i] == '/' && i > 0) {
+			strncpy(fpath_sub, fsd_action_item->fsd_info.fpath, i);
+			rc = mkdir(fpath_sub,
+				   S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH);
+			if (rc < 0) {
+				if (errno != EEXIST) {
+					rc = -errno;
+					CT_ERROR(rc, "mkdir '%s'", fpath_sub);
+					goto out;
+				}
+				goto next; /* Directory exists, skip it. */
+                        }
+			rc = chown(fpath_sub, fsd_action_item->uid, fsd_action_item->gid);
+			if (rc < 0) {
+				rc = -errno;
+				CT_ERROR(rc, "chown '%s', uid %zu, gid %zu",
+					 fpath_sub, fsd_action_item->uid, fsd_action_item->gid);
+				goto out;
+			}
+		}
+	next:
 		i++;
-	}
-	fpath_dup[j + 1] = '\0';
-
-	/* Make sure the directory exists. */
-	rc = mkdir_p(fpath_dup,
-		     S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH);
-	CT_DEBUG("[rc=%d] mkdir_p '%s'", rc, fpath_dup);
-	if (rc) {
-		rc = -errno;
-		CT_ERROR(rc, "mkdir_p '%s'", fpath_dup);
-		goto out;
 	}
 
 	fd_write = open(fsd_action_item->fsd_info.fpath, O_WRONLY | O_CREAT | O_TRUNC, 00664);
@@ -1023,9 +1025,6 @@ out:
 
 	if (fd_write != -1)
 		close(fd_write);
-
-	if (fpath_dup)
-		free(fpath_dup);
 
 	return rc;
 }
