@@ -158,9 +158,9 @@ void test_fsd_fcalls(CuTest *tc)
 #endif
 
 		rnd_str(rnd_s, LEN_RND_STR);
-		snprintf(fpath[r], PATH_MAX, "/lustre/%s", rnd_s);
+		snprintf(fpath[r], PATH_MAX, "/lustre/fsdapi/%s", rnd_s);
 
-		rc = fsd_fopen("/", fpath[r], NULL, &fsd_session);
+		rc = fsd_fopen("/lustre", fpath[r], NULL, &fsd_session);
 		CuAssertIntEquals(tc, 0, rc);
 
 		for (uint8_t b = 0; b < rand() % 0xff; b++) {
@@ -180,7 +180,7 @@ void test_fsd_fcalls(CuTest *tc)
 		CuAssertIntEquals(tc, 0, rc);
 #if 0
 		/* Verify data is correctly copied to fsd server. */
-		snprintf(fpath[r], PATH_MAX, "/fsddata/lustre/%s", rnd_s);
+		snprintf(fpath[r], PATH_MAX, "/fsddata/lustre/fsdapi/%s", rnd_s);
 		CT_DEBUG("fpath fsd '%s'", fpath[r]);
 		sleep(2); /* Give Linux some time to flush data to disk. */
 		rc = crc32file(fpath[r], &crc32sum_file);

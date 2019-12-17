@@ -919,12 +919,28 @@ static int copy_action(struct fsd_action_item_t *fsd_action_item)
 		return rc;
 	}
 
+	char *fpath_dup = strdup(fsd_action_item->fsd_info.fpath);
+	if (!fpath_dup) {
+		rc = -EINVAL;
+		CT_ERROR(rc, "strdup '%s'", fsd_action_item->fsd_info.fpath);
+		goto out;
+	}
+	uint16_t i = 0;
+	uint16_t j = 0;
+	while (fpath_dup[i] != '\0') {
+		if (fpath_dup[i] == '/')
+			j = i;
+		i++;
+	}
+	fpath_dup[j + 1] = '\0';
+
 	/* Make sure the directory exists. */
-	rc = mkdir_p(fsd_action_item->fsd_info.fpath,
+	rc = mkdir_p(fpath_dup,
 		     S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH);
+	CT_DEBUG("[rc=%d] mkdir_p '%s'", rc, fpath_dup);
 	if (rc) {
 		rc = -errno;
-		CT_ERROR(rc, "mkdir_p '%s'", fsd_action_item->fsd_info.fpath);
+		CT_ERROR(rc, "mkdir_p '%s'", fpath_dup);
 		goto out;
 	}
 
@@ -999,6 +1015,9 @@ out:
 
 	if (fd_write != -1)
 		close(fd_write);
+
+	if (fpath_dup)
+		free(fpath_dup);
 
 	return rc;
 }
