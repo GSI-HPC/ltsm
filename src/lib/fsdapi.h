@@ -101,6 +101,8 @@ struct fsd_action_item_t {
 	time_t ts[3];
 	size_t action_error_cnt;
 	int archive_id;
+	uid_t uid;
+	gid_t gid;
 };
 
 int fsd_send(struct fsd_session_t *fsd_session,

@@ -469,8 +469,9 @@ static int enqueue_fsd_item(struct fsd_action_item_t *fsd_action_item)
 }
 
 static struct fsd_action_item_t* create_fsd_item(const size_t bytes_recv_total,
-						 struct fsd_info_t *fsd_info,
-						 char *fpath_local, int archive_id)
+						 const struct fsd_info_t *fsd_info,
+						 const char *fpath_local, const int archive_id,
+						 const uid_t uid, const gid_t gid)
 {
 	int rc;
 	struct fsd_action_item_t *fsd_action_item;
@@ -491,12 +492,13 @@ static struct fsd_action_item_t* create_fsd_item(const size_t bytes_recv_total,
 	fsd_action_item->ts[2] = 0;
 	strncpy(fsd_action_item->fpath_local, fpath_local, PATH_MAX);
 	fsd_action_item->archive_id = archive_id;
+	fsd_action_item->uid = uid;
+	fsd_action_item->gid = gid;
 
 	return fsd_action_item;
 }
 
 static int init_fsd_local(char **fpath_local, int *fd_local,
-			  const uid_t uid, const gid_t gid,
 			  const struct fsd_session_t *fsd_session)
 {
 	int rc;
@@ -548,15 +550,6 @@ static int init_fsd_local(char **fpath_local, int *fd_local,
 		rc = -errno;
 		CT_ERROR(rc, "open '%s'", *fpath_local);
 		return rc;
-	}
-
-	/* Change owner and group. */
-	rc = fchown(*fd_local, uid, gid);
-	CT_DEBUG("[rc=%d,fd=%d] fchown uid %zu gid %zu", rc, *fd_local,
-		 uid, gid);
-	if (rc) {
-		rc = -errno;
-		CT_ERROR(rc, "fchown uid %zu gid %zu", uid, gid);
 	}
 
 	return rc;
@@ -697,7 +690,7 @@ static void *thread_sock_client(void *arg)
 			*fd_sock, fsd_session.fsd_login.node,
 			fsd_session.fsd_info.fpath);
 
-		rc = init_fsd_local(&fpath_local, &fd_local, uid, gid, &fsd_session);
+		rc = init_fsd_local(&fpath_local, &fd_local, &fsd_session);
 		if (rc) {
 			CT_ERROR(rc, "init_fsd_local");
 			goto out;
@@ -734,7 +727,8 @@ static void *thread_sock_client(void *arg)
 
 		fsd_action_item = create_fsd_item(bytes_recv_total,
 						  &fsd_session.fsd_info,
-						  fpath_local, archive_id);
+						  fpath_local, archive_id,
+						  uid, gid);
 		if (fsd_action_item == NULL)
 			goto out;
 
@@ -863,7 +857,9 @@ static void re_enqueue(const char *dpath)
 				fsd_action_item = create_fsd_item(st.st_size,
 								  &fsd_info,
 								  fpath_local,
-								  archive_id);
+								  archive_id,
+								  st.st_uid,
+								  st.st_uid);
 				if (!fsd_action_item) {
 					CT_WARN("create_fsd_item '%s' failed", fpath_local);
 					break;
@@ -1008,6 +1004,18 @@ static int copy_action(struct fsd_action_item_t *fsd_action_item)
 		fd_read, fsd_action_item->fpath_local,
 		fd_write, fsd_action_item->fsd_info.fpath,
 		bytes_read_total);
+
+	/* Change owner and group. */
+	rc = fchown(fd_write, fsd_action_item->uid, fsd_action_item->gid);
+	CT_DEBUG("[rc=%d,fd=%d] fchown '%s', uid %zu gid %zu", rc, fd_write,
+		 fsd_action_item->fsd_info.fpath,
+		 fsd_action_item->uid, fsd_action_item->gid);
+	if (rc) {
+		rc = -errno;
+		CT_ERROR(rc, "fchown '%s', uid %zu, gid %zu",
+			 fsd_action_item->fsd_info.fpath,
+			 fsd_action_item->uid, fsd_action_item->gid);
+	}
 
 out:
 	if (fd_read != -1)
