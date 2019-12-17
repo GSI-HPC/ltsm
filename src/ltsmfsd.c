@@ -125,7 +125,7 @@ static void print_ident(void *data)
 	struct ident_map_t *ident_map =
 		(struct ident_map_t *)data;
 	CT_INFO("node: '%s', servername: '%s', archive_id: %d, "
-		"uid: %lu, gid: %lu",
+		"uid: %d, gid: %d",
 		ident_map->node, ident_map->servername, ident_map->archive_id,
 		ident_map->uid, ident_map->gid);
 }
@@ -918,6 +918,16 @@ static int copy_action(struct fsd_action_item_t *fsd_action_item)
 		CT_ERROR(rc, "open '%s'", fsd_action_item->fpath_local);
 		return rc;
 	}
+
+	/* Make sure the directory exists. */
+	rc = mkdir_p(fsd_action_item->fsd_info.fpath,
+		     S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH);
+	if (rc) {
+		rc = -errno;
+		CT_ERROR(rc, "mkdir_p '%s'", fsd_action_item->fsd_info.fpath);
+		goto out;
+	}
+
 	fd_write = open(fsd_action_item->fsd_info.fpath, O_WRONLY | O_CREAT | O_TRUNC, 00664);
 	if (fd_write < 0) {
 		rc = -errno;
