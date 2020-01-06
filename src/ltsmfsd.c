@@ -89,6 +89,9 @@ static pthread_t	*threads_queue = NULL;
 static pthread_mutex_t	 queue_mutex   = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t	 queue_cond    = PTHREAD_COND_INITIALIZER;
 
+/* TSM connect authentication. */
+static pthread_mutex_t tsm_connect_mutex = PTHREAD_MUTEX_INITIALIZER;
+
 static void usage(const char *cmd_name, const int rc)
 {
 	fprintf(stdout, "usage: %s [options] <lustre_mount_point>\n"
@@ -665,14 +668,17 @@ static void *thread_sock_client(void *arg)
 		   DEFAULT_FSNAME,
 		   DEFAULT_FSTYPE);
 
+	pthread_mutex_lock(&tsm_connect_mutex);
 	rc = tsm_connect(&login, &session);
 	CT_DEBUG("[rc=%d] tsm_connect", rc);
 	if (rc) {
 		CT_ERROR(rc, "tsm_connect");
 		tsm_disconnect(&session);
+		pthread_mutex_unlock(&tsm_connect_mutex);
 		goto out;
 	}
 	tsm_disconnect(&session);
+	pthread_mutex_unlock(&tsm_connect_mutex);
 
 	do {
 		/* State 2: Client calls fsd_fopen(...) or fsd_disconnect(...). */
