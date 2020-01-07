@@ -168,8 +168,8 @@ void tsm_cleanup(const dsBool_t mt_flag);
 dsInt16_t tsm_connect(struct login_t *login, struct session_t *session);
 void tsm_disconnect(struct session_t *session);
 
-dsmAppVersion get_appapi_ver();
-dsmApiVersionEx get_libapi_ver();
+dsmAppVersion get_appapi_ver(void);
+dsmApiVersionEx get_libapi_ver(void);
 
 dsInt16_t tsm_check_free_mountp(const char *fs, struct session_t *session);
 dsInt16_t tsm_query_session(struct session_t *session);
