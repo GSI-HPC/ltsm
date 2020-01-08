@@ -2161,9 +2161,9 @@ static int tsm_fopen_write(struct session_t *session)
 		arch_data.descr = desc;
 	}
 
-	/* The size is not known a priori, thus set it to maximum. */
-	session->tsm_file->archive_info.obj_info.size.hi = ~((dsUint32_t)0);
-	session->tsm_file->archive_info.obj_info.size.lo = ~((dsUint32_t)0);
+	/* The size is not known a priori, thus set it to 2^31 = 2GB. */
+	session->tsm_file->archive_info.obj_info.size.hi = 0;
+	session->tsm_file->archive_info.obj_info.size.lo = 1U << 31;
 
 	rc = obj_attr_prepare(&session->tsm_file->obj_attr,
 			      &session->tsm_file->archive_info);
