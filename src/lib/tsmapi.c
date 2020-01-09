@@ -2331,7 +2331,7 @@ ssize_t tsm_fwrite(const void *ptr, size_t size, size_t nmemb,
 			data_blk.numBytes);
 	}
 
-	return rc == 0 ? data_blk.numBytes : -1;
+	return rc == 0 ? (ssize_t)data_blk.numBytes : (ssize_t)-1;
 }
 
 int tsm_fclose(struct session_t *session)
