@@ -80,17 +80,18 @@ void test_tsm_fcalls(CuTest *tc)
 			buf = calloc(buf_size, sizeof(unsigned char));
 			CuAssertPtrNotNull(tc, buf);
 
-			for (size_t r = 0; r < buf_size; r++)
-				buf[r] = rand() % 256;
+			for (size_t i = 0; i < buf_size; i++)
+				buf[i] = rand() % 256;
 
 			size_t written = 0;
 			size_t total_written = 0;
-			size_t rand_nmemb;
 			size_t to_write = buf_size;
-
-			size_t written_tsm = 0;
 			size_t total_written_tsm = 0;
+
 			do {
+				size_t rand_nmemb;
+				size_t written_tsm;
+
 				rand_nmemb = 1 + (rand() % buf_size);
 				written = fwrite(buf, 1, rand_nmemb, file);
 				total_written += written;
