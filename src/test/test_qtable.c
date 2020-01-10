@@ -244,7 +244,7 @@ void test_qtable_replace_older2(CuTest *tc)
 	sprintf(qra_data.objName.fs, "%s", "fstest:");
 	sprintf(qra_data.objName.hl, "%s", "/hltest/");
 	for (uint32_t n = 0; n < N; n++) {
-		sprintf(qra_data.objName.ll, "%s%d", "/lltest", n);
+		sprintf(qra_data.objName.ll, "%s%u", "/lltest", n);
 		rc = insert_qtable(&qtable, &qra_data);
 		CuAssertTrue(tc, rc == DSM_RC_SUCCESSFUL);
 	}
@@ -357,7 +357,7 @@ void test_qtable_sort_date_ascending(CuTest *tc)
 		qra_data.insDate.hour = rand() % 24;
 		qra_data.insDate.minute = rand() % 60;
 		qra_data.insDate.second = rand() % 60;
-		sprintf(qra_data.objName.ll, "%s%d", "/lltest", n);
+		sprintf(qra_data.objName.ll, "%s%u", "/lltest", n);
 		rc = insert_qtable(&qtable, &qra_data);
 		CuAssertTrue(tc, rc == DSM_RC_SUCCESSFUL);
 	}
@@ -463,7 +463,7 @@ void test_qtable_sort_date_descending(CuTest *tc)
 		qra_data.insDate.hour = rand() % 24;
 		qra_data.insDate.minute = rand() % 60;
 		qra_data.insDate.second = rand() % 60;
-		sprintf(qra_data.objName.ll, "%s%d", "/lltest", n);
+		sprintf(qra_data.objName.ll, "%s%u", "/lltest", n);
 		rc = insert_qtable(&qtable, &qra_data);
 		CuAssertTrue(tc, rc == DSM_RC_SUCCESSFUL);
 	}
