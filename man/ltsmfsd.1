@@ -1,0 +1,57 @@
+.TH ltsmfsd 1 "January 2020" TSM "user utilities"
+.SH NAME
+ltsmfsd \- Daemon that receives data via socket communication, copies data to a Lustre file system and finally archive data on TSM server.
+.SH SYNOPSIS
+ltsmfsd [\fIOPTION\fR]... LUSTRE_MOUNT_POINT
+.SH DESCRIPTION
+.SS
+.BR OPTIONS:
+Mandatory arguments of long options are mandatory for short options
+.PP
+REQUIRED
+.TP
+.BR \-l ", " \-\-localfs =\fINAME\fR
+The mount point of local file system for intermediate storage.
+.TP
+.BR \-i ", " \-\-identmap =\fIFILE\fR
+File consists of lines of form: node, TSM servername, archive-id and uid/gid mapping.
+Read conf \fIFILE\fR with options: \fInode\fR, \fIservername\fR, \fIarchive-id\fR, \fIuid\fR and \fIgid\fR.
+Syntax in conf \fIFILE\fR is \fIoption\fR \fIvalue\fR where separators are whitespace(s) and tabulator(s). The character # is treated as a comment and strings after character # are ignored.
+.PP
+OPTIONAL
+.TP
+.BR \-p ", " \-\-port
+Socket port accepting connections. Default is 7625.
+.TP
+.BR \-s ", " \-\-sthreads
+Number of socket threads accepting connections. Default is 4.
+.TP
+.BR \-q ", " \-\-qthreads
+Number of queue worker threads enqueueing and dequeueing actions. Default is 4.
+.TP
+.BR \-t ", " \-\-tolerr
+Number of tolerated file errors before file is omitted. Default is 16.
+.TP
+.BR \-v ", " \-\-verbose =\fIerror\fR|\fIwarn\fR|\fImessage\fR|\fIinfo\fR|\fIdebug\fR
+Causes ltsmfsd to be more verbose in printing messages. Default is \fImessage\fR.
+.TP
+.BR \-h ", " \-\-help
+Display help and exit.
+.SS
+.BR LUSTRE_MOUNT_POINT:
+.PP
+Directory where a Lustre filesystem is mounted at. This filesystem needs to have HSM functionality enabled. Note, the TSM filespace name is set to the LUSTRE_MOUNT_POINT.
+
+.SH REPORTING BUGS
+Please report bugs to <http://github.com/tstibor/ltsm/issues>
+
+.SH COPYRIGHT
+Copyright \(co 2020 GSI Helmholtz Centre for Heavy Ion Research
+.br
+License GPLv2: GNU GPL version 2 <https://www.gnu.org/licenses/>.
+.br
+This is free software: you are free to change and redistribute it.
+There is NO WARRANTY, to the extent permitted by law.
+
+.SH SEE ALSO
+Github project at <http://github.com/tstibor/ltsm>

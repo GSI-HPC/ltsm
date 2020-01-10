@@ -13,7 +13,7 @@
  */
 
 /*
- * Copyright (c) 2016, 2017, GSI Helmholtz Centre for Heavy Ion Research
+ * Copyright (c) 2016-2019, GSI Helmholtz Centre for Heavy Ion Research
  */
 
 #ifndef _GNU_SOURCE
@@ -948,7 +948,7 @@ static int ct_connect_sessions(void)
 	}
 
 	memset(&login, 0, sizeof(login));
-	login_fill(&login, opt.o_servername,
+	login_init(&login, opt.o_servername,
 		   opt.o_node, opt.o_password,
 		   opt.o_owner, LINUX_PLATFORM,
 		   opt.o_fsname, DEFAULT_FSTYPE);

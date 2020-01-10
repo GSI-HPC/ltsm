@@ -461,7 +461,7 @@ int main(int argc, char *argv[])
 	}
 
 	struct login_t login;
-	login_fill(&login, opt.o_servername,
+	login_init(&login, opt.o_servername,
 		   opt.o_node, opt.o_password,
 		   opt.o_owner, LINUX_PLATFORM,
 		   opt.o_fsname, DEFAULT_FSTYPE);

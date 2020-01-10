@@ -1,4 +1,3 @@
-#                                               -*- Autoconf -*-
 # Process this file with autoconf to produce a configure script.
 
 AC_PREREQ([2.69])
@@ -49,30 +48,59 @@ AS_IF([test "x$lapiheader" = "xyes"],
 		 [],
 		 [AC_MSG_ERROR([cannot find Lustre API library lustreapi, fix it by providing library path e.g. ./configure LDFLAGS='-L/<PATH_TO_LIB>'])]
         )
-	# Check for required xattr library, otherwise we cannot get Lustre stripe information.
-	AC_CHECK_LIB([attr], [fgetxattr], [], [AC_MSG_ERROR([cannot find library libattr, install libattr package or provide library path e.g. ./configure LDFLAGS='-L/<PATH_TO_LIB>'])])
 	#
 	AC_DEFINE([HAVE_LUSTRE], [1], [define to 1 if Lustre source is available])
 	AM_CONDITIONAL([HAVE_LUSTRE], [true])
 	],
 	[
 	AM_CONDITIONAL([HAVE_LUSTRE], [false])
-	AC_MSG_WARN([cannot find Lustre API headers or Lustre API library, only TSM console client ltsmc will be build])
+	AC_MSG_WARN([cannot find Lustre API headers and/or Lustre API library])
 	]
 )
 
 # Path to TSM API src directory.
 AC_ARG_WITH([tsm-headers], AS_HELP_STRING([--with-tsm-headers[=PATH]],[path to location of IBM TSM header files [default=/opt/tivoli/tsm/client/api/bin64/sample]]),
 	TSM_SRC_DIR="$withval", TSM_SRC_DIR="/opt/tivoli/tsm/client/api/bin64/sample")
-AC_CHECK_FILE("$TSM_SRC_DIR/dsmapitd.h", [],
-	[AC_MSG_ERROR([cannot find proprietary IBM TSM header files, use --with-tsm-headers=PATH])])
+
+tsmheader="no"
+AC_CHECK_FILE("$TSM_SRC_DIR/dsmapitd.h", [tsmheader="yes"],
+	[AC_MSG_WARN([cannot find proprietary IBM TSM header files, use --with-tsm-headers=PATH])])
+AS_IF([test "x$tsmheader" = "xyes"],
+	[
+	# We found the required TSM header files, so let's check for TSM API library.
+	AC_CHECK_LIB([ApiTSM64],
+		[dsmInitEx],
+		[],
+		[AC_MSG_ERROR([cannot find proprietary IBM library ApiTSM64, provide library path e.g. ./configure LDFLAGS='-L/<PATH_TO_LIB>'])]
+        )
+	#
+	AC_DEFINE([HAVE_TSM], [1], [define to 1 if TSM sdk is available])
+	AM_CONDITIONAL([HAVE_TSM], [true])
+	],
+	[
+	AM_CONDITIONAL([HAVE_TSM], [false])
+	AC_MSG_WARN([cannot find TSM API headers and/or TSM API library, only FSD client API will be build])
+	]
+)
+
+AS_IF([test "x$lapiheader" = "xyes" && test "x$tsmheader" = "xyes"],
+      [
+      AC_DEFINE([HAVE_TSM_LUSTRE], [1], [define to 1 if Lustre and TSM source is available])
+      AM_CONDITIONAL([HAVE_TSM_LUSTRE], [true])
+      ],
+      [
+      AM_CONDITIONAL([HAVE_TSM_LUSTRE], [false])
+      ]
+)
 
 # Checks for other libraries.
 AC_CHECK_LIB([m],[ceil])
-AC_CHECK_LIB([ApiTSM64], [dsmInitEx], [], [AC_MSG_ERROR([cannot find proprietary IBM library ApiTSM64, provide library path e.g. ./configure LDFLAGS='-L/<PATH_TO_LIB>'])])
 
 # Check for required zlib library.
 AC_CHECK_LIB([z], [crc32], [], [AC_MSG_ERROR([cannot find library zlib, install zlib package or provide library path e.g. ./configure LDFLAGS='-L/<PATH_TO_LIB>'])])
+
+# Check for required xattr library, otherwise we cannot get Lustre stripe information and FSD library.
+AC_CHECK_LIB([attr], [fgetxattr], [], [AC_MSG_ERROR([cannot find library libattr, install libattr package or provide library path e.g. ./configure LDFLAGS='-L/<PATH_TO_LIB>'])])
 
 # Checks for header files.
 AC_CHECK_HEADERS([fcntl.h stdint.h stdlib.h string.h strings.h sys/param.h sys/time.h unistd.h pthread.h float.h attr/xattr.h])
@@ -101,12 +129,14 @@ do {
 
 #  Default-disabled tests.
 AC_ARG_ENABLE([tests],
-    AS_HELP_STRING([--enable-tests], [enable and compile tests]))
+    AS_HELP_STRING([--enable-tests], [enable and build tests]))
 AM_CONDITIONAL([TESTS], [test "x$enable_tests" = "xyes"])
 
 # Enable measurements when tests are enabled.
 if test "x$enable_tests" = "xyes"; then
     AC_DEFINE([WITH_MEASUREMENT], [1], [define if enabling tests])
+else
+    enable_tests="no"
 fi
 
 # Propage flags and dirs among final Makefiles.
@@ -146,3 +176,12 @@ AC_SUBST(_VERSION, [m4_esyscmd([git describe --tags | cut -f1 -d"-"])])
 AC_SUBST(_RELEASE, [m4_esyscmd([git describe --tags | sed 's/-g[a-z0-9]\{7\}//' | sed -n -e '/^.*-/!{q100}; s/^.*-//p' || echo '1'])])
 
 AC_OUTPUT
+
+echo
+echo "configured ltsm:"
+echo
+echo "build fsdapi library           : yes"
+echo "build tsmapi library and ltsmc : ${tsmheader}"
+echo "build ltsmfsd and lhsmtool_tsm : ${lapiheader}"
+echo "build test suite               : ${enable_tests}"
+echo

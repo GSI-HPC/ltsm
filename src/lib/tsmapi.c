@@ -13,7 +13,7 @@
  */
 
 /*
- * Copyright (c) 2016, 2017, GSI Helmholtz Centre for Heavy Ion Research
+ * Copyright (c) 2016-2019, GSI Helmholtz Centre for Heavy Ion Research
  */
 
 #ifndef _GNU_SOURCE
@@ -33,8 +33,12 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/param.h>
-#include <zlib.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <netdb.h>
 #include "tsmapi.h"
+#include "common.h"
 #include "qtable.h"
 
 #ifdef HAVE_LUSTRE
@@ -112,50 +116,6 @@ static const char *replfail_flag(const dsmFailOvrCfgType type)
 		return "connected to replication server";
 	}
 	return "unknown fail over state";
-}
-
-/**
- * @brief Fill login structure with required login information.
- *
- * @param[out] login Structure to be filled.
- * @param[in] servername TSM servername to connect to.
- * @param[in] node Name of the TSM node which is registered on the TSM server.
- * @param[in] password Password of the TSM node which is registered on the
- *                     TSM server.
- * @param[in] owner Name of owner accessing TSM objects.
- * @param[in] platform Name of used platform, e.g. 'GNU/Linux'
- * @param[in] fsname Name of a file system, disk drive, or any other high-level
- *                   qualifier that groups related data together, e.g. '/lustre'.
- * @param[in] fstype File space type is a character string that the application
- *                   client sets, e.g. 'ltsm'.
- */
-void login_fill(struct login_t *login, const char *servername,
-		const char *node, const char *password,
-		const char *owner, const char *platform,
-		const char *fsname, const char *fstype)
-{
-	if (!login)
-		return;
-
-	memset(login, 0, sizeof(*login));
-	STRNCPY(login->node, node, DSM_MAX_NODE_LENGTH);
-	STRNCPY(login->password, password, DSM_MAX_VERIFIER_LENGTH);
-	STRNCPY(login->owner, owner, DSM_MAX_OWNER_LENGTH);
-	STRNCPY(login->platform, platform, DSM_MAX_PLATFORM_LENGTH);
-	STRNCPY(login->fsname, fsname, DSM_MAX_FSNAME_LENGTH);
-	STRNCPY(login->fstype, fstype, DSM_MAX_FSTYPE_LENGTH);
-
-	if (!servername)
-		return;
-
-	const uint16_t s_arg_len = 1 + strlen(servername) +
-		strlen("-se=");
-	if (s_arg_len < MAX_OPTIONS_LENGTH)
-		snprintf(login->options, s_arg_len, "-se=%s", servername);
-	else
-		CT_WARN("Option parameter \'-se=%s\' is larger than "
-			"MAX_OPTIONS_LENGTH: %d and is ignored\n",
-			servername, MAX_OPTIONS_LENGTH);
 }
 
 /**
@@ -317,50 +277,37 @@ static void date_to_str(char *str, const dsmDate *date)
 		(dsInt16_t)date->second);
 }
 
-/**
- * @brief Split path in all subpaths S and create directories S
- *        when they no not exist.
- *
- * Split input pathname into all subpaths S, e.g.
- * /tmp/a/b/c into S := {'/','/tmp','/tmp/a','/tmp/a/b','/tmp/a/b/c'}
- * and create directories S when they do not exist.
- *
- * @param[in] path Pathname of directory.
- * @param[in] st_mode Stat setting for directory.
- * @return 0 on success, or -1 if an error occurred.
- */
-static dsInt16_t mkdir_subpath(const char *path, const mode_t st_mode)
+int mkdir_p(const char *path, const mode_t st_mode)
 {
-	dsInt16_t rc = 0;
-	size_t len = strlen(path);
-	char _path[len + 1];
+	if (!path)
+		return -EPERM;
 
-	memset(_path, 0, len + 1);
-	snprintf(_path, len + 1, "%s", path);
+	const size_t len = strlen(path);
+	if (len > PATH_MAX)
+		return -ENAMETOOLONG;
 
-	if (len > 1 && _path[len - 1] != '/')
-		_path[len] = '/';
-	if (len == 1 && _path[len - 1] == '/')
-		_path[len] = '/';
+	/* Operate on copy of path, so we not alter the original path. */
+	char _path[PATH_MAX] = {0};
+	strncpy(_path, path, PATH_MAX);
 
-	for (size_t l = 1; l <= len; l++) {
-		if (_path[l] == '/') {
+	for (size_t l = 0; l <= len; l++) {
+		if ((_path[l] == '/' && l > 0) || l == len) {
+
 			_path[l] = '\0';
-			mode_t process_mask = umask(0);
-			rc = mkdir(_path, st_mode);
-			CT_DEBUG("[rc:%d] mkdir '%s'", rc, _path);
-			umask(process_mask);
 
-			if (rc < 0 && errno != EEXIST) {
-				CT_ERROR(errno, "mkdir failed on '%s'", _path);
-				return rc;
-			}
+			mode_t process_mask = umask(0);
+			int rc = mkdir(_path, st_mode);
+                        umask(process_mask);
+                        if (rc < 0 && errno != EEXIST) {
+                                CT_ERROR(errno, "mkdir failed on '%s'", _path);
+                                return -errno;
+                        }
+
 			_path[l] = '/';
 		}
 	}
-	/* If directory already exists return success. */
-	rc = rc < 0 && errno == EEXIST ? 0 : rc;
-	return rc;
+
+	return 0;
 }
 
 #ifdef HAVE_LUSTRE
@@ -507,12 +454,11 @@ static dsInt16_t retrieve_obj(qryRespArchiveData *query_data,
 		   S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH */
 
 		/* Make sure the directory exists where to store the file. */
-		rc = mkdir_subpath(path,
-				   S_IRWXU | S_IRGRP | S_IXGRP |
-				   S_IROTH | S_IXOTH);
-		CT_DEBUG("[rc=%d] mkdir_subpath '%s'", rc, path);
+		rc = mkdir_p(path,
+			     S_IRWXU | S_IRGRP | S_IXGRP |
+			     S_IROTH | S_IXOTH);
 		if (rc) {
-			CT_ERROR(rc, "mkdir_subpath '%s'", path);
+			CT_ERROR(rc, "mkdir_p '%s'", path);
 			return DSM_RC_UNSUCCESSFUL;
 		}
 
@@ -1127,8 +1073,8 @@ static dsInt16_t tsm_query_hl_ll(const char *fs, const char *hl, const char *ll,
  * @param[out] ll   TSM low level name.
  * @return DSM_RC_SUCCESSFUL on success otherwise DSM_RC_UNSUCCESSFUL.
  */
-static dsInt16_t extract_hl_ll(const char *fpath, const char *fs,
-			       char *hl, char *ll)
+dsInt16_t extract_hl_ll(const char *fpath, const char *fs,
+			char *hl, char *ll)
 {
 
 	size_t pos_hl = 0;
@@ -1477,12 +1423,10 @@ static dsInt16_t tsm_retrieve_generic(int fd, struct session_t *session)
 					 query_data.objName.fs,
 					 query_data.objName.hl,
 					 query_data.objName.ll);
-				rc_minor = mkdir_subpath(path,
-							 obj_info.st_mode);
-				CT_DEBUG("[rc:%d] mkdir_subpath(%s)\n",
-					 rc_minor, path);
+				rc_minor = mkdir_p(path, obj_info.st_mode);
+				CT_DEBUG("[rc:%d] mkdir_p(%s)\n", rc_minor, path);
 				if (rc_minor) {
-					CT_ERROR(rc_minor, "mkdir_subpath '%s'", path);
+					CT_ERROR(rc_minor, "mkdir_p '%s'", path);
 					goto cleanup_getdata;
 				}
 				break;
@@ -2217,9 +2161,9 @@ static int tsm_fopen_write(struct session_t *session)
 		arch_data.descr = desc;
 	}
 
-	/* The size is not known a priori, thus set it to maximum. */
-	session->tsm_file->archive_info.obj_info.size.hi = ~((dsUint32_t)0);
-	session->tsm_file->archive_info.obj_info.size.lo = ~((dsUint32_t)0);
+	/* The size is not known a priori, thus set it to 2^31 = 2GB. */
+	session->tsm_file->archive_info.obj_info.size.hi = 0;
+	session->tsm_file->archive_info.obj_info.size.lo = 1U << 31;
 
 	rc = obj_attr_prepare(&session->tsm_file->obj_attr,
 			      &session->tsm_file->archive_info);
@@ -2303,21 +2247,18 @@ static int tsm_fclose_write(struct session_t *session)
 	return rc;
 }
 
-int tsm_fopen(const char *fs, const char *fpath, const char *desc,
-	      struct session_t *session)
+static int init_tsm_file(const char *fs, const char *fpath, const char *desc,
+			 struct session_t *session)
 {
 	int rc;
 
-	if (session->tsm_file) {
-		rc = EFAULT;
-		CT_ERROR(rc, "session->tsm_file already allocated");
-		goto cleanup;
-	}
-	session->tsm_file = calloc(1, sizeof(struct tsm_file_t));
 	if (!session->tsm_file) {
-		rc = errno;
-		CT_ERROR(rc, "calloc");
-		goto cleanup;
+		session->tsm_file = calloc(1, sizeof(struct tsm_file_t));
+		if (!session->tsm_file) {
+			rc = -errno;
+			CT_ERROR(rc, "calloc");
+			return rc;
+		}
 	}
 
 	session->tsm_file->archive_info.obj_info.magic = MAGIC_ID_V1;
@@ -2329,20 +2270,17 @@ int tsm_fopen(const char *fs, const char *fpath, const char *desc,
 	rc = extract_hl_ll(fpath, fs,
 			   session->tsm_file->archive_info.obj_name.hl,
 			   session->tsm_file->archive_info.obj_name.ll);
-	CT_DEBUG("[rc:%d] extract_hl_ll:\n"
-		 "fpath: %s\n"
-		 "fs   : %s\n"
-		 "hl: %s\n"
-		 "ll: %s\n", rc, fpath, fs,
+	CT_DEBUG("[rc:%d] extract_hl_ll fpath '%s', fs '%s', hl '%s', ll '%s'",
+		 rc, fpath, fs,
 		 session->tsm_file->archive_info.obj_name.hl,
 		 session->tsm_file->archive_info.obj_name.ll);
 	if (rc) {
-		CT_ERROR(rc, "extract_hl_ll failed, resolved_path: %s, "
-			 "hl: %s, ll: %s", fpath,
+		CT_ERROR(rc, "extract_hl_ll failed, resolved_path '%s', "
+			 "hl '%s', ll '%s'", fpath,
 			 session->tsm_file->archive_info.obj_name.hl,
 			 session->tsm_file->archive_info.obj_name.ll);
-		rc = DSM_RC_UNSUCCESSFUL;
-		goto cleanup;
+		rc = -ECANCELED;
+		return rc;
 	}
 	strncpy(session->tsm_file->archive_info.obj_name.fs, fs,
 		DSM_MAX_FSNAME_LENGTH);
@@ -2353,17 +2291,19 @@ int tsm_fopen(const char *fs, const char *fpath, const char *desc,
 		strncpy(session->tsm_file->archive_info.desc, desc,
 			DSM_MAX_DESCR_LENGTH);
 
-	rc = tsm_fopen_write(session);
-	if (rc)
-		goto cleanup;
-
 	return rc;
+}
 
-cleanup:
-	if (session->tsm_file) {
-		free(session->tsm_file);
-		session->tsm_file = NULL;
-	}
+int tsm_fopen(const char *fs, const char *fpath, const char *desc,
+	      struct session_t *session)
+{
+	int rc;
+
+	rc = init_tsm_file(fs, fpath, desc, session);
+	if (rc)
+		return rc;
+
+	rc = tsm_fopen_write(session);
 
 	return rc;
 }
@@ -2391,7 +2331,7 @@ ssize_t tsm_fwrite(const void *ptr, size_t size, size_t nmemb,
 			data_blk.numBytes);
 	}
 
-	return rc == 0 ? data_blk.numBytes : -1;
+	return rc == 0 ? (ssize_t)data_blk.numBytes : (ssize_t)-1;
 }
 
 int tsm_fclose(struct session_t *session)
@@ -2424,45 +2364,6 @@ int tsm_fconnect(struct login_t *login, struct session_t *session)
 void tsm_fdisconnect(struct session_t *session)
 {
 	tsm_disconnect(session);
-}
-
-int crc32file(const char *filename, uint32_t *crc32result)
-{
-	int rc = 0;
-	FILE *file;
-	size_t cur_read;
-	uint32_t crc32sum = 0;
-	unsigned char buf[TSM_BUF_LENGTH] = {0};
-
-	file = fopen(filename, "r");
-	if (file == NULL) {
-		rc = errno;
-		CT_ERROR(rc, "fopen failed on '%s'", filename);
-		return rc;
-	}
-
-	do {
-		cur_read = fread(buf, 1, TSM_BUF_LENGTH, file);
-		if (ferror(file)) {
-			rc = EIO;
-			CT_ERROR(rc, "fread failed on '%s'", filename);
-			break;
-		}
-		crc32sum = crc32(crc32sum, (const unsigned char *)buf,
-				 cur_read);
-
-	} while (!feof(file));
-
-	int rc_minor;
-	rc_minor = fclose(file);
-	if (rc_minor) {
-		rc_minor = errno;
-		CT_ERROR(rc_minor, "fclose failed on '%s'", filename);
-		return rc_minor;
-	}
-
-	*crc32result = crc32sum;
-	return rc;
 }
 
 int parse_line(char *line, struct kv_opt *kv_opt)
@@ -2525,6 +2426,10 @@ int parse_conf(const char *filename, struct kv_opt *kv_opt)
 		if (rc == -EINVAL)
 			CT_WARN("malformed option '%s' in conf file '%s'",
 				line, filename);
+		else if (rc == -ENOMEM) {
+			CT_ERROR(rc, "realloc");
+			goto cleanup;
+		}
 	}
 
 	if (errno) {
@@ -2532,16 +2437,12 @@ int parse_conf(const char *filename, struct kv_opt *kv_opt)
 		CT_ERROR(errno, "getline failed");
 	}
 
+cleanup:
 	if (line) {
 		free(line);
 		line = NULL;
 	}
-
-	rc = fclose(file);
-	if (rc) {
-		rc = -errno;
-		CT_ERROR(errno, "fclose failed on '%s'", filename);
-	}
+	fclose(file);
 
 	return rc;
 }

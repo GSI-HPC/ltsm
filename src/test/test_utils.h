@@ -22,6 +22,6 @@
 #include <stdlib.h>
 #include <stdint.h>
 
-void rnd_str(char *s, const uint16_t len);
+void rnd_str(char *s, const size_t len);
 
 #endif	/* TEST_UTILS_H */

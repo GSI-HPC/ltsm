@@ -13,7 +13,7 @@
  */
 
 /*
- * Copyright (c) 2016, 2017, GSI Helmholtz Centre for Heavy Ion Research
+ * Copyright (c) 2016-2019, GSI Helmholtz Centre for Heavy Ion Research
  */
 
 /* Important note: The API can only retrieve objects that were
@@ -35,12 +35,14 @@
 
 #include <stdint.h>
 #include <stdbool.h>
+#include <limits.h>
 #include <sys/types.h>
 #include "dsmapitd.h"
 #include "dsmapifp.h"
 #include "dsmapips.h"
 #include "dsmrc.h"
 #include "dapint64.h"
+#include "common.h"
 #include "log.h"
 #include "chashtable.h"
 
@@ -48,12 +50,6 @@
 #define PACKAGE_VERSION "NA"
 #endif
 
-#define DEFAULT_FSNAME "/"
-#define DEFAULT_FSTYPE "ltsm"
-#define LINUX_PLATFORM "GNU/Linux"
-
-#define TSM_BUF_LENGTH 32764 /* (32768 - 4) gives best transfer performance. */
-#define MAX_OPTIONS_LENGTH 64
 #define MAGIC_ID_V1 71147
 #define DEFAULT_NUM_BUCKETS 64
 
@@ -61,19 +57,11 @@
 	((strlen(str1) == strlen(str2)) &&	\
 	 (strncmp(str1, str2, strlen(str1)) == 0))
 
-enum sort_by_t {SORT_NONE	     = 0,
-		SORT_DATE_ASCENDING  = 1,
-		SORT_DATE_DESCENDING = 2,
-		SORT_RESTORE_ORDER   = 3};
-
-struct login_t {
-	char node[DSM_MAX_NODE_LENGTH + 1];
-	char password[DSM_MAX_VERIFIER_LENGTH + 1];
-	char owner[DSM_MAX_OWNER_LENGTH + 1];
-	char platform[DSM_MAX_PLATFORM_LENGTH + 1];
-	char options[MAX_OPTIONS_LENGTH + 1];
-	char fsname[DSM_MAX_FSNAME_LENGTH + 1];
-	char fstype[DSM_MAX_FSTYPE_LENGTH + 1];
+enum sort_by_t {
+	SORT_NONE	     = 0,
+	SORT_DATE_ASCENDING  = 1,
+	SORT_DATE_DESCENDING = 2,
+	SORT_RESTORE_ORDER   = 3
 };
 
 struct fid_t {
@@ -165,6 +153,9 @@ void select_latest(const dsBool_t latest);
 void set_prefix(const char *_prefix);
 void set_restore_stripe(const dsBool_t _restore_stripe);
 int parse_verbose(const char *val, int *opt_verbose);
+int mkdir_p(const char *path, const mode_t st_mode);
+dsInt16_t extract_hl_ll(const char *fpath, const char *fs,
+			char *hl, char *ll);
 
 void login_fill(struct login_t *login, const char *servername,
 		const char *node, const char *password,
@@ -196,8 +187,9 @@ dsInt16_t tsm_retrieve_fpath(const char *fs, const char *fpath,
 			     const char *desc, int fd,
 			     struct session_t *session);
 
-int crc32file(const char *filename, uint32_t *crc32result);
 int parse_conf(const char *filename, struct kv_opt *kv_opt);
+ssize_t read_size(int fd, void *ptr, size_t n);
+ssize_t write_size(int fd, const void *ptr, size_t n);
 
 #ifdef HAVE_LUSTRE
 int xattr_get_lov(const int fd, struct lustre_info_t *lustre_info,

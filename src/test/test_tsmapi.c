@@ -13,7 +13,7 @@
  */
 
 /*
- * Copyright (c) 2017, GSI Helmholtz Centre for Heavy Ion Research
+ * Copyright (c) 2017-2019, GSI Helmholtz Centre for Heavy Ion Research
  */
 
 #include <string.h>
@@ -26,28 +26,32 @@
 #include "tsmapi.c"
 #include "test_utils.h"
 
-#define SERVERNAME	"polaris-kvm-tsm-server"
+#define SERVERNAME	"centos-7-tsmserver-7"
 #define NODE		"polaris"
 #define PASSWORD	"polaris"
 #define OWNER           ""
+
+#define FSD_HOSTNAME    "localhost"
+#define FSD_PORT         7625
+
+#define NUM_FILES       10
 #define LEN_RND_STR     6
 
-void test_fcalls(CuTest *tc)
+void test_tsm_fcalls(CuTest *tc)
 {
 	int rc;
 	struct login_t login;
-	char fpath[][5 + LEN_RND_STR + 1] = {"/tmp/",
-					     "/tmp/",
-					     "/tmp/",
-					     "/tmp/"};
+	char fpath[NUM_FILES][PATH_MAX];
+
+	memset(fpath, 0, sizeof(char) * NUM_FILES * PATH_MAX);
 
 	for (uint8_t r = 0; r < sizeof(fpath)/sizeof(fpath[0]); r++) {
 		char rnd_s[LEN_RND_STR + 1] = {0};
 		rnd_str(rnd_s, LEN_RND_STR);
-		snprintf(fpath[r] + 5, LEN_RND_STR + 1, "%s", rnd_s);
+		snprintf(fpath[r], PATH_MAX, "/tmp/%s", rnd_s);
 	}
 
-	login_fill(&login, SERVERNAME, NODE, PASSWORD,
+	login_init(&login, SERVERNAME, NODE, PASSWORD,
 		   OWNER, LINUX_PLATFORM, DEFAULT_FSNAME,
 		   DEFAULT_FSTYPE);
 
@@ -60,7 +64,6 @@ void test_fcalls(CuTest *tc)
 	rc = tsm_fconnect(&login, &session);
 	CuAssertIntEquals(tc, DSM_RC_SUCCESSFUL, rc);
 
-	srand(time(NULL));
 	FILE *file = NULL;
 
         for (uint8_t r = 0; r < sizeof(fpath)/sizeof(fpath[0]); r++) {
@@ -140,10 +143,10 @@ void test_extract_hl_ll(CuTest *tc)
 	CuAssertStrEquals(tc, "/ll", ll);
 }
 
-void test_login_fill(CuTest *tc)
+void test_login_init(CuTest *tc)
 {
 	struct login_t login;
-	login_fill(&login, "servername", "node", "password",
+	login_init(&login, "servername", "node", "password",
 		   "owner", "platform", "fsname", "fstype");
 
 	CuAssertStrEquals(tc, "-se=servername", login.options);
@@ -154,25 +157,35 @@ void test_login_fill(CuTest *tc)
 	CuAssertStrEquals(tc, "fsname", login.fsname);
 	CuAssertStrEquals(tc, "fstype", login.fstype);
 
-	login_fill(&login, NULL, "node", "",
+	login_init(&login, NULL, "node", "",
 		   "owner", "platform", "", NULL);
-	CuAssertStrEquals(tc, "", login.options);
+	CuAssertStrEquals(tc, login.options, login.options);
+	CuAssertStrEquals(tc, login.node, login.node);
+	CuAssertStrEquals(tc, login.password, login.password);
+	CuAssertStrEquals(tc, login.owner, login.owner);
+	CuAssertStrEquals(tc, login.platform, login.platform);
+	CuAssertStrEquals(tc, login.fsname, login.fsname);
+	CuAssertStrEquals(tc, login.fstype, login.fstype);
+
+	login_init(&login, "servername", "node", "",
+		   NULL, "platform", "", NULL);
+	CuAssertStrEquals(tc, "-se=servername", login.options);
 	CuAssertStrEquals(tc, "node", login.node);
 	CuAssertStrEquals(tc, "", login.password);
-	CuAssertStrEquals(tc, "owner", login.owner);
+	CuAssertStrEquals(tc, "", login.owner);
 	CuAssertStrEquals(tc, "platform", login.platform);
 	CuAssertStrEquals(tc, "", login.fsname);
 	CuAssertStrEquals(tc, "", login.fstype);
 
-	login_fill(&login, NULL, NULL, NULL,
+	login_init(&login, NULL, NULL, NULL,
 		   NULL, NULL, NULL, NULL);
-	CuAssertStrEquals(tc, "", login.options);
-	CuAssertStrEquals(tc, "", login.node);
-	CuAssertStrEquals(tc, "", login.password);
-	CuAssertStrEquals(tc, "", login.owner);
-	CuAssertStrEquals(tc, "", login.platform);
-	CuAssertStrEquals(tc, "", login.fsname);
-	CuAssertStrEquals(tc, "", login.fstype);
+	CuAssertStrEquals(tc, login.options, login.options);
+	CuAssertStrEquals(tc, login.node, login.node);
+	CuAssertStrEquals(tc, login.password, login.password);
+	CuAssertStrEquals(tc, login.owner, login.owner);
+	CuAssertStrEquals(tc, login.platform, login.platform);
+	CuAssertStrEquals(tc, login.fsname, login.fsname);
+	CuAssertStrEquals(tc, login.fstype, login.fstype);
 }
 
 void test_set_prefix(CuTest *tc)
@@ -205,11 +218,11 @@ void test_set_prefix(CuTest *tc)
 CuSuite* tsmapi_get_suite()
 {
     CuSuite* suite = CuSuiteNew();
-#if TEST_F_OPEN_WRITE_CLOSE
-    SUITE_ADD_TEST(suite, test_fcalls);
+#ifdef TEST_TSM_CALLS
+    SUITE_ADD_TEST(suite, test_tsm_fcalls);
 #endif
     SUITE_ADD_TEST(suite, test_extract_hl_ll);
-    SUITE_ADD_TEST(suite, test_login_fill);
+    SUITE_ADD_TEST(suite, test_login_init);
     SUITE_ADD_TEST(suite, test_set_prefix);
 
     return suite;
@@ -217,7 +230,7 @@ CuSuite* tsmapi_get_suite()
 
 void run_all_tests(void)
 {
-	api_msg_set_level(API_MSG_ERROR);
+	api_msg_set_level(API_MSG_DEBUG);
 
 	CuString *output = CuStringNew();
 	CuSuite *suite = CuSuiteNew();
@@ -238,6 +251,11 @@ void run_all_tests(void)
 
 int main(void)
 {
+	struct timespec tspec = {0};
+
+	clock_gettime(CLOCK_MONOTONIC, &tspec);
+	srand(time(NULL) + tspec.tv_nsec);
 	run_all_tests();
+
 	return 0;
 }
