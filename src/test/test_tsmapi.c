@@ -13,7 +13,7 @@
  */
 
 /*
- * Copyright (c) 2017-2019, GSI Helmholtz Centre for Heavy Ion Research
+ * Copyright (c) 2017-2020, GSI Helmholtz Centre for Heavy Ion Research
  */
 
 #include <string.h>
@@ -26,13 +26,10 @@
 #include "tsmapi.c"
 #include "test_utils.h"
 
-#define SERVERNAME	"centos-7-tsmserver-7"
+#define SERVERNAME	"tsmserver-8"
 #define NODE		"polaris"
-#define PASSWORD	"polaris"
+#define PASSWORD	"polaris1234"
 #define OWNER           ""
-
-#define FSD_HOSTNAME    "localhost"
-#define FSD_PORT         7625
 
 #define NUM_FILES       10
 #define LEN_RND_STR     6
