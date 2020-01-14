@@ -65,6 +65,7 @@ struct options {
 	int o_nthreads_queue;
 	int o_ntol_file_errors;
 	int o_verbose;
+	char o_file_conf[PATH_MAX + 1];
 };
 
 static struct options opt   = {
@@ -74,7 +75,8 @@ static struct options opt   = {
 	.o_nthreads_sock    = N_THREADS_SOCK_DEFAULT,
 	.o_nthreads_queue   = N_THREADS_QUEUE_DEFAULT,
 	.o_ntol_file_errors = N_TOL_FILE_ERRORS,
-	.o_verbose	    = API_MSG_NORMAL
+	.o_verbose	    = API_MSG_NORMAL,
+	.o_file_conf        = {0}
 };
 
 static list_t		ident_list;
@@ -108,12 +110,14 @@ static void usage(const char *cmd_name, const int rc)
 		"\t-t, --tolerr <int>\n"
 		"\t\t""number of tolerated file errors before file is "
 		"omitted [default: %d]\n"
+		"\t-c, --conf <file>\n"
+		"\t\t""option conf file\n"
 		"\t-v, --verbose {error, warn, message, info, debug}"
 		" [default: message]\n"
 		"\t\t""produce more verbose output\n"
 		"\t-h, --help\n"
 		"\t\t""show this help\n"
-		"version: %s © 2019 by GSI Helmholtz Centre for Heavy Ion Research\n",
+		"version: %s © 2020 by GSI Helmholtz Centre for Heavy Ion Research\n",
 		cmd_name,
 		PORT_DEFAULT_FSD,
 		N_THREADS_SOCK_DEFAULT,
@@ -262,6 +266,85 @@ out:
 	return rc;
 }
 
+static void read_conf(const char *filename)
+{
+	int rc;
+	struct kv_opt kv_opt = {
+		.N	     = 0,
+		.kv	     = NULL
+	};
+
+	rc = parse_conf(filename, &kv_opt);
+	if (!rc) {
+		for (uint8_t n = 0; n < kv_opt.N; n++) {
+			if (!strncmp("localfs", kv_opt.kv[n].key, PATH_MAX))
+				strncpy(opt.o_local_mount, kv_opt.kv[n].val,
+					PATH_MAX);
+			else if (!strncmp("identmap", kv_opt.kv[n].key, PATH_MAX))
+				strncpy(opt.o_file_ident, kv_opt.kv[n].val,
+					PATH_MAX);
+			else if (!strncmp("port", kv_opt.kv[n].key, MAX_OPTIONS_LENGTH)) {
+				long int port;
+				rc = parse_valid_num(kv_opt.kv[n].val, &port);
+				if (rc)
+					CT_WARN("wrong value '%s' for option '%s'"
+						" in conf file '%s'",
+						kv_opt.kv[n].val, kv_opt.kv[n].key,
+						filename);
+				else
+					opt.o_port = (int)port;
+			} else if (!strncmp("sthreads", kv_opt.kv[n].key, MAX_OPTIONS_LENGTH)) {
+				long int sthreads;
+				rc = parse_valid_num(kv_opt.kv[n].val, &sthreads);
+				if (rc)
+					CT_WARN("wrong value '%s' for option '%s'"
+						" in conf file '%s'",
+						kv_opt.kv[n].val, kv_opt.kv[n].key,
+						filename);
+				else
+					opt.o_nthreads_sock = (int)sthreads;
+			} else if (!strncmp("qthreads", kv_opt.kv[n].key, MAX_OPTIONS_LENGTH)) {
+				long int qthreads;
+				rc = parse_valid_num(kv_opt.kv[n].val, &qthreads);
+				if (rc)
+					CT_WARN("wrong value '%s' for option '%s'"
+						" in conf file '%s'",
+						kv_opt.kv[n].val, kv_opt.kv[n].key,
+						filename);
+				else
+					opt.o_nthreads_queue = (int)qthreads;
+			} else if (!strncmp("tolerr", kv_opt.kv[n].key, MAX_OPTIONS_LENGTH)) {
+				long int tolerr;
+				rc = parse_valid_num(kv_opt.kv[n].val, &tolerr);
+				if (rc)
+					CT_WARN("wrong value '%s' for option '%s'"
+						" in conf file '%s'",
+						kv_opt.kv[n].val, kv_opt.kv[n].key,
+						filename);
+				else
+					opt.o_ntol_file_errors = (int)tolerr;
+			} else if (!strncmp("verbose", kv_opt.kv[n].key, MAX_OPTIONS_LENGTH)) {
+				rc = parse_verbose(kv_opt.kv[n].val,
+						   &opt.o_verbose);
+				if (rc)
+					CT_WARN("wrong value '%s' for option '%s'"
+						" in conf file '%s'",
+						kv_opt.kv[n].val, kv_opt.kv[n].key,
+						filename);
+			} else
+				CT_WARN("unknown option value '%s %s' in conf"
+					" file '%s'", kv_opt.kv[n].key,
+					kv_opt.kv[n].val, filename);
+		}
+	}
+
+	if (kv_opt.kv) {
+		free(kv_opt.kv);
+		kv_opt.kv = NULL;
+		kv_opt.N = 0;
+	}
+}
+
 static void sanity_arg_check(const struct options *opts, const char *argv)
 {
 	if (!opt.o_local_mount[0]) {
@@ -287,21 +370,22 @@ static void sanity_arg_check(const struct options *opts, const char *argv)
 static int parseopts(int argc, char *argv[])
 {
 	struct option long_opts[] = {
-		{"localfs",	required_argument, 0,		     'l'},
-		{"identmap",	required_argument, 0,		     'i'},
-		{"port",	required_argument, 0,		     'p'},
-		{"sthreads",	required_argument, 0,		     's'},
-		{"qthreads",	required_argument, 0,		     'q'},
-		{"tolerr",	required_argument, 0,		     't'},
-		{"verbose",	required_argument, 0,		     'v'},
-		{"help",	no_argument,	   0,		     'h'},
+		{"localfs",	required_argument, 0,	'l'},
+		{"identmap",	required_argument, 0,	'i'},
+		{"port",	required_argument, 0,	'p'},
+		{"sthreads",	required_argument, 0,	's'},
+		{"qthreads",	required_argument, 0,	'q'},
+		{"tolerr",	required_argument, 0,	't'},
+		{"conf",	required_argument, 0,	'c'},
+		{"verbose",	required_argument, 0,	'v'},
+		{"help",	no_argument,	   0,	'h'},
 		{0, 0, 0, 0}
 	};
 
 	int c, rc;
 	optind = 0;
 
-	while ((c = getopt_long(argc, argv, "l:i:p:s:q:t:v:h",
+	while ((c = getopt_long(argc, argv, "l:i:p:s:q:t:c:v:h",
 				long_opts, NULL)) != -1) {
 		switch (c) {
 		case 'l': {
@@ -344,6 +428,10 @@ static int parseopts(int argc, char *argv[])
 			opt.o_ntol_file_errors = (int)t;
 			break;
 		}
+		case 'c': {
+			strncpy(opt.o_file_conf, optarg, PATH_MAX);
+			break;
+		}
 		case 'v': {
 			if (OPTNCMP("error", optarg))
 				opt.o_verbose = API_MSG_ERROR;
@@ -374,6 +462,9 @@ static int parseopts(int argc, char *argv[])
 			return -EINVAL;
 		}
 	}
+
+	if (opt.o_file_conf)
+		read_conf(opt.o_file_conf);
 
 	sanity_arg_check(&opt, argv[0]);
 
@@ -1488,8 +1579,11 @@ int main(int argc, char *argv[])
 		CT_ERROR(rc, "listen");
 		goto cleanup;
 	}
-	CT_MESSAGE("listening on port: %d with %d serving socket threads",
-		   opt.o_port, opt.o_nthreads_sock);
+	CT_MESSAGE("listening on port %d with %d socket threads, %d queue "
+		   "worker threads, local fs '%s' and number of tolerated "
+		   "file errors %d",
+		   opt.o_port, opt.o_nthreads_sock, opt.o_nthreads_queue,
+		   opt.o_local_mount, opt.o_ntol_file_errors);
 
 	/* Initialize socket processing threads. */
 	threads_sock = calloc(opt.o_nthreads_sock, sizeof(pthread_t));

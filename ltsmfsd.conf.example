@@ -1,0 +1,8 @@
+# Conf example for ltsmfsd
+localfs	       /fsddata
+identmap       /etc/default/identmap.conf
+port	       7625
+sthreads       4
+qthreads       4
+tolerr	       16
+verbose	       warn
