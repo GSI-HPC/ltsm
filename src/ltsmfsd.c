@@ -463,7 +463,7 @@ static int parseopts(int argc, char *argv[])
 		}
 	}
 
-	if (opt.o_file_conf)
+	if (opt.o_file_conf[0])
 		read_conf(opt.o_file_conf);
 
 	sanity_arg_check(&opt, argv[0]);
