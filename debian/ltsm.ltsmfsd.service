@@ -1,0 +1,12 @@
+[Unit]
+Description=Lustre TSM File System Daemon
+Documentation=man:ltsmfsd(1)
+Requires=lhsmtool_tsm.target
+After=lhsmtool_tsm.target
+
+[Service]
+EnvironmentFile=-/etc/default/ltsmfsd
+ExecStart=/usr/sbin/ltsmfsd $LTSMFSD_OPTS
+
+[Install]
+WantedBy=multi-user.target

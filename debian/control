@@ -9,10 +9,12 @@ Vcs-Git: git://github.com/tstibor/ltsm.git
 
 Package: ltsm
 Architecture: any
-Depends: ${shlibs:Depends}, ${misc:Depends}, tivsm-api64 (>= 7.1.0)
-Description: Lustre TSM copytool and TSM console client 
+Depends: ${shlibs:Depends}, ${misc:Depends}, tivsm-api64 (>= 7.1.0), lustre-dev (>= 2.10)
+Description: Lustre TSM copytool, TSM console client and LTSMFSD file system daemon
  Lustre TSM copytool for seamlessly archiving and retrieving data in Lustre
  mount points. In addition a TSM console client is provided for archiving,
  retrieving, deleting and querying data. This is especially useful when
  a Lustre storage deployment is decommissioned and the archived data still
- needs to be retrieved afterwards.
+ needs to be retrieved afterwards. Moreover, the package consists of a file system
+ daemon (called ltsmfsd) that implements a protocol for receiving data via socket, copy
+ data to Lustre and finally archive data on TSM server.
