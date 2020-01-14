@@ -1335,6 +1335,17 @@ static int process_fsd_action_item(struct fsd_action_item_t *fsd_action_item)
 	}
 	case STATE_TSM_ARCHIVE_RUN: {
 
+		/* We stay in STATE_TSM_ARCHIVE_RUN and poll every 50ms to check,
+		   whether the archive operation finishes successfully. This approach,
+		   however, is not efficient and in addition congests the queue, as the
+		   the fsd_action_item is enqueued/dequeued over and over until the file
+		   is finally archived. To overcome this problem, we change immediatly
+		   (via a C goto statement) the state from STATE_TSM_ARCHIVE_RUN to
+		   STATE_TSM_ARCHIVE_DONE and assume: If archive_action(fsd_action_item)
+		   returns success, then the file is also successfully archived.
+		   To remove this assumption, just remove the goto statement and label. */
+		goto AVOID_TSM_ARCHIVE_POLLING;
+
 		uint32_t states = 0;
 
 		/* The archive_state check is based on polling, thus employ
@@ -1354,7 +1365,7 @@ static int process_fsd_action_item(struct fsd_action_item_t *fsd_action_item)
 
 		/* Verify whether file is finally archived. */
 		if ((states & HS_EXISTS) && (states && HS_ARCHIVED)) {
-
+		AVOID_TSM_ARCHIVE_POLLING:
 			rc = xattr_update_fsd_state(fsd_action_item,
 						    STATE_TSM_ARCHIVE_DONE);
 			CT_DEBUG("[rc=%d] setting state from '%s' to '%s'",
