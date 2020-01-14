@@ -20,17 +20,21 @@ Syntax in conf \fIFILE\fR is \fIoption\fR \fIvalue\fR where separators are white
 .PP
 OPTIONAL
 .TP
-.BR \-p ", " \-\-port
+.BR \-p ", " \-\-port =\fINUMBER\fR
 Socket port accepting connections. Default is 7625.
 .TP
-.BR \-s ", " \-\-sthreads
+.BR \-s ", " \-\-sthreads =\fINUMBER\fR
 Number of socket threads accepting connections. Default is 4.
 .TP
-.BR \-q ", " \-\-qthreads
+.BR \-q ", " \-\-qthreads =\fINUMBER\fR
 Number of queue worker threads enqueueing and dequeueing actions. Default is 4.
 .TP
-.BR \-t ", " \-\-tolerr
+.BR \-t ", " \-\-tolerr =\fINUMBER\fR
 Number of tolerated file errors before file is omitted. Default is 16.
+.TP
+.BR \-c ", " \-\-conf =\fIFILE\fR
+Read conf \fIFILE\fR with options: \fIlocalfs\fR, \fIidentmap\fR, \fIport\fR, \fIsthreads\fR, \fIqthreads\fR, \fItolerr\fR and \fIverbose\fR.
+Syntax in conf \fIFILE\fR is \fIoption\fR \fIvalue\fR where separators are whitespace(s) and tabulator(s). The character # is treated as a comment and strings after character # are ignored.
 .TP
 .BR \-v ", " \-\-verbose =\fIerror\fR|\fIwarn\fR|\fImessage\fR|\fIinfo\fR|\fIdebug\fR
 Causes ltsmfsd to be more verbose in printing messages. Default is \fImessage\fR.
