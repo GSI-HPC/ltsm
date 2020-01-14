@@ -533,25 +533,35 @@ static int enqueue_fsd_item(struct fsd_action_item_t *fsd_action_item)
 
 	if (rc) {
 		rc = -EFAILED;
-		CT_ERROR(rc, "failed enqueue operation: state='%s', fs='%s', "
-			 "fpath='%s', size=%lu, queue size=%lu, ptr=%p",
+		CT_ERROR(rc, "failed enqueue operation: "
+			 "%p, state '%s', fs '%s', fpath '%s', size %zu "
+			 "errors %d, ts[0] %zu, ts[1] %zu, ts[2] %zu, queue size %lu",
+			 fsd_action_item,
 			 FSD_ACTION_STR(fsd_action_item->fsd_action_state),
 			 fsd_action_item->fsd_info.fs,
 			 fsd_action_item->fsd_info.fpath,
 			 fsd_action_item->size,
-			 queue_size(&queue),
-			 fsd_action_item);
+			 fsd_action_item->action_error_cnt,
+			 fsd_action_item->ts[0],
+			 fsd_action_item->ts[1],
+			 fsd_action_item->ts[2],
+			 queue_size(&queue));
+
 		free(fsd_action_item);
-	} else {
-		CT_INFO("enqueue operation: state='%s', fs='%s', fpath='%s', "
-			"size=%lu, queue size=%lu, ptr=%p",
+	} else
+		CT_INFO("enqueue operation: "
+			"%p, state '%s', fs '%s', fpath '%s', size %zu "
+			"errors %d, ts[0] %zu, ts[1] %zu, ts[2] %zu, queue size %lu",
+			fsd_action_item,
 			FSD_ACTION_STR(fsd_action_item->fsd_action_state),
 			fsd_action_item->fsd_info.fs,
 			fsd_action_item->fsd_info.fpath,
 			fsd_action_item->size,
-			queue_size(&queue),
-			fsd_action_item);
-	}
+			fsd_action_item->action_error_cnt,
+			fsd_action_item->ts[0],
+			fsd_action_item->ts[1],
+			fsd_action_item->ts[2],
+			queue_size(&queue));
 
 	/* Free the lock of the queue. */
 	pthread_mutex_unlock(&queue_mutex);
@@ -1216,17 +1226,18 @@ static int process_fsd_action_item(struct fsd_action_item_t *fsd_action_item)
 {
 	int rc = 0;
 
-	CT_INFO("fsd_action_item %p, state '%s', fpath '%s', size %zu "
-		"errors %d, ts[0] %zu, ts[1] %zu, ts[2] %zu, queue size %lu",
-		fsd_action_item,
-		FSD_ACTION_STR(fsd_action_item->fsd_action_state),
-		fsd_action_item->fsd_info.fpath,
-		fsd_action_item->size,
-		fsd_action_item->action_error_cnt,
-		fsd_action_item->ts[0],
-		fsd_action_item->ts[1],
-		fsd_action_item->ts[2],
-		queue_size(&queue));
+	CT_DEBUG("process_fsd_action_item %p, state '%s', fs '%s', fpath '%s', size %zu "
+		 "errors %d, ts[0] %zu, ts[1] %zu, ts[2] %zu, queue size %lu",
+		 fsd_action_item,
+		 FSD_ACTION_STR(fsd_action_item->fsd_action_state),
+		 fsd_action_item->fsd_info.fs,
+		 fsd_action_item->fsd_info.fpath,
+		 fsd_action_item->size,
+		 fsd_action_item->action_error_cnt,
+		 fsd_action_item->ts[0],
+		 fsd_action_item->ts[1],
+		 fsd_action_item->ts[2],
+		 queue_size(&queue));
 
 	if (fsd_action_item->action_error_cnt > opt.o_ntol_file_errors) {
 		CT_WARN("file '%s' reached maximum number of tolerated errors, "
@@ -1460,23 +1471,33 @@ static void *thread_queue_consumer(void *data)
 
 		if (rc) {
 			rc = -EFAILED;
-			CT_ERROR(rc, "failed dequeue operation: state='%s', fs='%s', "
-				 "fpath='%s', size=%lu, queue size=%lu, ptr=%p",
+			CT_ERROR(rc, "failed dequeue operation: "
+				 "%p, state '%s', fs '%s', fpath '%s', size %zu "
+				 "errors %d, ts[0] %zu, ts[1] %zu, ts[2] %zu, queue size %lu",
+				 fsd_action_item,
 				 FSD_ACTION_STR(fsd_action_item->fsd_action_state),
 				 fsd_action_item->fsd_info.fs,
 				 fsd_action_item->fsd_info.fpath,
 				 fsd_action_item->size,
-				 queue_size(&queue),
-				 fsd_action_item);
+				 fsd_action_item->action_error_cnt,
+				 fsd_action_item->ts[0],
+				 fsd_action_item->ts[1],
+				 fsd_action_item->ts[2],
+				 queue_size(&queue));
 		} else {
-			CT_INFO("dequeue operation: state='%s', fs='%s', "
-				"fpath='%s', size=%lu, queue size=%lu, ptr=%p",
+			CT_INFO("dequeue operation: "
+				"%p, state '%s', fs '%s', fpath '%s', size %zu "
+				"errors %d, ts[0] %zu, ts[1] %zu, ts[2] %zu, queue size %lu",
+				fsd_action_item,
 				FSD_ACTION_STR(fsd_action_item->fsd_action_state),
 				fsd_action_item->fsd_info.fs,
 				fsd_action_item->fsd_info.fpath,
 				fsd_action_item->size,
-				queue_size(&queue),
-				fsd_action_item);
+				fsd_action_item->action_error_cnt,
+				fsd_action_item->ts[0],
+				fsd_action_item->ts[1],
+				fsd_action_item->ts[2],
+				queue_size(&queue));
 
 			rc = process_fsd_action_item(fsd_action_item);
 		}
