@@ -1339,7 +1339,7 @@ static int process_fsd_action_item(struct fsd_action_item_t *fsd_action_item)
 		   whether the archive operation finishes successfully. This approach,
 		   however, is not efficient and in addition congests the queue, as the
 		   the fsd_action_item is enqueued/dequeued over and over until the file
-		   is finally archived. To overcome this problem, we change immediatly
+		   is finally archived. To overcome this problem, we change immediately
 		   (via a C goto statement) the state from STATE_TSM_ARCHIVE_RUN to
 		   STATE_TSM_ARCHIVE_DONE and assume: If archive_action(fsd_action_item)
 		   returns success, then the file is also successfully archived.
