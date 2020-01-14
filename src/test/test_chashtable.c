@@ -46,7 +46,7 @@ void load_factor(CuTest *tc, const chashtable_t *chashtable, const char *hashf)
 	for (uint32_t b = 0; b < chashtable->buckets; b++) {
 		total_size += list_size(&chashtable->table[b]);
 #if 0
-		CT_INFO("list size: %lu in bucket: %d\n",
+		CT_INFO("list size: %lu in bucket: %d",
 			list_size(&chashtable->table[b]), b);
 #endif
 		sd += (list_size(&chashtable->table[b]) - load_factor) *
