@@ -42,6 +42,7 @@ make install DESTDIR=%{buildroot}
 install -m 644 debian/%{name}.lhsmtool_tsm.service %{buildroot}/%{_unitdir}/%{name}.lhsmtool_tsm.service
 install -m 600 debian/lhsmtool_tsm.default %{buildroot}/%{_etcdir}/default/lhsmtool_tsm
 install -m 644 debian/%{name}.ltsmfsd.service %{buildroot}/%{_unitdir}/%{name}.ltsmfsd.service
+install -m 600 debian/ltsmfsd.default %{buildroot}/%{_etcdir}/default/ltsmfsd
 
 %files
 %defattr(-,root,root)
@@ -54,6 +55,7 @@ install -m 644 debian/%{name}.ltsmfsd.service %{buildroot}/%{_unitdir}/%{name}.l
 %{_unitdir}/%{name}.lhsmtool_tsm.service
 %{_etcdir}/default/lhsmtool_tsm
 %{_unitdir}/%{name}.ltsmfsd.service
+%{_etcdir}/default/ltsmfsd
 
 %post
 %systemd_post %{name}.lhsmtool_tsm.service

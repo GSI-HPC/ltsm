@@ -1,0 +1,2 @@
+# Store this file at /etc/default/ltsmfsd
+LTSMFSD_OPTS="--verbose info --localfs /fsddata --sthreads 16 --qthreads 8 --identmap /etc/default/identmap.conf /lustre"
