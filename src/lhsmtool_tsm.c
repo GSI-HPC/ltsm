@@ -13,7 +13,7 @@
  */
 
 /*
- * Copyright (c) 2016-2019, GSI Helmholtz Centre for Heavy Ion Research
+ * Copyright (c) 2016-2020, GSI Helmholtz Centre for Heavy Ion Research
  */
 
 #ifndef _GNU_SOURCE
@@ -40,8 +40,12 @@
 #include "tsmapi.h"
 #include "queue.h"
 
-#ifndef LL_HSM_MAX_ARCHIVE
-#define LL_HSM_MAX_ARCHIVE (sizeof(__u32) * 8)
+/* Lustre commit 3bfb6107ba4e92d8aa02e842502bc44bac7b8b43
+   increased the upper limit of maximum HSM backends
+   registered with MDT. We still use (sizeof(__u32) * 8) = 32
+   for compatibility with older MDT. */
+#ifndef LL_HSM_ORIGIN_MAX_ARCHIVE
+#define LL_HSM_ORIGIN_MAX_ARCHIVE (sizeof(__u32) * 8)
 #endif
 
 /* Program options */
@@ -53,7 +57,7 @@ struct options {
 	int o_restore_stripe;
 	int o_abort_on_err;
         int o_archive_cnt;
-        int o_archive_id[LL_HSM_MAX_ARCHIVE + 1];
+        int o_archive_id[LL_HSM_ORIGIN_MAX_ARCHIVE + 1];
 	char *o_mnt;
 	int o_mnt_fd;
 	char o_servername[DSM_MAX_SERVERNAME_LENGTH + 1];
@@ -174,11 +178,11 @@ static int parse_archive_id(const char *arg)
 		CT_ERROR(rc, "invalid archive-id: '%s'", arg);
 		return rc;
 	}
-	if ((opt.o_archive_cnt > LL_HSM_MAX_ARCHIVE) ||
-	    (val > LL_HSM_MAX_ARCHIVE)) {
+	if ((opt.o_archive_cnt > (int)LL_HSM_ORIGIN_MAX_ARCHIVE) ||
+	    (val > (int)LL_HSM_ORIGIN_MAX_ARCHIVE)) {
 		rc = -EINVAL;
 		CT_ERROR(rc, "archive number must be less"
-			 " than %zu", LL_HSM_MAX_ARCHIVE + 1);
+			 " than %zu", LL_HSM_ORIGIN_MAX_ARCHIVE + 1);
 		return rc;
 	}
 	opt.o_archive_id[opt.o_archive_cnt] = val;
