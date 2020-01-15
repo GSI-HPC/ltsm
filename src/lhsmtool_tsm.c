@@ -56,6 +56,7 @@ struct options {
 	int o_verbose;
 	int o_restore_stripe;
 	int o_abort_on_err;
+	int o_enable_maxmpc;
         int o_archive_cnt;
         int o_archive_id[LL_HSM_ORIGIN_MAX_ARCHIVE + 1];
 	char *o_mnt;
@@ -137,6 +138,9 @@ static void usage(const char *cmd_name, const int rc)
 		"\t\t""don't run, just show what would be done\n"
 		"\t--restore-stripe\n"
 		"\t\t""restore stripe information\n"
+		"\t--enable-maxmpc\n"
+		"\t\t""enable tsm mount point check to infer the maximum number"
+		" of feasible threads\n"
 		"\t-h, --help\n"
 		"\t\t""show this help\n"
 		"\nIBM API library version: %d.%d.%d.%d, "
@@ -294,6 +298,7 @@ static int ct_parseopts(int argc, char *argv[])
 		{"verbose",        required_argument, 0,                   'v'},
 		{"dry-run",	   no_argument,	      &opt.o_dry_run,        1},
 		{"restore-stripe", no_argument,	      &opt.o_restore_stripe, 1},
+		{"enable-maxmpc",  no_argument,	      &opt.o_enable_maxmpc,  1},
 		{"help",           no_argument,       0,		   'h'},
 		{0, 0, 0, 0}
 	};
@@ -964,10 +969,14 @@ static int ct_connect_sessions(void)
 		rc = tsm_connect(&login, &sessions[n]);
 		if (rc) {
 			CT_ERROR(rc, "tsm_init failed");
-			nthreads = n; // don't attempt to create more threads
+			nthreads = n; // Don't attempt to create more threads.
 			rc = 0;
 			break;
 		}
+
+		if (!opt.o_enable_maxmpc)
+			continue;
+
 		/* Find maximum number of allowed mountpoints (alias the number
 		   of maxium threads) by sending DSM_OBJ_DIRECTORY and verifying
 		   whether transaction was successful. If rc is ECONNREFUSED,
