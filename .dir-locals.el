@@ -2,7 +2,12 @@
 	 (flycheck-clang-include-path . (
 					 "."
 					 "/opt/tivoli/tsm/client/api/bin64/sample"
-					 "/home/tstibor/dev/tsm/github/ltsm/src/lib"
+					 "/usr/include/lustre"
+					 "/usr/include/linux/lustre"
+					 "/home/tstibor/dev/ltsm"
+					 "/home/tstibor/dev/ltsm/src"
+					 "/home/tstibor/dev/ltsm/src/lib"
+					 "/home/tstibor/dev/ltsm/src/test"
 					 ))
 	 (flycheck-clang-definitions . (
 					"_FILE_OFFSET_BITS=64"
