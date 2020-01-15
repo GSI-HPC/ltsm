@@ -74,6 +74,9 @@ rm -rf %{buildroot}
 
 %changelog
 
+* Wed Jan 15 2020 Thomas Stibor <t.stibor@gsi.de> 0.8.0-1
+- Added Lustre TSM file system daemon.
+
 * Thu Aug 8 2018 Thomas Stibor <t.stibor@gsi.de> 0.7.3-1
 - Lower and upper date/time bound for querying.
 - Display in query results the CRC32 value.

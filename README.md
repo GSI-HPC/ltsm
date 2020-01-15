@@ -1,15 +1,16 @@
-LTSM - Lightweight TSM API, Lustre TSM Copytool for Archiving Data and TSM Console Client
+LTSM - Lightweight TSM API, Lustre TSM Copytool for Archiving Data, TSM Console Client and Lustre TSM File System Daemon.
 ==============
 
 [![Build Status](https://travis-ci.org/tstibor/ltsm.svg?branch=master)](https://travis-ci.org/tstibor/ltsm)
 [![Tag Version](https://img.shields.io/github/tag/tstibor/ltsm.svg)](https://github.com/tstibor/ltsm/tags)
 [![License](http://img.shields.io/:license-gpl2-blue.svg)](http://www.gnu.org/licenses/gpl-2.0.html)
 
-This project consists of *four* parts:
+This project consists of *five* parts:
 1. Lightweight TSM API/library (called *tsmapi*) supporting operations (*archiving*, *retrieving*, *deleting*, *querying*).
 2. Lustre TSM Copytool.
 3. TSM console client.
 4. Benchmark and test suite.
+5. Lustre TSM file system daemon.
 
 # Introduction into Lustre HSM
 Lustre has since version 2.5 hierarchical storage management (HSM) capabilities, that is, data can be automatically
@@ -114,30 +115,31 @@ and execute
 ```
 ./autogen.sh && ./configure CFLAGS='-g -DDEBUG -O0' --enable-tests
 ```
-If Lustre API headers are not found you will get the message
+If Lustre sources are not found you will get the message
 ```
 ...
-configure: WARNING: cannot find Lustre API header files, use --with-lustre-headers=PATH
-configure: WARNING: cannot find Lustre API headers or Lustre API library, only TSM console client ltsmc will be build
+configure: WARNING: cannot find Lustre source files, use --with-lustre-src=PATH
+configure: WARNING: cannot find Lustre API headers and/or Lustre API library
 ...
-
 ```
-and the console client *ltsmc* is built only. For building also the Lustre Copytool thus make sure the Lustre API header files
+and the console client *ltsmc* as well as the *fsdlib* are built only. For building also the Lustre Copytool thus make sure the Lustre sources
 and the Lustre library `liblustreapi.so` are available and the paths are correctly specified e.g.
 ```
-./autogen.sh && ./configure CFLAGS='-g -DDEBUG -O0' --with-lustre-headers=/usr/local/include/lustre LDFLAGS='-L/usr/local/lib' --with-tsm-headers=/opt/tivoli/tsm/client/api/bin64/sample --enable-tests
+./autogen.sh && ./configure CFLAGS='-g -DDEBUG -O0' --with-lustre-src=/usr/local/lustre-release LDFLAGS='-L/usr/local/lib' --with-tsm-headers=/opt/tivoli/tsm/client/api/bin64/sample --enable-tests
 ```
 
 If *required* TSM and *optional* Lustre header files and libraries are found the following executable files are provided:
   * `src/lhsmtool_tsm` (Lustre TSM Copytool)
   * `src/ltsmc` (Console client)
+  * `src/ltsmfsd` (Lustre TSM File System Daemon)
   * `src/test/test_cds` (Test suite for data structures (linked-list, queue, hashtable, etc.))
   * `src/test/test_tsmapi` (Test suite for *tsmapi*)
+  * `src/test/test_fsdapi` (Test suite for *fsdapi*)
   * `src/test/ltsmbench` (Benchmark suite for measuring threaded archive/retrieve performance)
 
 ### Install or Build DEB/RPM Package
 
-Download and install already built Debian Stretch package [ltsm_0.7.3_amd64.deb](https://github.com/tstibor/ltsm.github.io/tree/master/packages/deb) or CentOS 7.4 package [ltsm-0.7.3-1.x86_64.rpm](https://github.com/tstibor/ltsm.github.io/tree/master/packages/rpm). In addition you can build the rpm package
+Download and install already built Debian Stretch package [ltsm_0.8.0_amd64.deb](https://github.com/tstibor/ltsm.github.io/tree/master/packages/deb) or CentOS 7.7 package [ltsm-0.8.0-1.x86_64.rpm](https://github.com/tstibor/ltsm.github.io/tree/master/packages/rpm). In addition you can build the rpm package
 yourself as follows
 ```
 git clone https://github.com/tstibor/ltsm && cd ltsm && ./autogen.sh && ./configure && make rpms
@@ -160,10 +162,10 @@ SErvername              polaris-kvm-tsm-server
 If the compilation process is successful, then you should see the following information `./src/lhsmtool_tsm --help`
 ```
 usage: ./src/lhsmtool_tsm [options] <lustre_mount_point>
-	-a, --archive-id <int> [default: 1]
+	-a, --archive-id <int> [default: 0]
 		archive id number
 	-t, --threads <int>
-		number of processing threads [default: 2]
+		number of processing threads [default: 1]
 	-n, --node <string>
 		node name registered on tsm server
 	-p, --password <string>
@@ -172,6 +174,8 @@ usage: ./src/lhsmtool_tsm [options] <lustre_mount_point>
 		owner of tsm node
 	-s, --servername <string>
 		hostname of tsm server
+	-c, --conf <file>
+		option conf file
 	-v, --verbose {error, warn, message, info, debug} [default: message]
 		produce more verbose output
 	--abort-on-error
@@ -182,11 +186,13 @@ usage: ./src/lhsmtool_tsm [options] <lustre_mount_point>
 		don't run, just show what would be done
 	--restore-stripe
 		restore stripe information
+	--enable-maxmpc
+		enable tsm mount point check to infer the maximum number of feasible threads
 	-h, --help
 		show this help
 
-IBM API library version: 7.1.6.0, IBM API application client version: 7.1.6.0
-version: 0.5.7-5 © 2017 by GSI Helmholtz Centre for Heavy Ion Research
+IBM API library version: 7.1.8.0, IBM API application client version: 7.1.8.0
+version: 0.8.0 © 2017 by GSI Helmholtz Centre for Heavy Ion Research
 ```
 
 Starting the *copytool* with 4 threads and *archive_id=1* works as follows `./src/lhsmtool_tsm --restore-stripe -a 1 -v debug -n polaris -p polaris -s 'polaris-kvm-tsm-server' -t 4 /lustre` where
@@ -243,7 +249,7 @@ lustre stripe count                        : 0
 ```
 Note, there is unfortunately no low-level TSM API call to query the [maximum number of mount points](https://www.ibm.com/support/knowledgecenter/en/SSS9C9_2.1.3/com.ibm.ia.doc_1.0/ic/t_coll_ssam_set_max_mount_points.html) (that is parallel sessions).
 This number is an upper limit of the number of parallel threads of the copytool. To determine the maximum number of mount points and thus set the number of threads appropriately,
-one can apply a trick and send *dummy* transactions to the TSM server until one receives a certain error code. That is the reason why at start you see (in debug mode) the output of *node mountpoint check*.
+one can apply a trick and send *dummy* transactions to the TSM server until one receives a certain error code. That is the reason why at start you see (in debug mode) the output of *node mountpoint check* when starting the copytool with option *--enable-maxmpc*.
 
 Once the copytool is started one can run the Lustre commands *lfs hsm_archive*, *lfs hsm_release*, *lfs hsm_restore* as depicted in the state diagram.
 
@@ -328,6 +334,17 @@ lustre stripe size                         : 1048576
 lustre stripe count                        : 1
 
 ```
+
+# Lustre TSM File System Daemon
+The goal of the Lustre TSM File System Daemon (short ltsmfsd) is to
+efficiently and robustly transfer data to a Lustre file system and
+additionally archive the data seamlessly on a TSM server.
+Frequently a deployed Lustre file system is shared and accessed by thousands of users and
+can suffer from latency delays. To overcome this problem,
+the daemon implements a straightforward socket communication protocol and employs
+(similar to the copytool architecture) a *queue* data-structure and
+*multiple producer-consumer* model to leverage asynchronous data transfer by using an intermediate
+local file system.
 
 # Tips for Tuning
 There are basically 3 knobs for adjusting the archive/retrieve performance.
