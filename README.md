@@ -121,6 +121,12 @@ If Lustre sources are not found you will get the message
 configure: WARNING: cannot find Lustre source files, use --with-lustre-src=PATH
 configure: WARNING: cannot find Lustre API headers and/or Lustre API library
 ...
+configured ltsm:
+
+build fsdapi library           : yes
+build tsmapi library and ltsmc : yes
+build ltsmfsd and lhsmtool_tsm : no
+build test suite               : yes
 ```
 and the console client *ltsmc* as well as the *fsdlib* are built only. For building also the Lustre Copytool thus make sure the Lustre sources
 and the Lustre library `liblustreapi.so` are available and the paths are correctly specified e.g.
@@ -198,32 +204,32 @@ version: 0.8.0 © 2017 by GSI Helmholtz Centre for Heavy Ion Research
 Starting the *copytool* with 4 threads and *archive_id=1* works as follows `./src/lhsmtool_tsm --restore-stripe -a 1 -v debug -n polaris -p polaris -s 'polaris-kvm-tsm-server' -t 4 /lustre` where
 parameters, *-n = nodename*, *-p = password* and *-s = servername* have to match with those setup on the TSM Server (see [TSM Server Installation Guide](https://github.com/tstibor/ltsm.github.io/tree/master/doc/tutorial)).
 ```
-[DEBUG] 1509708481.724705 [15063] lhsmtool_tsm.c:262 using TSM filespace name '/lustre'
-[DEBUG] 1509708481.743621 [15063] tsmapi.c:739 dsmSetUp: handle: 0 ANS0302I (RC0)    Successfully done.
-[MESSAGE] 1509708481.743642 [15063] lhsmtool_tsm.c:836 tsm_init: session: 1
-[DEBUG] 1509708481.927847 [15063] tsmapi.c:785 dsmInitEx: handle: 1 ANS0302I (RC0)    Successfully done.
-[DEBUG] 1509708481.936992 [15063] tsmapi.c:806 dsmRegisterFS: handle: 1 ANS0242W (RC2062) On dsmRegisterFS the filespace is already registered
-[DEBUG] 1509708482.241943 [15063] tsmapi.c:1262 [rc=0] extract_hl_ll
+[D] 1509708481.724705 [15063] lhsmtool_tsm.c:262 using TSM filespace name '/lustre'
+[D] 1509708481.743621 [15063] tsmapi.c:739 dsmSetUp: handle: 0 ANS0302I (RC0)    Successfully done.
+[M] 1509708481.743642 [15063] lhsmtool_tsm.c:836 tsm_init: session: 1
+[D] 1509708481.927847 [15063] tsmapi.c:785 dsmInitEx: handle: 1 ANS0302I (RC0)    Successfully done.
+[D] 1509708481.936992 [15063] tsmapi.c:806 dsmRegisterFS: handle: 1 ANS0242W (RC2062) On dsmRegisterFS the filespace is already registered
+[D] 1509708482.241943 [15063] tsmapi.c:1262 [rc=0] extract_hl_ll
 fpath: '/lustre/.mount/.test-maxnummp'
 fs   : '/lustre'
 hl   : '/.mount'
 ll   : '/.test-maxnummp'
 
-[INFO] 1509708482.241976 [15063] tsmapi.c:1020 query structure
+[I] 1509708482.241976 [15063] tsmapi.c:1020 query structure
 fs   : '/lustre'
 hl   : '/.mount'
 ll   : '/.test-maxnummp'
 owner: ''
 descr: '*'
-[DEBUG] 1509708482.242415 [15063] tsmapi.c:1023 dsmBeginQuery: handle: 1 ANS0302I (RC0)    Successfully done.
-[DEBUG] 1509708482.276913 [15063] tsmapi.c:1039 dsmGetNextQObj: handle: 1 ANS0258I (RC2200) On dsmGetNextQObj or dsmGetData there is more available data
-[DEBUG] 1509708482.276953 [15063] tsmapi.c:1039 dsmGetNextQObj: handle: 1 ANS0272I (RC121)  The operation is finished
-[DEBUG] 1509708482.276963 [15063] tsmapi.c:1233 [rc:0] get_qra: 0
-[DEBUG] 1509708482.277211 [15063] tsmapi.c:1198 dsmBeginTxn: handle: 1 ANS0302I (RC0)    Successfully done.
-[DEBUG] 1509708482.277226 [15063] tsmapi.c:1208 dsmDeleteObj: handle: 1 ANS0302I (RC0)    Successfully done.
-[DEBUG] 1509708482.321404 [15063] tsmapi.c:1217 dsmEndTxn: handle: 1 ANS0302I (RC0)    Successfully done.
-[DEBUG] 1509708482.321415 [15063] tsmapi.c:1240 [rc:0] tsm_del_obj: 0
-[INFO] 1509708482.321424 [15063] tsmapi.c:705 [delete] object # 0
+[D] 1509708482.242415 [15063] tsmapi.c:1023 dsmBeginQuery: handle: 1 ANS0302I (RC0)    Successfully done.
+[D] 1509708482.276913 [15063] tsmapi.c:1039 dsmGetNextQObj: handle: 1 ANS0258I (RC2200) On dsmGetNextQObj or dsmGetData there is more available data
+[D] 1509708482.276953 [15063] tsmapi.c:1039 dsmGetNextQObj: handle: 1 ANS0272I (RC121)  The operation is finished
+[D] 1509708482.276963 [15063] tsmapi.c:1233 [rc:0] get_qra: 0
+[D] 1509708482.277211 [15063] tsmapi.c:1198 dsmBeginTxn: handle: 1 ANS0302I (RC0)    Successfully done.
+[D] 1509708482.277226 [15063] tsmapi.c:1208 dsmDeleteObj: handle: 1 ANS0302I (RC0)    Successfully done.
+[D] 1509708482.321404 [15063] tsmapi.c:1217 dsmEndTxn: handle: 1 ANS0302I (RC0)    Successfully done.
+[D] 1509708482.321415 [15063] tsmapi.c:1240 [rc:0] tsm_del_obj: 0
+[I] 1509708482.321424 [15063] tsmapi.c:705 [delete] object # 0
 fs: /lustre, hl: /.mount, ll: /.test-maxnummp
 object id (hi,lo)                          : (0,34772)
 object info length                         : 48
@@ -243,9 +249,9 @@ lustre stripe count                        : 0
 ...
 ...
 ...
-[INFO] 1509708482.321437 [15063] tsmapi.c:2118 passed mount point check
-[DEBUG] 1509708482.321440 [15063] lhsmtool_tsm.c:871 Abort on error 0
-[DEBUG] 1509708482.322375 [15063] lhsmtool_tsm.c:645 waiting for message from kernel
+[I] 1509708482.321437 [15063] tsmapi.c:2118 passed mount point check
+[D] 1509708482.321440 [15063] lhsmtool_tsm.c:871 Abort on error 0
+[D] 1509708482.322375 [15063] lhsmtool_tsm.c:645 waiting for message from kernel
 ```
 Note, there is unfortunately no low-level TSM API call to query the [maximum number of mount points](https://www.ibm.com/support/knowledgecenter/en/SSS9C9_2.1.3/com.ibm.ia.doc_1.0/ic/t_coll_ssam_set_max_mount_points.html) (that is parallel sessions).
 This number is an upper limit of the number of parallel threads of the copytool. To determine the maximum number of mount points and thus set the number of threads appropriately,
@@ -257,41 +263,41 @@ In the following example we archive the Lustre wiki website:
 `wget -O - -o /dev/null http://wiki.lustre.org > /lustre/wiki.lustre.org && sudo lfs hsm_archive /lustre/wiki.lustre.org`.
 If the command was successful you should see:
 ```
-[MESSAGE] 1509710509.205682 [16973] lhsmtool_tsm.c:680 copytool fs=ldomov archive#=1 item_count=1
-[MESSAGE] 1509710509.205705 [16973] lhsmtool_tsm.c:735 enqueue action 'ARCHIVE' cookie=0x59f9b6f9, FID=[0x200000401:0x17:0x0]
-[DEBUG] 1509710509.205717 [16973] lhsmtool_tsm.c:645 waiting for message from kernel
-[DEBUG] 1509710509.205803 [16976] lhsmtool_tsm.c:596 dequeue action 'ARCHIVE' cookie=0x59f9b6f9, FID=[0x200000401:0x17:0x0]
-[MESSAGE] 1509710509.205823 [16976] lhsmtool_tsm.c:532 '[0x200000401:0x17:0x0]' action ARCHIVE reclen 72, cookie=0x59f9b6f9
-[DEBUG] 1509710509.207877 [16976] lhsmtool_tsm.c:361 [rc=0] ct_hsm_action_begin on '/lustre/wiki.lustre.org'
-[MESSAGE] 1509710509.207901 [16976] lhsmtool_tsm.c:366 archiving '/lustre/wiki.lustre.org' to TSM storage
-[DEBUG] 1509710509.208148 [16976] lhsmtool_tsm.c:376 [fd=10] llapi_hsm_action_get_fd()
-[DEBUG] 1509710509.208196 [16976] lhsmtool_tsm.c:389 [rc=0,fd=10] xattr_get_lov '/lustre/wiki.lustre.org'
-[INFO] 1509710509.208201 [16976] tsmapi.c:1964 tsm_archive_fpath:
+[M] 1509710509.205682 [16973] lhsmtool_tsm.c:680 copytool fs=ldomov archive#=1 item_count=1
+[M] 1509710509.205705 [16973] lhsmtool_tsm.c:735 enqueue action 'ARCHIVE' cookie=0x59f9b6f9, FID=[0x200000401:0x17:0x0]
+[D] 1509710509.205717 [16973] lhsmtool_tsm.c:645 waiting for message from kernel
+[D] 1509710509.205803 [16976] lhsmtool_tsm.c:596 dequeue action 'ARCHIVE' cookie=0x59f9b6f9, FID=[0x200000401:0x17:0x0]
+[M] 1509710509.205823 [16976] lhsmtool_tsm.c:532 '[0x200000401:0x17:0x0]' action ARCHIVE reclen 72, cookie=0x59f9b6f9
+[D] 1509710509.207877 [16976] lhsmtool_tsm.c:361 [rc=0] ct_hsm_action_begin on '/lustre/wiki.lustre.org'
+[M] 1509710509.207901 [16976] lhsmtool_tsm.c:366 archiving '/lustre/wiki.lustre.org' to TSM storage
+[D] 1509710509.208148 [16976] lhsmtool_tsm.c:376 [fd=10] llapi_hsm_action_get_fd()
+[D] 1509710509.208196 [16976] lhsmtool_tsm.c:389 [rc=0,fd=10] xattr_get_lov '/lustre/wiki.lustre.org'
+[I] 1509710509.208201 [16976] tsmapi.c:1964 tsm_archive_fpath:
 fs: /lustre, fpath: /lustre/wiki.lustre.org, desc: (null), fd: 10, *lustre_info: 0x7fd54c7bad70
-[DEBUG] 1509710509.208534 [16976] tsmapi.c:1792 [rc:0] extract_hl_ll:
+[D] 1509710509.208534 [16976] tsmapi.c:1792 [rc:0] extract_hl_ll:
 fpath: /lustre/wiki.lustre.org
 fs   : /lustre
 hl   : /
 ll   : /wiki.lustre.org
 
-[DEBUG] 1509710509.208938 [16976] tsmapi.c:1547 dsmBeginTxn: handle: 1 ANS0302I (RC0)    Successfully done.
-[DEBUG] 1509710509.208958 [16976] tsmapi.c:1555 dsmBindMC: handle: 1 ANS0302I (RC0)    Successfully done.
-[DEBUG] 1509710509.208993 [16976] tsmapi.c:1576 dsmSendObj: handle: 1 ANS0302I (RC0)    Successfully done.
-[DEBUG] 1509710509.209499 [16976] tsmapi.c:1608 dsmSendData: handle: 1 ANS0302I (RC0)    Successfully done.
-[INFO] 1509710509.209510 [16976] tsmapi.c:1615 cur_read: 20313, total_read: 20313, total_size: 20313
-[DEBUG] 1509710509.209747 [16976] tsmapi.c:1663 dsmEndSendObj: handle: 1 ANS0302I (RC0)    Successfully done.
-[DEBUG] 1509710509.394623 [16976] tsmapi.c:1674 dsmEndTxn: handle: 1 ANS0302I (RC0)    Successfully done.
-[INFO] 1509710509.394646 [16976] tsmapi.c:1702
+[D] 1509710509.208938 [16976] tsmapi.c:1547 dsmBeginTxn: handle: 1 ANS0302I (RC0)    Successfully done.
+[D] 1509710509.208958 [16976] tsmapi.c:1555 dsmBindMC: handle: 1 ANS0302I (RC0)    Successfully done.
+[D] 1509710509.208993 [16976] tsmapi.c:1576 dsmSendObj: handle: 1 ANS0302I (RC0)    Successfully done.
+[D] 1509710509.209499 [16976] tsmapi.c:1608 dsmSendData: handle: 1 ANS0302I (RC0)    Successfully done.
+[I] 1509710509.209510 [16976] tsmapi.c:1615 cur_read: 20313, total_read: 20313, total_size: 20313
+[D] 1509710509.209747 [16976] tsmapi.c:1663 dsmEndSendObj: handle: 1 ANS0302I (RC0)    Successfully done.
+[D] 1509710509.394623 [16976] tsmapi.c:1674 dsmEndTxn: handle: 1 ANS0302I (RC0)    Successfully done.
+[I] 1509710509.394646 [16976] tsmapi.c:1702
 *** successfully archived: DSM_OBJ_FILE /lustre/wiki.lustre.org of size: 20313 bytes with settings ***
 fs: /lustre
 hl: /
 ll: /wiki.lustre.org
 desc:
 
-[DEBUG] 1509710509.440357 [16976] tsmapi.c:1707 [rc:0] tsm_obj_update_crc32, crc32: 0x7d0db330 (2098049840)
-[MESSAGE] 1509710509.440370 [16976] lhsmtool_tsm.c:402 archiving '/lustre/wiki.lustre.org' to TSM storage done
-[MESSAGE] 1509710509.440681 [16976] lhsmtool_tsm.c:325 action completed, notifying coordinator cookie=0x59f9b6f9, FID=[0x200000401:0x17:0x0], err=0
-[DEBUG] 1509710509.441332 [16976] lhsmtool_tsm.c:338 [rc=0] llapi_hsm_action_end on '/lustre/wiki.lustre.org' ok
+[D] 1509710509.440357 [16976] tsmapi.c:1707 [rc:0] tsm_obj_update_crc32, crc32: 0x7d0db330 (2098049840)
+[M] 1509710509.440370 [16976] lhsmtool_tsm.c:402 archiving '/lustre/wiki.lustre.org' to TSM storage done
+[M] 1509710509.440681 [16976] lhsmtool_tsm.c:325 action completed, notifying coordinator cookie=0x59f9b6f9, FID=[0x200000401:0x17:0x0], err=0
+[D] 1509710509.441332 [16976] lhsmtool_tsm.c:338 [rc=0] llapi_hsm_action_end on '/lustre/wiki.lustre.org' ok
 ```
 
 Let us use our *ltsmc* to query (for fun) some TSM object information of */lustre/wiki.lustre.org*.
@@ -299,23 +305,23 @@ Let us use our *ltsmc* to query (for fun) some TSM object information of */lustr
 >src/ltsmc -f /lustre --query -v debug -n polaris -p polaris -s 'polaris-kvm-tsm-server' /lustre/wiki.lustre.org
 ...
 ...
-[DEBUG] 1509712134.421465 [18010] tsmapi.c:1303 [rc:0] extract_hl_ll:
+[D] 1509712134.421465 [18010] tsmapi.c:1303 [rc:0] extract_hl_ll:
 fpath: /lustre/wiki.lustre.org
 fs   : /lustre
-hl: /
-ll: /wiki.lustre.org
+hl   : /
+ll   : /wiki.lustre.org
 
-[INFO] 1509712134.421487 [18010] tsmapi.c:1020 query structure
+[I] 1509712134.421487 [18010] tsmapi.c:1020 query structure
 fs   : '/lustre'
 hl   : '/'
 ll   : '/wiki.lustre.org'
 owner: ''
 descr: '*'
-[DEBUG] 1509712134.421833 [18010] tsmapi.c:1023 dsmBeginQuery: handle: 1 ANS0302I (RC0)    Successfully done.
-[DEBUG] 1509712134.455811 [18010] tsmapi.c:1039 dsmGetNextQObj: handle: 1 ANS0258I (RC2200) On dsmGetNextQObj or dsmGetData there is more available data
-[DEBUG] 1509712134.455866 [18010] tsmapi.c:1039 dsmGetNextQObj: handle: 1 ANS0258I (RC2200) On dsmGetNextQObj or dsmGetData there is more available data
-[DEBUG] 1509712134.455927 [18010] tsmapi.c:1039 dsmGetNextQObj: handle: 1 ANS0272I (RC121)  The operation is finished
-[INFO] 1509712134.455945 [18010] tsmapi.c:705 [query] object # 0
+[D] 1509712134.421833 [18010] tsmapi.c:1023 dsmBeginQuery: handle: 1 ANS0302I (RC0)    Successfully done.
+[D] 1509712134.455811 [18010] tsmapi.c:1039 dsmGetNextQObj: handle: 1 ANS0258I (RC2200) On dsmGetNextQObj or dsmGetData there is more available data
+[D] 1509712134.455866 [18010] tsmapi.c:1039 dsmGetNextQObj: handle: 1 ANS0258I (RC2200) On dsmGetNextQObj or dsmGetData there is more available data
+[D] 1509712134.455927 [18010] tsmapi.c:1039 dsmGetNextQObj: handle: 1 ANS0272I (RC121)  The operation is finished
+[I] 1509712134.455945 [18010] tsmapi.c:705 [query] object # 0
 fs: /lustre, hl: /, ll: /wiki.lustre.org
 object id (hi,lo)                          : (0,34778)
 object info length                         : 48
@@ -339,12 +345,46 @@ lustre stripe count                        : 1
 The goal of the Lustre TSM File System Daemon (short ltsmfsd) is to
 efficiently and robustly transfer data to a Lustre file system and
 additionally archive the data seamlessly on a TSM server.
-Frequently a deployed Lustre file system is shared and accessed by thousands of users and
+A deployed Lustre file system is frequently shared and accessed by thousands of users and
 can suffer from latency delays. To overcome this problem,
 the daemon implements a straightforward socket communication protocol and employs
 (similar to the copytool architecture) a *queue* data-structure and
 *multiple producer-consumer* model to leverage asynchronous data transfer by using an intermediate
-local file system.
+local file system. The daemon can be started as follows:
+```
+>ltsmfsd -l /fsddata -i identmap.conf -s 16 -q 12 -v info /lustre
+[I] 1579167563.378896 [174822] ltsmfsd.c:137 node: 'polaris', servername: 'tsmserver-8', archive_id: 15, uid: 1000, gid: 2000
+[M] 1579167563.382178 [174822] ltsmfsd.c:1618 listening on port 7625 with 16 socket threads, 12 queue worker threads, local fs '/fsddata' and number of tolerated file errors 16
+[M] 1579167563.382268 [174822] ltsmfsd.c:1539 created queue consumer thread fsd_queue/0
+[M] 1579167563.382309 [174822] ltsmfsd.c:1539 created queue consumer thread fsd_queue/1
+[M] 1579167563.382353 [174822] ltsmfsd.c:1539 created queue consumer thread fsd_queue/2
+[M] 1579167563.382387 [174822] ltsmfsd.c:1539 created queue consumer thread fsd_queue/3
+[M] 1579167563.382418 [174822] ltsmfsd.c:1539 created queue consumer thread fsd_queue/4
+[M] 1579167563.382448 [174822] ltsmfsd.c:1539 created queue consumer thread fsd_queue/5
+[M] 1579167563.382480 [174822] ltsmfsd.c:1539 created queue consumer thread fsd_queue/6
+[M] 1579167563.382511 [174822] ltsmfsd.c:1539 created queue consumer thread fsd_queue/7
+[M] 1579167563.382544 [174822] ltsmfsd.c:1539 created queue consumer thread fsd_queue/8
+[M] 1579167563.382575 [174822] ltsmfsd.c:1539 created queue consumer thread fsd_queue/9
+[M] 1579167563.382606 [174822] ltsmfsd.c:1539 created queue consumer thread fsd_queue/10
+[M] 1579167563.382641 [174822] ltsmfsd.c:1539 created queue consumer thread fsd_queue/11
+```
+
+For interfacing the daemon from a client, use the function calls provided in: [fsdapi.h](http://github.com/tstibor/ltsm/blob/master/src/lib/fsdapi.h)
+```
+void fsd_init(struct fsd_login_t *fsd_login, const char *servername,
+              const char *node, const char *password,
+              const char *owner, const char *platform,
+              const char *fsname, const char *fstype,
+              const char *hostname, const int port);
+int fsd_fconnect(struct fsd_login_t *fsd_login,
+                 struct fsd_session_t *fsd_session);
+void fsd_fdisconnect(struct fsd_session_t *fsd_session);
+int fsd_fopen(const char *fs, const char *fpath, const char *desc,
+              struct fsd_session_t *fsd_session);
+ssize_t fsd_fwrite(const void *ptr, size_t size, size_t nmemb,
+                   struct fsd_session_t *fsd_session);
+int fsd_fclose(struct fsd_session_t *fsd_session);
+```
 
 # Tips for Tuning
 There are basically 3 knobs for adjusting the archive/retrieve performance.
@@ -403,7 +443,7 @@ transfer as depicted below.
 ![Archive performace](https://raw.githubusercontent.com/tstibor/ltsm.github.io/master/doc/images/scaling.png)
 
 ## More Information
-In the manual pages [lhsmtool_tsm.1](http://github.com/tstibor/ltsm/blob/master/man/lhsmtool_tsm.1) and [ltsmc.1](http://github.com/tstibor/ltsm/blob/master/man/ltsmc.1) usage details and options of *lhsmtool_tsm* and *ltsmc*
+In the manual pages [lhsmtool_tsm.1](http://github.com/tstibor/ltsm/blob/master/man/lhsmtool_tsm.1), [ltsmc.1](http://github.com/tstibor/ltsm/blob/master/man/ltsmc.1) and [ltsmfsd.1](http://github.com/tstibor/ltsm/blob/master/man/ltsmfsd.1) usage details and options of *lhsmtool_tsm*, *ltsmc* and *ltsmfsd*
 are provided. In addition, a [screencast](https://github.com/tstibor/ltsm.github.io/raw/master/screencast/ltsm-screencast-2.mp4) of an older version of this project is provided.
 
 ## References
