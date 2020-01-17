@@ -103,7 +103,7 @@ AC_CHECK_LIB([z], [crc32], [], [AC_MSG_ERROR([cannot find library zlib, install 
 AC_CHECK_LIB([attr], [fgetxattr], [], [AC_MSG_ERROR([cannot find library libattr, install libattr package or provide library path e.g. ./configure LDFLAGS='-L/<PATH_TO_LIB>'])])
 
 # Checks for header files.
-AC_CHECK_HEADERS([fcntl.h stdint.h stdlib.h string.h strings.h sys/param.h sys/time.h unistd.h pthread.h float.h attr/xattr.h])
+AC_CHECK_HEADERS([fcntl.h stdint.h stdlib.h string.h strings.h sys/param.h sys/time.h unistd.h pthread.h float.h attr/xattr.h arpa/inet.h limits.h netdb.h netinet/in.h sys/socket.h])
 
 AX_PTHREAD([AC_DEFINE(HAVE_PTHREAD, 1, [Define if you have POSIX threads libraries and header files.])
             CLIBS="$PTHREAD_LIBS $LIBS"
@@ -154,10 +154,11 @@ AC_TYPE_UINT16_T
 AC_TYPE_UINT32_T
 AC_TYPE_UINT64_T
 AC_TYPE_UINT8_T
+AC_TYPE_UID_T
 
 # Checks for library functions.
-AC_FUNC_LSTAT_FOLLOWS_SLASHED_SYMLINK
-AC_CHECK_FUNCS([malloc realloc atexit bzero clock_gettime gettimeofday memmove memset mkdir realpath sqrt strerror strtol])
+AC_FUNC_LSTAT_FOLLOWS_SLASHED_SYMLINK AC_FUNC_CHOWN
+AC_CHECK_FUNCS([malloc realloc atexit bzero clock_gettime gettimeofday memmove memset mkdir realpath sqrt strerror strtol gethostbyname inet_ntoa socket])
 
 AC_CONFIG_FILES([Makefile
                  src/Makefile
