@@ -577,14 +577,11 @@ static struct fsd_action_item_t* create_fsd_item(const size_t bytes_recv_total,
 						 const char *fpath_local, const int archive_id,
 						 const uid_t uid, const gid_t gid)
 {
-	int rc;
 	struct fsd_action_item_t *fsd_action_item;
 
 	fsd_action_item = calloc(1, sizeof(struct fsd_action_item_t));
 	if (!fsd_action_item) {
-		rc = -errno;
-		CT_ERROR(rc, "calloc");
-
+		CT_ERROR(-errno, "calloc");
 		return NULL;
 	}
 
@@ -922,7 +919,6 @@ static void re_enqueue(const char *dpath)
 	dir = opendir(dpath);
 	if (!dir) {
 		CT_ERROR(-errno, "opendir '%s'", dpath);
-
 		return;
 	}
 	while (1) {
@@ -1148,7 +1144,6 @@ static int archive_state(const struct fsd_action_item_t *fsd_action_item,
 	if (rc) {
 		CT_ERROR(rc, "llapi_hsm_state_get '%s'",
 			 fsd_action_item->fsd_info.fpath);
-
 		return rc;
 	}
 
@@ -1171,7 +1166,6 @@ static int archive_action(struct fsd_action_item_t *fsd_action_item)
 	if (rc) {
 		CT_ERROR(rc, "llapi_path2fid '%s'",
 			 fsd_action_item->fsd_info.fpath);
-
 		return rc;
 	}
 
@@ -1180,7 +1174,6 @@ static int archive_action(struct fsd_action_item_t *fsd_action_item)
 		rc = -errno;
 		CT_ERROR(rc, "llapi_hsm_user_request_alloc failed '%s'",
 			 fsd_action_item->fsd_info.fpath);
-
 		return rc;
 	}
 	hur->hur_request.hr_action = HUA_ARCHIVE;
@@ -1244,9 +1237,7 @@ static int process_fsd_action_item(struct fsd_action_item_t *fsd_action_item)
 			"and is omitted", fsd_action_item->fpath_local);
 		rc = xattr_update_fsd_state(fsd_action_item,
 					    STATE_FILE_OMITTED);
-
 		free(fsd_action_item);
-
 		return 0;
 	}
 
@@ -1431,14 +1422,12 @@ static int process_fsd_action_item(struct fsd_action_item_t *fsd_action_item)
 		CT_INFO("unlink '%s' and remove action item",
 			fsd_action_item->fpath_local);
 		free(fsd_action_item);
-
 		return 0;
 	}
 	case STATE_FILE_OMITTED: {
 		CT_MESSAGE("file '%s' is omitted and removed from queue",
 			   fsd_action_item->fpath_local);
 		free(fsd_action_item);
-
 		return 0;
 	}
 	default:		/* We should never be here. */
@@ -1539,7 +1528,6 @@ static int start_queue_consumer_threads(void)
 			CT_MESSAGE("created queue consumer thread fsd_queue/%d", n);
 	}
 	pthread_attr_destroy(&attr);
-
 	return rc;
 
 cleanup:

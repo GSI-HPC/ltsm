@@ -156,7 +156,6 @@ int fsd_fopen(const char *fs, const char *fpath, const char *desc,
 
 	if (!(fs && fpath)) {
 		close(fsd_session->sock_fd);
-
 		return -EFAULT;
 	}
 
