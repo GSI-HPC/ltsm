@@ -1132,6 +1132,8 @@ out:
 	return rc;
 }
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-function"
 static int archive_state(const struct fsd_action_item_t *fsd_action_item,
 			 uint32_t *states)
 {
@@ -1151,6 +1153,7 @@ static int archive_state(const struct fsd_action_item_t *fsd_action_item,
 
 	return rc;
 }
+#pragma GCC diagnostic pop
 
 static int archive_action(struct fsd_action_item_t *fsd_action_item)
 {
@@ -1335,7 +1338,9 @@ static int process_fsd_action_item(struct fsd_action_item_t *fsd_action_item)
 		break;
 	}
 	case STATE_TSM_ARCHIVE_RUN: {
+		uint32_t states = 0;
 
+#ifdef LTSMFSD_POLL_ARCHIVE_FINISHED
 		/* We stay in STATE_TSM_ARCHIVE_RUN and poll every 50ms to check,
 		   whether the archive operation finishes successfully. This approach,
 		   however, is not efficient and in addition congests the queue, as the
@@ -1345,9 +1350,6 @@ static int process_fsd_action_item(struct fsd_action_item_t *fsd_action_item)
 		   STATE_TSM_ARCHIVE_DONE and assume: If archive_action(fsd_action_item)
 		   returns success, then the file is also successfully archived.
 		   To remove this assumption, just remove the goto statement and label. */
-		goto AVOID_TSM_ARCHIVE_POLLING;
-
-		uint32_t states = 0;
 
 		/* The archive_state check is based on polling, thus employ
 		   sleep(50ms) to avoid high CPU load. */
@@ -1363,10 +1365,15 @@ static int process_fsd_action_item(struct fsd_action_item_t *fsd_action_item)
 				 fsd_action_item->fsd_info.fpath);
 			break;
 		}
+#else
+		states = HS_EXISTS | HS_ARCHIVED;
+#endif
 
-		/* Verify whether file is finally archived. */
-		if ((states & HS_EXISTS) && (states && HS_ARCHIVED)) {
-		AVOID_TSM_ARCHIVE_POLLING:
+		/* Verify whether file is finally archived. Note, this check also
+		   returns true when file exists, is archived and is e.g. dirty.
+		   For an exact match on HS_EXISTS and HS_ARCHIVED, do:
+		   (states == (HS_EXISTS | HS_ARCHIVED)) */
+		if ((states & HS_EXISTS) && (states & HS_ARCHIVED)) {
 			rc = xattr_update_fsd_state(fsd_action_item,
 						    STATE_TSM_ARCHIVE_DONE);
 			CT_DEBUG("[rc=%d] setting state from '%s' to '%s'",
