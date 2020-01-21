@@ -534,8 +534,8 @@ static int enqueue_fsd_item(struct fsd_action_item_t *fsd_action_item)
 	if (rc) {
 		rc = -EFAILED;
 		CT_ERROR(rc, "failed enqueue operation: "
-			 "%p, state '%s', fs '%s', fpath '%s', size %zu "
-			 "errors %d, ts[0] %zu, ts[1] %zu, ts[2] %zu, queue size %lu",
+			 "%p, state '%s', fs '%s', fpath '%s', size %zu, "
+			 "errors %d, ts[0] %.3f, ts[1] %.3f, ts[2] %.3f, queue size %lu",
 			 fsd_action_item,
 			 FSD_ACTION_STR(fsd_action_item->fsd_action_state),
 			 fsd_action_item->fsd_info.fs,
@@ -550,8 +550,8 @@ static int enqueue_fsd_item(struct fsd_action_item_t *fsd_action_item)
 		free(fsd_action_item);
 	} else
 		CT_INFO("enqueue operation: "
-			"%p, state '%s', fs '%s', fpath '%s', size %zu "
-			"errors %d, ts[0] %zu, ts[1] %zu, ts[2] %zu, queue size %lu",
+			"%p, state '%s', fs '%s', fpath '%s', size %zu, "
+			"errors %d, ts[0] %.3f, ts[1] %.3f, ts[2] %.3f, queue size %lu",
 			fsd_action_item,
 			FSD_ACTION_STR(fsd_action_item->fsd_action_state),
 			fsd_action_item->fsd_info.fs,
@@ -588,7 +588,7 @@ static struct fsd_action_item_t* create_fsd_item(const size_t bytes_recv_total,
 	fsd_action_item->fsd_action_state = STATE_FSD_COPY_DONE;
 	fsd_action_item->size = bytes_recv_total;
 	memcpy(&fsd_action_item->fsd_info, fsd_info, sizeof(struct fsd_info_t));
-	fsd_action_item->ts[0] = time(NULL);
+	fsd_action_item->ts[0] = time_now();
 	fsd_action_item->ts[1] = 0;
 	fsd_action_item->ts[2] = 0;
 	strncpy(fsd_action_item->fpath_local, fpath_local, PATH_MAX);
@@ -1219,8 +1219,8 @@ static int process_fsd_action_item(struct fsd_action_item_t *fsd_action_item)
 {
 	int rc = 0;
 
-	CT_DEBUG("process_fsd_action_item %p, state '%s', fs '%s', fpath '%s', size %zu "
-		 "errors %d, ts[0] %zu, ts[1] %zu, ts[2] %zu, queue size %lu",
+	CT_DEBUG("process_fsd_action_item %p, state '%s', fs '%s', fpath '%s', size %zu, "
+		 "errors %d, ts[0] %.3f, ts[1] %.3f, ts[2] %.3f, queue size %lu",
 		 fsd_action_item,
 		 FSD_ACTION_STR(fsd_action_item->fsd_action_state),
 		 fsd_action_item->fsd_info.fs,
@@ -1285,13 +1285,12 @@ static int process_fsd_action_item(struct fsd_action_item_t *fsd_action_item)
 				FSD_ACTION_STR(fsd_action_item->fsd_action_state));
 			break;
 		}
-		fsd_action_item->ts[1] = time(NULL);
+		fsd_action_item->ts[1] = time_now();
 		CT_MESSAGE("file '%s' copied to '%s' of size %zu in seconds %.3f",
 			   fsd_action_item->fpath_local,
 			   fsd_action_item->fsd_info.fpath,
 			   fsd_action_item->size,
-			   difftime(fsd_action_item->ts[1],
-				    fsd_action_item->ts[0]));
+			   fsd_action_item->ts[1] - fsd_action_item->ts[0]);
 		break;
 	}
 	case STATE_LUSTRE_COPY_RUN: {
@@ -1384,12 +1383,11 @@ static int process_fsd_action_item(struct fsd_action_item_t *fsd_action_item)
 					FSD_ACTION_STR(fsd_action_item->fsd_action_state));
 				break;
 			}
-			fsd_action_item->ts[2] = time(NULL);
+			fsd_action_item->ts[2] = time_now();
 			CT_MESSAGE("file '%s' of size %zu archived in %.3f seconds",
 				   fsd_action_item->fpath_local,
 				   fsd_action_item->size,
-				   difftime(fsd_action_item->ts[2],
-					    fsd_action_item->ts[1]));
+				   fsd_action_item->ts[2] - fsd_action_item->ts[1]);
 		}
 
 		/* Stay in state STATE_TSM_ARCHIVE_RUN. */
@@ -1410,8 +1408,7 @@ static int process_fsd_action_item(struct fsd_action_item_t *fsd_action_item)
 			   "and archived in %.3f seconds",
 			   fsd_action_item->fpath_local,
 			   fsd_action_item->size,
-			   difftime(fsd_action_item->ts[2],
-				    fsd_action_item->ts[1]));
+			   fsd_action_item->ts[2] - fsd_action_item->ts[1]);
 		rc = unlink(fsd_action_item->fpath_local);
 		CT_DEBUG("[rc=%d] unlink '%s'", rc, fsd_action_item->fpath_local);
 		if (rc < 0) {
@@ -1461,8 +1458,8 @@ static void *thread_queue_consumer(void *data)
 		if (rc) {
 			rc = -EFAILED;
 			CT_ERROR(rc, "failed dequeue operation: "
-				 "%p, state '%s', fs '%s', fpath '%s', size %zu "
-				 "errors %d, ts[0] %zu, ts[1] %zu, ts[2] %zu, queue size %lu",
+				 "%p, state '%s', fs '%s', fpath '%s', size %zu, "
+				 "errors %d, ts[0] %.3f, ts[1] %.3f, ts[2] %.3f, queue size %lu",
 				 fsd_action_item,
 				 FSD_ACTION_STR(fsd_action_item->fsd_action_state),
 				 fsd_action_item->fsd_info.fs,
@@ -1475,8 +1472,8 @@ static void *thread_queue_consumer(void *data)
 				 queue_size(&queue));
 		} else {
 			CT_INFO("dequeue operation: "
-				"%p, state '%s', fs '%s', fpath '%s', size %zu "
-				"errors %d, ts[0] %zu, ts[1] %zu, ts[2] %zu, queue size %lu",
+				"%p, state '%s', fs '%s', fpath '%s', size %zu, "
+				"errors %d, ts[0] %.3f, ts[1] %.3f, ts[2] %.3f, queue size %lu",
 				fsd_action_item,
 				FSD_ACTION_STR(fsd_action_item->fsd_action_state),
 				fsd_action_item->fsd_info.fs,

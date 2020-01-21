@@ -22,7 +22,7 @@ static unsigned int api_msg_level = API_MSG_MAX;
 typedef void (*api_log_callback_t)(enum api_message_level level, int err,
 				   const char *fmt, va_list ap);
 
-double ct_now(void)
+inline double time_now(void)
 {
 	struct timeval tv;
 
