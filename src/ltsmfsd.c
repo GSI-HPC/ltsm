@@ -1346,10 +1346,11 @@ static int process_fsd_action_item(struct fsd_action_item_t *fsd_action_item)
 		   however, is not efficient and in addition congests the queue, as the
 		   the fsd_action_item is enqueued/dequeued over and over until the file
 		   is finally archived. To overcome this problem, we change immediately
-		   (via a C goto statement) the state from STATE_TSM_ARCHIVE_RUN to
-		   STATE_TSM_ARCHIVE_DONE and assume: If archive_action(fsd_action_item)
-		   returns success, then the file is also successfully archived.
-		   To remove this assumption, just remove the goto statement and label. */
+		   (via undefined LTSMFSD_POLL_ARCHIVE_FINISHED) the state from
+		   STATE_TSM_ARCHIVE_RUN to STATE_TSM_ARCHIVE_DONE and assume:
+		   If archive_action(fsd_action_item) returns success, then the file
+		   is also successfully archived. To reject this assumption, just define
+		   directive LTSMFSD_POLL_ARCHIVE_FINISHED to activate the poll mechanism. */
 
 		/* The archive_state check is based on polling, thus employ
 		   sleep(50ms) to avoid high CPU load. */
