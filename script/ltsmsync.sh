@@ -1,7 +1,7 @@
 #!/bin/bash
 # Title       : ltsmsync.sh
-# Date        : Tue 04 Dec 2018 03:34:02 PM CET
-# Version     : 0.0.8
+# Date        : Fri 24 Jan 2020 11:55:32 AM CET
+# Version     : 0.0.9
 # Author      : "Thomas Stibor" <t.stibor@gsi.de>
 # Description : Query TSM server and create from the query result empty files
 #               with appropriate Lustre HSM flags. Subsequent files access, transparently
@@ -182,7 +182,7 @@ LUSTRE_DIR="$@"
 
 # Create list of files from query.
 DATE_TIME_DAYS_AGO=`date --date="${DAYS_AGO} days ago" +"%Y:%m:%d:%H:%M:%S"`
-FILE_LIST=`${LTSMC_BIN} -f ${FSPACE} --query \
+FILE_LIST=`${LTSMC_BIN} -f ${FSPACE} --query --latest \
 	     --servername ${SERVERNAME} -n ${NODE} \
 	     --password ${PASSWORD} "${LUSTRE_DIR}" -v message --datelow "${DATE_TIME_DAYS_AGO}" \
 	     | awk '{gsub(/^fs:/, "", $6); gsub(/^hl:/, "", $7); gsub(/^ll:/, "", $8); gsub(/^crc32:/, "@", $9); print $6 $7 $8 $9}'`
@@ -230,4 +230,3 @@ do
     fi
     __job_limit ${JOBS}
 done
-
