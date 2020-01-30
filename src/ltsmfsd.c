@@ -781,9 +781,9 @@ static void *thread_sock_client(void *arg)
 	do {
 		/* State 2: Client calls fsd_fopen(...) or fsd_disconnect(...). */
 		rc = fsd_recv(*fd_sock, &fsd_session, (FSD_OPEN | FSD_DISCONNECT));
-		CT_DEBUG("[rc=%d,fd=%d] recv_fsd_session", rc, *fd_sock);
+		CT_DEBUG("[rc=%d,fd=%d] recv_fsd", rc, *fd_sock);
 		if (rc) {
-			CT_ERROR(rc, "recv_fsd_session failed");
+			CT_ERROR(rc, "recv_fsd failed");
 			goto out;
 		}
 
@@ -808,7 +808,12 @@ static void *thread_sock_client(void *arg)
 				   &fsd_session,
 				   &bytes_recv_total,
 				   &bytes_send_total);
-
+		CT_DEBUG("[rc=%d,fd=%d] recv_fsd_data", rc, *fd_sock);
+		if (rc) {
+			CT_ERROR(rc, "recv_fsd_data failed");
+			goto out;
+		}
+		/* Sanity check. */
 		if (bytes_recv_total != bytes_send_total) {
 			rc = -EFAILED;
 			CT_ERROR(rc, "total number of bytes recv and send "
