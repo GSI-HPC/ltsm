@@ -73,7 +73,6 @@ __hsm_match_and_wait()
 ##########################################################
 # main
 ##########################################################
-TSM_NAME=${1-polaris}
 LHSMTOOL_TSM_BIN="src/lhsmtool_tsm"
 
 PATH_LUSTRE_MOUNTPOINT='/lustre'

@@ -7,16 +7,15 @@ set -e
 VERBOSE=0
 
 ##########################################################
-# main
+# Settings
 ##########################################################
-TSM_NAME=${1-polaris}
 LTSM_BIN="src/ltsmc"
-LTSM_NODE=${TSM_NAME}
-LTSM_PASSWORD=${TSM_NAME}
-LTSM_SERVERNAME=${2-polaris-kvm-tsm-server}
-LTSM_VERBOSE=${3-message}
-LTSM_FS=${4-/tmp}
-LTSM_OWNER=${5-testowner}
+LTSM_NODE=${1-polaris}
+LTSM_PASSWORD=${2-polaris1234}
+LTSM_SERVERNAME=${3-tsmserver-8}
+LTSM_VERBOSE=${4-message}
+LTSM_FS=${5-/tmp}
+LTSM_OWNER=${6-testowner}
 
 [ ${PWD##*/} == "script" ] && { LTSM_BIN="../${LTSM_BIN}"; }
 __check_bin "${LTSM_BIN}"
