@@ -345,7 +345,7 @@ static void read_conf(const char *filename)
 	}
 }
 
-static void sanity_arg_check(const struct options *opts, const char *argv)
+static void sanity_arg_check(const char *argv)
 {
 	if (!opt.o_local_mount[0]) {
 		fprintf(stdout, "missing argument -l, --localfs <string>\n\n");
@@ -466,7 +466,7 @@ static int parseopts(int argc, char *argv[])
 	if (opt.o_file_conf[0])
 		read_conf(opt.o_file_conf);
 
-	sanity_arg_check(&opt, argv[0]);
+	sanity_arg_check(argv[0]);
 
 	if (argc != optind + 1) {
 		rc = -EINVAL;
