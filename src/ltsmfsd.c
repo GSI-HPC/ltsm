@@ -1192,7 +1192,7 @@ static int archive_action(struct fsd_action_item_t *fsd_action_item)
 	hur->hur_request.hr_archive_id = fsd_action_item->archive_id;
 	hur->hur_request.hr_flags = 0;
 	hur->hur_request.hr_itemcount = 1;
-	hur->hur_request.hr_data_len = 0; /* TODO: fsd_action_item->size; */
+	hur->hur_request.hr_data_len = 0;
 
 	hui = &hur->hur_user_item[0];
 	hui->hui_fid = fid;
@@ -1446,7 +1446,8 @@ static int process_fsd_action_item(struct fsd_action_item_t *fsd_action_item)
 	}
 	default:		/* We should never be here. */
 		rc = -ERANGE;
-		break;
+		CT_ERROR(rc, "unknown action state");
+		return rc;
 	}
 
 	rc = enqueue_fsd_item(fsd_action_item);
