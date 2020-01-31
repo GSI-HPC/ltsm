@@ -74,6 +74,9 @@ rm -rf %{buildroot}
 
 %changelog
 
+* Wed Jan 31 2020 Thomas Stibor <t.stibor@gsi.de> 0.8.1-1
+- TSM file system daemon bug fixes.
+
 * Wed Jan 15 2020 Thomas Stibor <t.stibor@gsi.de> 0.8.0-1
 - Added Lustre TSM file system daemon.
 

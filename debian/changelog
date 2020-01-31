@@ -1,3 +1,9 @@
+ltsm (0.8.1) unstable; urgency=medium
+
+  * TSM file system daemon bug fixes.
+
+ -- Thomas Stibor <t.stibor@gsi.de>  Fri, 30 Jan 2020 12:40:30 +0200
+
 ltsm (0.8.0) unstable; urgency=medium
 
   * Added Lustre TSM file system daemon.
