@@ -53,10 +53,6 @@
 #define MAGIC_ID_V1 71147
 #define DEFAULT_NUM_BUCKETS 64
 
-#define OPTNCMP(str1, str2)			\
-	((strlen(str1) == strlen(str2)) &&	\
-	 (strncmp(str1, str2, strlen(str1)) == 0))
-
 enum sort_by_t {
 	SORT_NONE	     = 0,
 	SORT_DATE_ASCENDING  = 1,
