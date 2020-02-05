@@ -29,6 +29,8 @@
 #include "test_utils.h"
 #include "measurement.h"
 
+MSRT_DECLARE(fsd_fwrite);
+
 #define LEN_FILENAME_RND	32
 #define DEFAULT_FPATH_NAME	"/lustre/fsdbench/"
 
@@ -378,7 +380,7 @@ int main(int argc, char *argv[])
 	strncpy(fsd_login.hostname, opt.o_servername, HOST_NAME_MAX);
 	fsd_login.port = 7625;
 
-	/* Each threads connects a session. */
+	/* Each thread connects to a session. */
 	for (int n = 0; n < opt.o_nthreads; n++) {
 		rc = fsd_fconnect(&fsd_login, &fsd_sessions[n]);
 		if (rc)
@@ -387,10 +389,17 @@ int main(int argc, char *argv[])
 
 	pthread_mutex_init(&mutex, NULL);
 
+	MSRT_START(fsd_fwrite);
+	MSRT_DATA(fsd_fwrite,
+		  (uint64_t)opt.o_nfiles * (uint64_t)opt.o_filesize);
+
 	/* Perform fsd_fopen(...), fsd_fwrite(...) and fsd_fclose(...). */
 	rc = run_threads();
 	if (rc)
 		goto cleanup;
+
+	MSRT_STOP(fsd_fwrite);
+	MSRT_DISPLAY_RESULT(fsd_fwrite);
 
 cleanup:
 	pthread_mutex_destroy(&mutex);
