@@ -90,17 +90,17 @@ static void usage(const char *cmd_name, const int rc)
 static void sanity_arg_check(const char *argv)
 {
 	/* Required arguments. */
-	if (!strlen(opt.o_node)) {
+	if (!opt.o_node[0]) {
 		fprintf(stdout, "missing argument -n, --node <string>\n\n");
 		usage(argv, 1);
-	} else if (!strlen(opt.o_password)) {
+	} else if (!opt.o_password[0]) {
 		fprintf(stdout, "missing argument -p, --password <string>\n\n");
 		usage(argv, 1);
-	} else if (!strlen(opt.o_servername)) {
+	} else if (!opt.o_servername[0]) {
 		fprintf(stdout, "missing argument -s, --servername "
 			"<string>\n\n");
 		usage(argv, 1);
-	} else if (!strlen(opt.o_fsname))
+	} else if (!opt.o_fsname[0])
 		strncpy(opt.o_fsname, DEFAULT_FSNAME, DSM_MAX_FSNAME_LENGTH);
 }
 
