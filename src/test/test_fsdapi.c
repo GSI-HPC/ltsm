@@ -30,25 +30,27 @@
 #include "xattr.h"
 #include "test_utils.h"
 
-#define NODE		"polaris"
-#define PASSWORD	"polaris1234"
-#define OWNER           ""
-
-#define FSD_HOSTNAME    "localhost"
-#define FSD_PORT         7625
-
-#define NUM_FILES       200
-#define LEN_RND_STR     6
+#define NODE			"polaris"
+#define PASSWORD		"polaris1234"
+#define OWNER			""
+#define FSD_HOSTNAME		"localhost"
+#define FSD_PORT		7625
+#define NUM_FILES_XATTR		500
+#define NUM_FILES_FSD_CRC32	5
+#define NUM_FILES_FSD		50
+#define LEN_RND_STR		8
+#define LUSTRE_MOUNTP		"/lustre"
+#define FSD_MOUNTP		"/fsddata"
 
 void test_fsd_xattr(CuTest *tc)
 {
 	int rc;
 	char rnd_chars[0xffff] = {0};
-	char fpath[NUM_FILES][PATH_MAX];
+	char fpath[NUM_FILES_XATTR][PATH_MAX];
 
-	memset(fpath, 0, sizeof(char) * NUM_FILES * PATH_MAX);
+	memset(fpath, 0, sizeof(char) * NUM_FILES_XATTR * PATH_MAX);
 
-	for (uint8_t r = 0; r < NUM_FILES; r++) {
+	for (uint16_t r = 0; r < NUM_FILES_XATTR; r++) {
 
 		FILE *file;
 		char rnd_s[LEN_RND_STR + 1] = {0};
@@ -141,26 +143,85 @@ void test_fsd_fcalls(CuTest *tc)
 		.port		     = FSD_PORT
 	};
 	char rnd_chars[0xffff] = {0};
-	char fpath[NUM_FILES][PATH_MAX];
+	char fpath[NUM_FILES_FSD][PATH_MAX];
 
-	memset(fpath, 0, sizeof(char) * NUM_FILES * PATH_MAX);
+	memset(fpath, 0, sizeof(char) * NUM_FILES_FSD * PATH_MAX);
 	memset(&fsd_session, 0, sizeof(struct fsd_session_t));
 
 	rc = fsd_fconnect(&fsd_login, &fsd_session);
 	CuAssertIntEquals(tc, 0, rc);
 
-	for (uint8_t r = 0; r < NUM_FILES; r++) {
+	for (uint16_t r = 0; r < NUM_FILES_FSD; r++) {
 
-		char rnd_s[LEN_RND_STR + 1] = {0};
+		char fpath_rnd[PATH_MAX + 1] = {0};
+		char str_rnd[LEN_RND_STR + 1] = {0};
+
+		for (uint8_t d = 0; d < (rand() % 0x0a) + 1; d++) {
+			rnd_str(str_rnd, LEN_RND_STR);
+			CuAssertPtrNotNull(tc, strcat(fpath_rnd, "/"));
+			CuAssertPtrNotNull(tc, strcat(fpath_rnd, str_rnd));
+		}
+
+		sprintf(fpath[r], "%s%s", LUSTRE_MOUNTP, fpath_rnd);
+		CT_DEBUG("fpath '%s'", fpath[r]);
+
+		rc = fsd_fopen(LUSTRE_MOUNTP, fpath[r], NULL, &fsd_session);
+		CuAssertIntEquals(tc, 0, rc);
+
+		for (uint8_t b = 0; b < rand() % 0xff; b++) {
+
+			const size_t len = rand() % sizeof(rnd_chars);
+			ssize_t bytes_written;
+
+			rnd_str(rnd_chars, len);
+
+			bytes_written = fsd_fwrite(rnd_chars, len, 1, &fsd_session);
+			CuAssertIntEquals(tc, len, bytes_written);
+		}
+
+		rc = fsd_fclose(&fsd_session);
+		CuAssertIntEquals(tc, 0, rc);
+	}
+
+	fsd_fdisconnect(&fsd_session);
+}
+
+void test_fsd_fcalls_with_crc32(CuTest *tc)
+{
+	int rc;
+	struct fsd_session_t fsd_session;
+	struct fsd_login_t fsd_login = {
+		.node		     = NODE,
+		.password	     = PASSWORD,
+		.hostname	     = FSD_HOSTNAME,
+		.port		     = FSD_PORT
+	};
+	char rnd_chars[0xffff] = {0};
+	char fpath[NUM_FILES_FSD_CRC32][PATH_MAX];
+
+	memset(fpath, 0, sizeof(char) * NUM_FILES_FSD_CRC32 * PATH_MAX);
+	memset(&fsd_session, 0, sizeof(struct fsd_session_t));
+
+	rc = fsd_fconnect(&fsd_login, &fsd_session);
+	CuAssertIntEquals(tc, 0, rc);
+
+	for (uint16_t r = 0; r < NUM_FILES_FSD_CRC32; r++) {
+
+		char fpath_rnd[PATH_MAX + 1] = {0};
+		char str_rnd[LEN_RND_STR + 1] = {0};
 		uint32_t crc32sum_buf = 0;
-#if 0
 		uint32_t crc32sum_file = 0;
-#endif
 
-		rnd_str(rnd_s, LEN_RND_STR);
-		snprintf(fpath[r], PATH_MAX, "/lustre/fsdapi/%s", rnd_s);
+		for (uint8_t d = 0; d < (rand() % 0x0a) + 1; d++) {
+			rnd_str(str_rnd, LEN_RND_STR);
+			CuAssertPtrNotNull(tc, strcat(fpath_rnd, "/"));
+			CuAssertPtrNotNull(tc, strcat(fpath_rnd, str_rnd));
+		}
 
-		rc = fsd_fopen("/lustre", fpath[r], NULL, &fsd_session);
+		sprintf(fpath[r], "%s%s", LUSTRE_MOUNTP, fpath_rnd);
+		CT_DEBUG("fpath '%s'", fpath[r]);
+
+		rc = fsd_fopen(LUSTRE_MOUNTP, fpath[r], NULL, &fsd_session);
 		CuAssertIntEquals(tc, 0, rc);
 
 		for (uint8_t b = 0; b < rand() % 0xff; b++) {
@@ -178,25 +239,30 @@ void test_fsd_fcalls(CuTest *tc)
 
 		rc = fsd_fclose(&fsd_session);
 		CuAssertIntEquals(tc, 0, rc);
+
+		/* Make sure rc = unlink(...) is commented out, to keep the
+		   file for crc32 verification. */
 #if 0
 		/* Verify data is correctly copied to fsd server. */
-		snprintf(fpath[r], PATH_MAX, "/fsddata/lustre/fsdapi/%s", rnd_s);
+		sprintf(fpath[r], "%s%s", FSD_MOUNTP, fpath_rnd);
 		CT_DEBUG("fpath fsd '%s'", fpath[r]);
 		sleep(2); /* Give Linux some time to flush data to disk. */
 		rc = crc32file(fpath[r], &crc32sum_file);
-		CT_INFO("buf crc32 %lu, file crc32 %lu", crc32sum_buf, crc32sum_file);
-		CuAssertIntEquals(tc, 0, rc);
-		CuAssertTrue(tc, crc32sum_buf == crc32sum_file);
-
-		/* Verify data is correctly copied to lustre. */
-		snprintf(fpath[r], PATH_MAX, "/lustre/%s", rnd_s);
-		CT_DEBUG("fpath lustre '%s'", fpath[r]);
-		sleep(1); /* Give Linux some time to flush data to disk. */
-		rc = crc32file(fpath[r], &crc32sum_file);
-		CT_INFO("buf crc32 %lu, file crc32 %lu", crc32sum_buf, crc32sum_file);
+		CT_INFO("buf:fsd crc32 (0x%08x, 0x%08x) '%s'",
+			crc32sum_buf, crc32sum_file, fpath[r]);
 		CuAssertIntEquals(tc, 0, rc);
 		CuAssertTrue(tc, crc32sum_buf == crc32sum_file);
 #endif
+
+		/* Verify data is correctly copied to lustre. */
+		sprintf(fpath[r], "%s%s", LUSTRE_MOUNTP, fpath_rnd);
+		CT_DEBUG("fpath lustre '%s'", fpath[r]);
+		sleep(3); /* Give Linux some time to flush data to disk. */
+		rc = crc32file(fpath[r], &crc32sum_file);
+		CT_INFO("buf:lustre crc32 (0x%08x, 0x%08x) '%s'",
+			crc32sum_buf, crc32sum_file, fpath[r]);
+		CuAssertIntEquals(tc, 0, rc);
+		CuAssertTrue(tc, crc32sum_buf == crc32sum_file);
 	}
 
 	fsd_fdisconnect(&fsd_session);
@@ -206,6 +272,7 @@ CuSuite* fsdapi_get_suite()
 {
     CuSuite* suite = CuSuiteNew();
     SUITE_ADD_TEST(suite, test_fsd_xattr);
+    SUITE_ADD_TEST(suite, test_fsd_fcalls_with_crc32);
     SUITE_ADD_TEST(suite, test_fsd_fcalls);
 
     return suite;
@@ -213,7 +280,7 @@ CuSuite* fsdapi_get_suite()
 
 void run_all_tests(void)
 {
-	api_msg_set_level(API_MSG_DEBUG);
+	api_msg_set_level(API_MSG_INFO);
 
 	CuString *output = CuStringNew();
 	CuSuite *suite = CuSuiteNew();
