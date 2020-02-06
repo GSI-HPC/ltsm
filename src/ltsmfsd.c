@@ -1181,7 +1181,7 @@ static int archive_action(struct fsd_action_item_t *fsd_action_item)
 		return rc;
 	}
 
-	hur = llapi_hsm_user_request_alloc(1, fsd_action_item->size);
+	hur = llapi_hsm_user_request_alloc(1, 0);
 	if (hur == NULL) {
 		rc = -errno;
 		CT_ERROR(rc, "llapi_hsm_user_request_alloc failed '%s'",
