@@ -267,7 +267,7 @@ static int create_rnd_fnames(void)
 			rc = -ENOMEM;
 			goto cleanup;
 		}
-		strncpy(fpaths[n], fpath, PATH_MAX);
+		strncpy(fpaths[n], fpath, PATH_MAX + 1);
 
 		char rnd_s[LEN_FILENAME_RND + 1] = {0};
 		rnd_str(rnd_s, LEN_FILENAME_RND);
@@ -375,9 +375,9 @@ int main(int argc, char *argv[])
 	struct fsd_login_t fsd_login;
 
 	memset(&fsd_login, 0, sizeof(fsd_login));
-	strncpy(fsd_login.node, opt.o_node, DSM_MAX_NODE_LENGTH);
-	strncpy(fsd_login.password, opt.o_password, DSM_MAX_VERIFIER_LENGTH);
-	strncpy(fsd_login.hostname, opt.o_servername, HOST_NAME_MAX);
+	strncpy(fsd_login.node, opt.o_node, DSM_MAX_NODE_LENGTH + 1);
+	strncpy(fsd_login.password, opt.o_password, DSM_MAX_VERIFIER_LENGTH + 1);
+	strncpy(fsd_login.hostname, opt.o_servername, HOST_NAME_MAX + 1);
 	fsd_login.port = 7625;
 
 	/* Each thread connects to a session. */
