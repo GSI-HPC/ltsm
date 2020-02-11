@@ -31,6 +31,7 @@
 
 MSRT_DECLARE(fsd_fwrite);
 
+#define BUF_SIZE		0xffff
 #define LEN_FILENAME_RND	32
 #define DEFAULT_FPATH_NAME	"/lustre/fsdbench/"
 
@@ -45,6 +46,7 @@ struct options {
 	uint32_t	o_nfiles;
 	size_t		o_filesize;
 	uint16_t	o_nthreads;
+	uint32_t        o_wdelay;
 	char		o_servername[HOST_NAME_MAX + 1];
 	char		o_node[DSM_MAX_NODE_LENGTH + 1];
 	char		o_password[DSM_MAX_VERIFIER_LENGTH + 1];
@@ -57,6 +59,7 @@ static struct options opt = {
 	.o_nfiles	  = 16,
 	.o_filesize	  = 16777216,
 	.o_nthreads	  = 1,
+	.o_wdelay	  = 0,
 	.o_servername	  = {0},
 	.o_node		  = {0},
 	.o_password	  = {0},
@@ -67,9 +70,10 @@ static struct options opt = {
 static void usage(const char *cmd_name, const int rc)
 {
 	fprintf(stdout, "usage: %s [options]\n"
-		"\t-z, --size <long> [default: 16777216 bytes]\n"
-		"\t-b, --number <int> [default: 16]\n"
-		"\t-t, --threads <int> [default: 1]\n"
+		"\t-z, --size <long> [default: %lu bytes]\n"
+		"\t-b, --number <int> [default: %u]\n"
+		"\t-t, --threads <int> [default: %u]\n"
+		"\t-d, --wdelay <int> [default: %u]\n"
 		"\t-f, --fsname <string> [default: '%s']\n"
 		"\t-a, --fpath <string> [default: '%s']\n"
 		"\t-n, --node <string>\n"
@@ -79,6 +83,10 @@ static void usage(const char *cmd_name, const int rc)
 		"\t-h, --help\n"
 		"version: %s © 2017 by GSI Helmholtz Centre for Heavy Ion Research\n",
 		cmd_name,
+		opt.o_filesize,
+		opt.o_nfiles,
+		opt.o_nthreads,
+		opt.o_wdelay,
 		DEFAULT_FSNAME,
 		DEFAULT_FPATH_NAME,
 		PACKAGE_VERSION);
@@ -113,6 +121,7 @@ static int parseopts(int argc, char *argv[])
 		{"size",	required_argument, 0, 'z'},
 		{"number",	required_argument, 0, 'b'},
 		{"threads",	required_argument, 0, 't'},
+		{"wdelay",	required_argument, 0, 'd'},
 		{"fsname",	required_argument, 0, 'f'},
 		{"fpath",	required_argument, 0, 'a'},
 		{"node",	required_argument, 0, 'n'},
@@ -123,7 +132,7 @@ static int parseopts(int argc, char *argv[])
 		{0, 0, 0, 0}
 	};
 	int c;
-	while ((c = getopt_long(argc, argv, "z:b:t:f:a:n:p:s:v:h",
+	while ((c = getopt_long(argc, argv, "z:b:t:d:f:a:n:p:s:v:h",
 				long_opts, NULL)) != -1) {
 		switch (c) {
 		case 'z': {
@@ -136,6 +145,10 @@ static int parseopts(int argc, char *argv[])
 		}
 		case 't': {
 			opt.o_nthreads = atoi(optarg);
+			break;
+		}
+		case 'd': {
+			opt.o_wdelay = atol(optarg);
 			break;
 		}
 		case 'f': {
@@ -202,7 +215,6 @@ static void *perform_task(void *thread_data)
 	char fpath[PATH_MAX + 1] = {0};
 	uint8_t *buf = NULL;
 	int rc = 0;
-	ssize_t bwritten = 0;
 
 	session = (struct fsd_session_t *)thread_data;
 
@@ -221,18 +233,37 @@ static void *perform_task(void *thread_data)
 			buf[r] = (uint8_t)rand();
 
 		rc = fsd_fopen(opt.o_fsname, fpath, NULL, session);
+		CT_DEBUG("[rc=%d] fsd_fopen '%s' '%s' %p",
+			 rc, opt.o_fsname, fpath, session);
 		if (rc)
 			goto cleanup;
+		CT_INFO("[rc=%d] fsd_fopen '%s' '%s' %p",
+			rc, opt.o_fsname, fpath, session);
 
-		bwritten = fsd_fwrite(buf, opt.o_filesize, 1, session);
+		ssize_t bwritten = 0;
+		size_t buf_size = BUF_SIZE < opt.o_filesize ?
+			BUF_SIZE : opt.o_filesize;
+
+		while (bwritten < (ssize_t)opt.o_filesize) {
+			if (opt.o_filesize - bwritten < buf_size)
+				buf_size = opt.o_filesize - bwritten;
+			bwritten += fsd_fwrite(buf, buf_size, 1, session);
+			CT_DEBUG("fsd_fwrite %lu %lu", buf_size, bwritten);
+			if (opt.o_wdelay) {
+				CT_DEBUG("usleep %u", opt.o_wdelay);
+				usleep(opt.o_wdelay);
+			}
+		}
 		if (bwritten != (ssize_t)opt.o_filesize) {
 			rc = -EIO;
 			goto cleanup;
 		}
 
 		rc = fsd_fclose(session);
+		CT_DEBUG("[rc=%d] fsd_fclose %p", rc, session);
 		if (rc)
 			goto cleanup;
+		CT_INFO("[rc=%d] fsd_fclose %p", rc, session);
 	}
 
 cleanup:
@@ -321,6 +352,7 @@ static int run_threads(void)
 			snprintf(thread_name, sizeof(thread_name),
 				 "fsdbench/%d", n);
 			pthread_setname_np(threads[n], thread_name);
+			CT_INFO("created thread '%s'", thread_name);
 		}
 	}
 
@@ -333,6 +365,8 @@ static int run_threads(void)
 		rc = pthread_join(threads[n], &status);
 		if (rc)
 			CT_WARN("[rc=%d] pthread_join failed thread '%d'", rc, n);
+		else
+			CT_INFO("[rc=%d] pthread_join thread '%d'", rc, n);
 	}
 
 	return rc;
@@ -398,6 +432,7 @@ int main(int argc, char *argv[])
 
 	/* Perform fsd_fopen(...), fsd_fwrite(...) and fsd_fclose(...). */
 	rc = run_threads();
+	CT_DEBUG("[rc=%d] run_threads", rc);
 	if (rc)
 		goto cleanup;
 
