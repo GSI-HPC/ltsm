@@ -41,15 +41,15 @@ static pthread_mutex_t		  mutex;
 static uint32_t			  next_idx     = 0;
 
 struct options {
-	int	o_verbose;
-	int	o_nfiles;
-	size_t	o_filesize;
-	int	o_nthreads;
-	char	o_servername[HOST_NAME_MAX + 1];
-	char	o_node[DSM_MAX_NODE_LENGTH + 1];
-	char	o_password[DSM_MAX_VERIFIER_LENGTH + 1];
-	char	o_fsname[DSM_MAX_FSNAME_LENGTH + 1];
-	char	o_fpath[PATH_MAX + 1];
+	int		o_verbose;
+	uint32_t	o_nfiles;
+	size_t		o_filesize;
+	uint16_t	o_nthreads;
+	char		o_servername[HOST_NAME_MAX + 1];
+	char		o_node[DSM_MAX_NODE_LENGTH + 1];
+	char		o_password[DSM_MAX_VERIFIER_LENGTH + 1];
+	char		o_fsname[DSM_MAX_FSNAME_LENGTH + 1];
+	char		o_fpath[PATH_MAX + 1];
 };
 
 static struct options opt = {
@@ -212,10 +212,13 @@ static void *perform_task(void *thread_data)
 		pthread_exit((void *)&rc);
 	}
 
-	while (next_idx < (uint32_t)opt.o_nfiles) {
+	while (next_idx < opt.o_nfiles) {
 		pthread_mutex_lock(&mutex);
 		strncpy(fpath, fpaths[next_idx++], PATH_MAX);
 		pthread_mutex_unlock(&mutex);
+
+		for (size_t r = 0; r < opt.o_filesize; r++)
+			buf[r] = (uint8_t)rand();
 
 		rc = fsd_fopen(opt.o_fsname, fpath, NULL, session);
 		if (rc)
@@ -261,7 +264,7 @@ static int create_rnd_fnames(void)
 	    (fpath[strlen(fpath) - 1] != '/'))
 		strncat(fpath, "/", PATH_MAX);
 
-	for (int n = 0; n < opt.o_nfiles; n++) {
+	for (uint32_t n = 0; n < opt.o_nfiles; n++) {
 		fpaths[n] = calloc(PATH_MAX + 1, sizeof(char));
 		if (!fpaths[n]) {
 			rc = -ENOMEM;
@@ -278,7 +281,7 @@ static int create_rnd_fnames(void)
 
 cleanup:
 	if (fpaths) {
-		for (int n = 0; n < opt.o_nfiles; n++)
+		for (uint32_t n = 0; n < opt.o_nfiles; n++)
 			if (fpaths[n])
 				free(fpaths[n]);
 		free(fpaths);
@@ -309,7 +312,7 @@ static int run_threads(void)
 
 	pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
 
-	for (int n = 0; n < opt.o_nthreads; n++) {
+	for (uint16_t n = 0; n < opt.o_nthreads; n++) {
 		rc = pthread_create(&threads[n], &attr, perform_task, &fsd_sessions[n]);
 
 		if (rc)
@@ -326,7 +329,7 @@ static int run_threads(void)
 		CT_ERROR(rc, "pthread_attr_destroy");
 
 	void *status = NULL;
-	for (int n = 0; n < opt.o_nthreads; n++) {
+	for (uint16_t n = 0; n < opt.o_nthreads; n++) {
 		rc = pthread_join(threads[n], &status);
 		if (rc)
 			CT_WARN("[rc=%d] pthread_join failed thread '%d'", rc, n);
