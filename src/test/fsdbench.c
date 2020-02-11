@@ -31,7 +31,7 @@
 
 MSRT_DECLARE(fsd_fwrite);
 
-#define BUF_SIZE		0xffff
+#define BUF_SIZE		0x100000 /* 1MiB */
 #define LEN_FILENAME_RND	32
 #define DEFAULT_FPATH_NAME	"/lustre/fsdbench/"
 
@@ -215,6 +215,7 @@ static void *perform_task(void *thread_data)
 	char fpath[PATH_MAX + 1] = {0};
 	uint8_t *buf = NULL;
 	int rc = 0;
+	uint32_t crc32sum_buf = 0;
 
 	session = (struct fsd_session_t *)thread_data;
 
@@ -224,13 +225,19 @@ static void *perform_task(void *thread_data)
 		pthread_exit((void *)&rc);
 	}
 
+	/* Fill buffer to write initially with random data. */
+	for (size_t r = 0; r < opt.o_filesize; r++)
+		buf[r] = (uint8_t)rand();
+
 	while (next_idx < opt.o_nfiles) {
 		pthread_mutex_lock(&mutex);
 		strncpy(fpath, fpaths[next_idx++], PATH_MAX);
 		pthread_mutex_unlock(&mutex);
 
-		for (size_t r = 0; r < opt.o_filesize; r++)
-			buf[r] = (uint8_t)rand();
+		/* Pick random position in buf and overwrite
+		   at that position. Note this is a layman shuffling. */
+		size_t pos = rand() % opt.o_filesize;
+		memcpy(buf, buf + pos, opt.o_filesize - pos);
 
 		rc = fsd_fopen(opt.o_fsname, fpath, NULL, session);
 		CT_DEBUG("[rc=%d] fsd_fopen '%s' '%s' %p",
@@ -240,30 +247,37 @@ static void *perform_task(void *thread_data)
 		CT_INFO("[rc=%d] fsd_fopen '%s' '%s' %p",
 			rc, opt.o_fsname, fpath, session);
 
-		ssize_t bwritten = 0;
+		ssize_t twritten = 0; /* Total written. */
+		ssize_t cwritten = 0; /* Current written. */
 		size_t buf_size = BUF_SIZE < opt.o_filesize ?
 			BUF_SIZE : opt.o_filesize;
 
-		while (bwritten < (ssize_t)opt.o_filesize) {
-			if (opt.o_filesize - bwritten < buf_size)
-				buf_size = opt.o_filesize - bwritten;
-			bwritten += fsd_fwrite(buf, buf_size, 1, session);
-			CT_DEBUG("fsd_fwrite %lu %lu", buf_size, bwritten);
+		while (twritten < (ssize_t)opt.o_filesize) {
+			if (opt.o_filesize - twritten < buf_size)
+				buf_size = opt.o_filesize - twritten;
+			cwritten = fsd_fwrite(buf, buf_size, 1, session);
+			twritten += cwritten;
+			CT_DEBUG("fsd_fwrite %lu %lu %lu",
+				 buf_size, cwritten, twritten);
 			if (opt.o_wdelay) {
 				CT_DEBUG("usleep %u", opt.o_wdelay);
 				usleep(opt.o_wdelay);
 			}
+			crc32sum_buf = crc32(crc32sum_buf, buf, cwritten);
 		}
-		if (bwritten != (ssize_t)opt.o_filesize) {
+		if (twritten != (ssize_t)opt.o_filesize) {
 			rc = -EIO;
 			goto cleanup;
 		}
 
 		rc = fsd_fclose(session);
-		CT_DEBUG("[rc=%d] fsd_fclose %p", rc, session);
+		CT_DEBUG("[rc=%d] fsd_fclose '%s' '%s' crc32 0x%08x %p",
+			 rc, opt.o_fsname, fpath, crc32sum_buf, session);
 		if (rc)
 			goto cleanup;
-		CT_INFO("[rc=%d] fsd_fclose %p", rc, session);
+		CT_INFO("[rc=%d] fsd_fclose '%s' '%s' crc32 0x%08x %p",
+			rc, opt.o_fsname, fpath, crc32sum_buf, session);
+		crc32sum_buf = 0;
 	}
 
 cleanup:
