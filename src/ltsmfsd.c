@@ -1273,6 +1273,8 @@ static int process_fsd_action_item(struct fsd_action_item_t *fsd_action_item)
 				FSD_ACTION_STR(fsd_action_item->fsd_action_state));
 			break;
 		}
+
+		double ts = time_now();
 		rc = copy_action(fsd_action_item);
 		if (rc) {
 			CT_WARN("file '%s' copying to '%s' failed, will "
@@ -1283,6 +1285,12 @@ static int process_fsd_action_item(struct fsd_action_item_t *fsd_action_item)
 			fsd_action_item->fsd_action_state = STATE_LUSTRE_COPY_ERROR;
 			break;
 		}
+		CT_MESSAGE("file '%s' copied to '%s' of size %zu in seconds %.3f",
+			   fsd_action_item->fpath_local,
+			   fsd_action_item->fsd_info.fpath,
+			   fsd_action_item->size,
+			   time_now() - ts);
+
 		rc = xattr_update_fsd_state(fsd_action_item,
 					      STATE_LUSTRE_COPY_DONE);
 		CT_DEBUG("[rc=%d] setting state from '%s' to '%s'",
@@ -1300,11 +1308,6 @@ static int process_fsd_action_item(struct fsd_action_item_t *fsd_action_item)
 			break;
 		}
 		fsd_action_item->ts[1] = time_now();
-		CT_MESSAGE("file '%s' copied to '%s' of size %zu in seconds %.3f",
-			   fsd_action_item->fpath_local,
-			   fsd_action_item->fsd_info.fpath,
-			   fsd_action_item->size,
-			   fsd_action_item->ts[1] - fsd_action_item->ts[0]);
 		break;
 	}
 	case STATE_LUSTRE_COPY_RUN: {
@@ -1403,7 +1406,8 @@ static int process_fsd_action_item(struct fsd_action_item_t *fsd_action_item)
 				break;
 			}
 			fsd_action_item->ts[2] = time_now();
-			CT_MESSAGE("file '%s' of size %zu archived in %.3f seconds",
+			CT_MESSAGE("file '%s' of size %zu in queue archived "
+				   "in %.3f seconds",
 				   fsd_action_item->fpath_local,
 				   fsd_action_item->size,
 				   fsd_action_item->ts[2] - fsd_action_item->ts[1]);
@@ -1423,7 +1427,7 @@ static int process_fsd_action_item(struct fsd_action_item_t *fsd_action_item)
 		break;
 	}
 	case STATE_TSM_ARCHIVE_DONE: {
-		CT_MESSAGE("file '%s' of size %zu successfully copied "
+		CT_MESSAGE("file '%s' of size %zu in queue successfully copied "
 			   "and archived in %.3f seconds",
 			   fsd_action_item->fpath_local,
 			   fsd_action_item->size,
@@ -1435,8 +1439,8 @@ static int process_fsd_action_item(struct fsd_action_item_t *fsd_action_item)
 			CT_ERROR(rc, "unlink '%s'", fsd_action_item->fpath_local);
 			break;
 		}
-		CT_INFO("unlink '%s' and remove action item",
-			fsd_action_item->fpath_local);
+		CT_INFO("unlink '%s' and remove action item %p",
+			fsd_action_item->fpath_local, fsd_action_item);
 		free(fsd_action_item);
 		return 0;
 	}
