@@ -802,6 +802,7 @@ static void *thread_sock_client(void *arg)
 
 		size_t bytes_recv_total = 0;
 		size_t bytes_send_total = 0;
+		double ts = time_now();
 		/* State 3: Client calls fsd_fwrite(...) or fsd_fclose(...). */
 		rc = recv_fsd_data(fd_sock,
 				   &fd_local,
@@ -822,7 +823,8 @@ static void *thread_sock_client(void *arg)
 			goto out;
 		}
 		CT_INFO("[fd=%d,fd=%d] data buffer of size: %zd successfully "
-			"received and sent", *fd_sock, fd_local, bytes_recv_total);
+			"received in seconds %.3f",
+			*fd_sock, fd_local, bytes_recv_total, time_now() - ts);
 
 		rc = xattr_set_fsd(fpath_local,
 				   STATE_FSD_COPY_DONE,
