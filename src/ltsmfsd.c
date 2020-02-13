@@ -781,7 +781,9 @@ static void *thread_sock_client(void *arg)
 	do {
 		/* State 2: Client calls fsd_fopen(...) or fsd_disconnect(...). */
 		rc = fsd_recv(*fd_sock, &fsd_session, (FSD_OPEN | FSD_DISCONNECT));
-		CT_DEBUG("[rc=%d,fd=%d] recv_fsd", rc, *fd_sock);
+		CT_DEBUG("[rc=%d,fd=%d] recv_fsd node '%s' fpath '%s'",
+			 rc, *fd_sock, fsd_session.fsd_login.node,
+			 fsd_session.fsd_info.fpath);
 		if (rc) {
 			CT_ERROR(rc, "recv_fsd failed");
 			goto out;
@@ -789,10 +791,6 @@ static void *thread_sock_client(void *arg)
 
 		if (fsd_session.state & FSD_DISCONNECT)
 			goto out;
-
-		CT_INFO("[fd=%d] fsd_recv node: '%s' with fpath: '%s'",
-			*fd_sock, fsd_session.fsd_login.node,
-			fsd_session.fsd_info.fpath);
 
 		rc = init_fsd_local(&fpath_local, &fd_local, &fsd_session);
 		if (rc) {
@@ -822,9 +820,11 @@ static void *thread_sock_client(void *arg)
 				 bytes_recv_total, bytes_send_total);
 			goto out;
 		}
-		CT_INFO("[fd=%d,fd=%d] data buffer of size: %zd successfully "
-			"received in seconds %.3f",
-			*fd_sock, fd_local, bytes_recv_total, time_now() - ts);
+		CT_INFO("[fd=%d,fd=%d] data buffer for fpath '%s' of size %zd "
+			"successfully received in seconds %.3f",
+			*fd_sock, fd_local,
+			fsd_session.fsd_info.fpath,
+			bytes_recv_total, time_now() - ts);
 
 		rc = xattr_set_fsd(fpath_local,
 				   STATE_FSD_COPY_DONE,
