@@ -1081,6 +1081,7 @@ static int copy_action(struct fsd_action_item_t *fsd_action_item)
 	uint8_t buf[BUF_SIZE];
 	ssize_t bytes_read, bytes_read_total = 0;
 	ssize_t bytes_write, bytes_write_total = 0;
+	double ts = time_now();
 	do {
 		bytes_read = read_size(fd_read, buf, sizeof(buf));
 		bytes_read_total += bytes_read;
@@ -1116,10 +1117,10 @@ static int copy_action(struct fsd_action_item_t *fsd_action_item)
 		goto out;
 	}
 	CT_INFO("[fd_read=(%d,'%s'),fd_write=(%d,'%s')] data buffer of "
-		"size: %zd successfully read and written",
+		"size %zd successfully read and written seconds %.3f",
 		fd_read, fsd_action_item->fpath_local,
 		fd_write, fsd_action_item->fsd_info.fpath,
-		bytes_read_total);
+		bytes_read_total, time_now() - ts);
 
 	/* Change owner and group. */
 	rc = fchown(fd_write, fsd_action_item->uid, fsd_action_item->gid);
