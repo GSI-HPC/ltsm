@@ -1,15 +1,15 @@
 #!/bin/bash
 # Title       : ltsmsync.sh
-# Date        : Fri 24 Jan 2020 11:55:32 AM CET
-# Version     : 0.0.9
+# Date        : Sat 15 Feb 2020 12:12:22 PM CET
+# Version     : 0.1.0
 # Author      : "Thomas Stibor" <t.stibor@gsi.de>
-# Description : Query TSM server and create from the query result empty files
+# Description : Query TSM server by means of ltsmc and create from the query result empty files
 #               with appropriate Lustre HSM flags. Subsequent files access, transparently
-#               retrieve the raw data of the files by means of the Lustre copytool.
+#               retrieve the raw data of the files by means of the Lustre copytool or ltsmc.
 #               At current this script also retrieve the raw data by reading with command 'head'
 #               this first byte and thus triggers the copytool retrieve process. The retrieving
 #               process is parallized by JOBS=4 concurrent retrieving processes.
-# Note        : Lustre copytool must be running.
+# Note        : Lustre copytool must be running when argument {OMIT_COPYTOOL} equals 'no'.
 
 # Path to 3rd party executables.
 LFS_BIN="/usr/bin/lfs"
@@ -26,6 +26,7 @@ JOBS=4
 DAYS_AGO=7
 DRY_RUN=0
 CRC32_VERIFY=0
+OMIT_COPYTOOL="no"
 
 __usage() {
     echo -e "usage: ${0} <LUSTRE_DIRECTORY>\n" \
@@ -38,6 +39,7 @@ __usage() {
 	 "\t-j, --jobs <int> [default: ${JOBS}]\n" \
 	 "\t-y, --days-ago <int> [default: ${DAYS_AGO}]\n" \
 	 "\t-c, --crc32-verify\n" \
+	 "\t-x, --omit-copytool <yes,no> [default: ${OMIT_COPYTOOL}]\n" \
 	 "\t-d, --dry-run\n"
     exit 1
 }
@@ -79,12 +81,26 @@ __retrieve_file() {
 	mkdir -p ${DIR} || exit 1
     fi
     if [[ ! -f ${f} ]]; then
-	touch ${f} || exit 1
-	sudo ${LFS_BIN} hsm_set --exists --archived --archive-id ${i} ${f} || exit 1
-	${LFS_BIN} hsm_release ${f} || exit 1
-	# Comment out the line below for creating an empty HSM released file.
-	head --bytes=1 ${f} > /dev/null
-	rc=0
+	if [[ ${OMIT_COPYTOOL} -eq 1 ]]; then
+	    ${LTSMC_BIN} --retrieve --latest --fsname ${FSPACE} \
+			 --servername ${SERVERNAME} -n ${NODE} \
+			 --password ${PASSWORD} -v message \
+			 --datelow "${DATE_TIME_DAYS_AGO}" \
+			 "${f}"
+	    rc=$?
+	    if [[ ${rc} -ne 0 ]]; then
+		echo "retrieving file ${f} from TSM server failed"
+		return ${rc}
+	    fi
+	    sudo ${LFS_BIN} hsm_set --exists --archived --archive-id ${i} ${f} || exit 1
+	else
+	    touch ${f} || exit 1
+	    sudo ${LFS_BIN} hsm_set --exists --archived --archive-id ${i} ${f} || exit 1
+	    ${LFS_BIN} hsm_release ${f} || exit 1
+	    # Comment out the line below for creating an empty HSM released file.
+	    head --bytes=1 ${f} > /dev/null
+	    rc=0
+	fi
     else
 	echo "file ${f} already exists"
     fi
@@ -158,6 +174,10 @@ case $arg in
     -c|--crc32-verify)
 	CRC32_VERIFY=1
 	;;
+    -x|--omit-copytool)
+	OMIT_COPYTOOL="$2"
+	shift
+	;;
     -d|--dry-run)
 	DRY_RUN=1
 	;;
@@ -170,11 +190,23 @@ shift
 done
 
 # Check for missing arguments.
-[[ -z "$@" ]]            && { echo "missing argument <LUSTRE_DIRECTORY>"; __usage; }
-[[ -z "${FSPACE}" ]]     && { echo "missing argument -f, --filespace"; __usage; }
-[[ -z "${SERVERNAME}" ]] && { echo "missing argument -s, --servername"; __usage; }
-[[ -z "${NODE}" ]]       && { echo "missing argument -n, --node"; __usage; }
-[[ -z "${PASSWORD}" ]]   && { echo "missing argument -p, --password"; __usage; }
+[[ -z "$@" ]]                 && { echo "missing argument <LUSTRE_DIRECTORY>"; __usage; }
+[[ -z "${FSPACE}" ]]          && { echo "missing argument -f, --filespace"; __usage; }
+[[ -z "${SERVERNAME}" ]]      && { echo "missing argument -s, --servername"; __usage; }
+[[ -z "${NODE}" ]]            && { echo "missing argument -n, --node"; __usage; }
+[[ -z "${PASSWORD}" ]]        && { echo "missing argument -p, --password"; __usage; }
+[[ -z "${OMIT_COPYTOOL}" ]]   && { echo "missing argument -x, --omit-copytool"; __usage; }
+# Check for incorrect argument.
+if [[ "${OMIT_COPYTOOL}" == [Yy][Ee][Ss] ]];
+then
+    OMIT_COPYTOOL=1
+elif [[ "${OMIT_COPYTOOL}" == [Nn][Oo] ]];
+then
+    OMIT_COPYTOOL=0
+else
+    { echo "incorrect argument -x, --omit-copytool ${OMIT_COPYTOOL}"; __usage; }
+fi
+
 LUSTRE_DIR="$@"
 
 # Make sure FSPACE is prefix of LUSTRE_DIRECTORY
