@@ -650,21 +650,21 @@ static int ct_process_item(struct session_t *session)
 
 	if (opt.o_verbose >= API_MSG_NORMAL) {
 
-		char fid[128];
+		char strfid[FID_LEN + 1];
 		char path[PATH_MAX];
 		long long recno = -1;
 		int linkno = 0;
 
-		sprintf(fid, DFID, PFID(&session->hai->hai_fid));
+		snprintf(strfid, sizeof(strfid), DFID, PFID(&session->hai->hai_fid));
 		CT_MESSAGE("'%s' action %s reclen %d, cookie=%#jx",
-			   fid,
+			   strfid,
 			   hsm_copytool_action2name(session->hai->hai_action),
 			   session->hai->hai_len,
 			   (uintmax_t)session->hai->hai_cookie);
-		rc = llapi_fid2path(opt.o_mnt, fid, path,
+		rc = llapi_fid2path(opt.o_mnt, strfid, path,
 				    sizeof(path), &recno, &linkno);
 		if (rc < 0)
-			CT_ERROR(rc, "cannot get path of FID %s", fid);
+			CT_ERROR(rc, "cannot get path of FID %s", strfid);
 	}
 
 	switch (session->hai->hai_action) {
