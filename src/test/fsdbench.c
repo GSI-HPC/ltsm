@@ -34,6 +34,7 @@ MSRT_DECLARE(fsd_fwrite);
 #define BUF_SIZE		0x100000 /* 1MiB */
 #define LEN_FILENAME_RND	32
 #define DEFAULT_FPATH_NAME	"/lustre/fsdbench/"
+#define DEFAULT_FSSPACE_NAME    "/lustre"
 
 static char			**fpaths       = NULL;
 static struct fsd_session_t	 *fsd_sessions = NULL;
@@ -87,7 +88,7 @@ static void usage(const char *cmd_name, const int rc)
 		opt.o_nfiles,
 		opt.o_nthreads,
 		opt.o_wdelay,
-		DEFAULT_FSNAME,
+		DEFAULT_FSSPACE_NAME,
 		DEFAULT_FPATH_NAME,
 		PACKAGE_VERSION);
 
@@ -107,12 +108,10 @@ static void sanity_arg_check(const char *argv)
 		fprintf(stdout, "missing argument -s, --servername "
 			"<string>\n\n");
 		usage(argv, 1);
-	} else if (!opt.o_fpath[0]) {
-		fprintf(stdout, "missing argument -a, --fpath "
-			"<string>\n\n");
-		usage(argv, 1);
-	} else if (!opt.o_fsname[0])
-		strncpy(opt.o_fsname, DEFAULT_FSNAME, DSM_MAX_FSNAME_LENGTH);
+	} else if (!opt.o_fpath[0])
+		strncpy(opt.o_fpath, DEFAULT_FPATH_NAME, PATH_MAX);
+	else if (!opt.o_fsname[0])
+		strncpy(opt.o_fsname, DEFAULT_FSSPACE_NAME, DSM_MAX_FSNAME_LENGTH);
 }
 
 static int parseopts(int argc, char *argv[])
@@ -224,11 +223,11 @@ static void *perform_task(void *thread_data)
 		rc = -errno;
 		pthread_exit((void *)&rc);
 	}
-
-	/* Fill buffer to write initially with random data. */
-	for (size_t r = 0; r < opt.o_filesize; r++)
-		buf[r] = (uint8_t)rand();
-
+#ifdef WITH_RAND
+	/* Fill buffer each 16th position initially with random data. */
+	for (size_t r = 0; r < opt.o_filesize; r += 16)
+		buf[r] = (uint8_t)mrand48();
+#endif
 	while (next_idx < opt.o_nfiles) {
 		pthread_mutex_lock(&mutex);
 		strncpy(fpath, fpaths[next_idx++], PATH_MAX);
@@ -256,6 +255,9 @@ static void *perform_task(void *thread_data)
 			if (opt.o_filesize - twritten < buf_size)
 				buf_size = opt.o_filesize - twritten;
 			cwritten = fsd_fwrite(buf, buf_size, 1, session);
+			if (cwritten < 0)
+				goto cleanup;
+
 			twritten += cwritten;
 			CT_DEBUG("fsd_fwrite %lu %lu %lu",
 				 buf_size, cwritten, twritten);
