@@ -1071,10 +1071,12 @@ static int copy_action(struct fsd_action_item_t *fsd_action_item)
 		CT_ERROR(rc, "stat");
 		goto out;
 	}
-	if (statbuf.st_size != fsd_action_item->size) {
+	if (statbuf.st_size != (off_t)fsd_action_item->size) {
 		rc = -ERANGE;
-		CT_ERROR(rc, "fsd_action_item->size %zu != fstat.st_size %zu",
-			 fsd_action_item->size, statbuf.st_size);
+		CT_ERROR(rc, "'%s' "
+			 "fstat.st_size %zu != fsd_action_item->size %zu",
+			 fsd_action_item->fsd_info.fpath,
+			 statbuf.st_size, fsd_action_item->size);
 		goto out;
 	}
 
