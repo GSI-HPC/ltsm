@@ -1,10 +1,11 @@
 #!/bin/bash
 
+# Prerequisite: lhsmtool_tsm and ltsmfsd service are running.
+
 source $(dirname $(readlink -f $0))/include.sh
 
 # Exit on error.
 set -e
-VERBOSE=0
 
 ##########################################################
 # settings
@@ -37,18 +38,18 @@ ${FSDBENCH_BIN} -v info -z ${FSDBENCH_SIZE} -b ${FSDBENCH_NUMBER} -t ${FSDBENCH_
 		-f ${FSD_FSNAME} -a ${FSD_FPATH} -n ${LTSM_NODE} -p ${LTSM_PASSWORD} \
 		-s ${FSD_SERVER} > ${FSDBENCH_RESULT} 2>&1
 FILE_CRC32_LIST=`cat ${FSDBENCH_RESULT} | awk '/fsd_fclose/{print $8"@"$10}' | tr -d "\'"`
-FILE_LIST=`cat ${FSDBENCH_RESULT} | awk '/fsd_fclose/{print $8}' | tr -d "\'"`
 
 # Wait until all files are archived.
 N_FILES=0
 FSDBENCH_NUMBER=$((FSDBENCH_NUMBER + 0))
 while [[ ${FSDBENCH_NUMBER} > ${N_FILES} ]]
 do
-    for f in ${FILE_LIST}
+    for f in ${FILE_CRC32_LIST}
     do
+	FILE_AND_CRC32=(${f//@/ })
 	if ${LTSM_BIN} --query --node ${LTSM_NODE} --password ${LTSM_PASSWORD} \
     		       --servername ${LTSM_SERVERNAME} --fsname ${FSD_FSNAME} \
-		       --verbose message "${f}" 2>&1 | grep -q "DSM_OBJ_FILE"; then
+		       --verbose message "${FILE_AND_CRC32[0]}" 2>&1 | grep -q "DSM_OBJ_FILE"; then
 	    N_FILES=$((N_FILES + 1))
 	    echo -ne "waiting until ${N_FILES}/${FSDBENCH_NUMBER} files are archived\033[0K\r"
 	fi
