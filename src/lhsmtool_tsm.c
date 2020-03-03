@@ -286,21 +286,21 @@ static void read_conf(const char *filename)
 static int ct_parseopts(int argc, char *argv[])
 {
 	struct option long_opts[] = {
-		{"abort-on-error", no_argument,       &opt.o_abort_on_err,   1},
-		{"archive-id",	   required_argument, 0,	           'a'},
-		{"daemon",	   no_argument,       &opt.o_daemonize,      1},
-		{"threads",        required_argument, 0,	           't'},
-		{"node",           required_argument, 0,                   'n'},
-		{"password",       required_argument, 0,                   'p'},
-		{"owner",          required_argument, 0,                   'o'},
-		{"servername",     required_argument, 0,                   's'},
-		{"conf",	   required_argument, 0,		   'c'},
-		{"verbose",        required_argument, 0,                   'v'},
-		{"dry-run",	   no_argument,	      &opt.o_dry_run,        1},
-		{"restore-stripe", no_argument,	      &opt.o_restore_stripe, 1},
-		{"enable-maxmpc",  no_argument,	      &opt.o_enable_maxmpc,  1},
-		{"help",           no_argument,       0,		   'h'},
-		{0, 0, 0, 0}
+		{.name = "abort-on-error", .has_arg = no_argument,       .flag = &opt.o_abort_on_err,   .val =  1},
+		{.name = "archive-id",	   .has_arg = required_argument, .flag = NULL,	                .val = 'a'},
+		{.name = "daemon",	   .has_arg = no_argument,       .flag = &opt.o_daemonize,      .val =   1},
+		{.name = "threads",        .has_arg = required_argument, .flag = NULL,	                .val = 't'},
+		{.name = "node",           .has_arg = required_argument, .flag = NULL,                  .val = 'n'},
+		{.name = "password",       .has_arg = required_argument, .flag = NULL,                  .val = 'p'},
+		{.name = "owner",          .has_arg = required_argument, .flag = NULL,                  .val = 'o'},
+		{.name = "servername",     .has_arg = required_argument, .flag = NULL,                  .val = 's'},
+		{.name = "conf",	   .has_arg = required_argument, .flag = NULL,		        .val = 'c'},
+		{.name = "verbose",        .has_arg = required_argument, .flag = NULL,                  .val = 'v'},
+		{.name = "dry-run",	   .has_arg = no_argument,	 .flag = &opt.o_dry_run,        .val =   1},
+		{.name = "restore-stripe", .has_arg = no_argument,	 .flag = &opt.o_restore_stripe, .val =   1},
+		{.name = "enable-maxmpc",  .has_arg = no_argument,	 .flag = &opt.o_enable_maxmpc,  .val =   1},
+		{.name = "help",           .has_arg = no_argument,       .flag = NULL,		        .val = 'h'},
+		{.name = NULL}
 	};
 
 	int c, rc;

@@ -373,16 +373,16 @@ static void sanity_arg_check(const char *argv)
 static int parseopts(int argc, char *argv[])
 {
 	struct option long_opts[] = {
-		{"localfs",	required_argument, 0,	'l'},
-		{"identmap",	required_argument, 0,	'i'},
-		{"port",	required_argument, 0,	'p'},
-		{"sthreads",	required_argument, 0,	's'},
-		{"qthreads",	required_argument, 0,	'q'},
-		{"tolerr",	required_argument, 0,	't'},
-		{"conf",	required_argument, 0,	'c'},
-		{"verbose",	required_argument, 0,	'v'},
-		{"help",	no_argument,	   0,	'h'},
-		{0, 0, 0, 0}
+		{.name = "localfs",  .has_arg = required_argument, .flag = NULL, .val = 'l'},
+		{.name = "identmap", .has_arg = required_argument, .flag = NULL, .val = 'i'},
+		{.name = "port",     .has_arg = required_argument, .flag = NULL, .val = 'p'},
+		{.name = "sthreads", .has_arg = required_argument, .flag = NULL, .val = 's'},
+		{.name = "qthreads", .has_arg = required_argument, .flag = NULL, .val = 'q'},
+		{.name = "tolerr",   .has_arg = required_argument, .flag = NULL, .val = 't'},
+		{.name = "conf",     .has_arg = required_argument, .flag = NULL, .val = 'c'},
+		{.name = "verbose",  .has_arg = required_argument, .flag = NULL, .val = 'v'},
+		{.name = "help",     .has_arg = no_argument,	   .flag = NULL, .val = 'h'},
+		{.name = NULL}
 	};
 
 	int c, rc;
