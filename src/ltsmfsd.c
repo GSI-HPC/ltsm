@@ -130,6 +130,56 @@ static void usage(const char *cmd_name, const int rc)
 	exit(rc);
 }
 
+static int listen_socket_srv(int port)
+{
+	int rc;
+	int sock_fd = -1;
+	int reuse = 1;
+	struct sockaddr_in sockaddr_srv;
+
+	memset(&sockaddr_srv, 0, sizeof(sockaddr_srv));
+	sockaddr_srv.sin_family	     = AF_INET;
+	sockaddr_srv.sin_addr.s_addr = htonl(INADDR_ANY);
+	sockaddr_srv.sin_port	     = htons(port);
+
+	sock_fd = socket(AF_INET, SOCK_STREAM, 0);
+	if (sock_fd < 0) {
+		rc = -errno;
+		CT_ERROR(rc, "socket");
+		goto cleanup;
+	}
+	rc = setsockopt(sock_fd, SOL_SOCKET, SO_REUSEADDR, &reuse,
+			sizeof(reuse));
+	if (rc < 0) {
+		rc = -errno;
+		CT_ERROR(rc, "setsockopt");
+		goto cleanup;
+	}
+
+	rc = bind(sock_fd, (struct sockaddr *)&sockaddr_srv,
+		  sizeof(sockaddr_srv));
+	if (rc < 0) {
+		rc = -errno;
+		CT_ERROR(rc, "bind");
+		goto cleanup;
+	}
+
+	rc = listen(sock_fd, BACKLOG);
+	if (rc < 0) {
+		rc = -errno;
+		CT_ERROR(rc, "listen");
+		goto cleanup;
+	}
+
+	return sock_fd;
+
+cleanup:
+	if (sock_fd > -1)
+		close(sock_fd);
+
+	return rc;
+}
+
 static void print_ident(void *data)
 {
 	struct ident_map_t *ident_map =
@@ -478,7 +528,6 @@ static int parseopts(int argc, char *argv[])
 	}
 	opt.o_mnt_lustre = argv[optind];
 
-	list_init(&ident_list, free);
 	rc = parse_file_ident(opt.o_file_ident);
 	if (!rc && opt.o_verbose >= API_MSG_INFO)
 		list_for_each(&ident_list, print_ident);
@@ -914,8 +963,6 @@ static int fsd_setup(void)
 		CT_ERROR(rc, "cannot find a Lustre filesystem mounted at '%s'",
 			 opt.o_mnt_lustre);
 	}
-
-	queue_init(&queue, free);
 
 	return rc;
 }
@@ -1569,11 +1616,9 @@ cleanup:
 int main(int argc, char *argv[])
 {
 	int rc;
-	int sock_fd = -1;
-	struct sockaddr_in sockaddr_srv;
+	int srv_sock_fd = -1;
 	pthread_t *threads_sock = NULL;
 	pthread_attr_t attr;
-	int reuse = 1;
 	struct sigaction sig_act;
 
 	sig_act.sa_handler = signal_handler;
@@ -1582,52 +1627,27 @@ int main(int argc, char *argv[])
 	sigaction(SIGINT, &sig_act, NULL);
 	sigaction(SIGTERM, &sig_act, NULL);
 
+	list_init(&ident_list, free);
+	queue_init(&queue, free);
+
 	rc = parseopts(argc, argv);
 	if (rc < 0) {
 		CT_WARN("try '%s --help' for more information", argv[0]);
-		return -rc;	/* Return positive error codes back to shell. */
+		goto cleanup;
 	}
 
 	rc = fsd_setup();
 	if (rc < 0)
-		return rc;
+		goto cleanup;
 
-	/* Re-enqueue files caused e.g. daemon shutdown. */
+	/* Re-enqueue files stored in opt.o_local_mount. */
 	re_enqueue(opt.o_local_mount);
 
-	memset(&sockaddr_srv, 0, sizeof(sockaddr_srv));
-	sockaddr_srv.sin_family = AF_INET;
-	sockaddr_srv.sin_addr.s_addr = htonl(INADDR_ANY);
-	sockaddr_srv.sin_port = htons(opt.o_port);
+	/* Bind and listen to port opt.o_port. */
+	srv_sock_fd = listen_socket_srv(opt.o_port);
+	if (srv_sock_fd < 0)
+		goto cleanup;
 
-	sock_fd = socket(AF_INET, SOCK_STREAM, 0);
-	if (sock_fd < 0) {
-		rc = errno;
-		CT_ERROR(rc, "socket");
-		goto cleanup;
-	}
-	rc = setsockopt(sock_fd, SOL_SOCKET, SO_REUSEADDR, &reuse,
-			sizeof(reuse));
-	if (rc < 0) {
-		rc = errno;
-		CT_ERROR(rc, "setsockopt");
-		goto cleanup;
-	}
-
-	rc = bind(sock_fd, (struct sockaddr *)&sockaddr_srv,
-		  sizeof(sockaddr_srv));
-	if (rc < 0) {
-		rc = errno;
-		CT_ERROR(rc, "bind");
-		goto cleanup;
-	}
-
-	rc = listen(sock_fd, BACKLOG);
-	if (rc < 0) {
-		rc = errno;
-		CT_ERROR(rc, "listen");
-		goto cleanup;
-	}
 	CT_MESSAGE("listening on port %d with %d socket threads, %d queue "
 		   "worker threads, local fs '%s' and number of tolerated "
 		   "file errors %d",
@@ -1665,7 +1685,7 @@ int main(int argc, char *argv[])
 
 		memset(&sockaddr_cli, 0, sizeof(sockaddr_cli));
 		addrlen = sizeof(sockaddr_cli);
-		fd = accept(sock_fd, (struct sockaddr *)&sockaddr_cli,
+		fd = accept(srv_sock_fd, (struct sockaddr *)&sockaddr_cli,
 			    &addrlen);
 		if (fd < 0)
 			CT_ERROR(errno, "accept");
@@ -1715,11 +1735,11 @@ cleanup:
 	if (threads_queue)
 		free(threads_queue);
 
-	if (sock_fd > -1)
-		close(sock_fd);
+	if (srv_sock_fd > -1)
+		close(srv_sock_fd);
 
-	list_destroy(&ident_list);
 	queue_destroy(&queue);
+	list_destroy(&ident_list);
 
 	return rc;
 }
