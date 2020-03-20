@@ -1701,7 +1701,8 @@ int main(int argc, char *argv[])
 			int *fd_sock = NULL;
 			fd_sock = malloc(sizeof(int));
 			if (!fd_sock) {
-				CT_ERROR(-errno, "malloc");
+				rc = -errno;
+				CT_ERROR(rc, "malloc");
 				goto cleanup_attr;
 			}
 			*fd_sock = fd;
