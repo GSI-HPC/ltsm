@@ -1657,7 +1657,7 @@ int main(int argc, char *argv[])
 	/* Initialize socket processing threads. */
 	threads_sock = calloc(opt.o_nthreads_sock, sizeof(pthread_t));
 	if (threads_sock == NULL) {
-		rc = errno;
+		rc = -errno;
 		CT_ERROR(rc, "calloc");
 		goto cleanup;
 	}
