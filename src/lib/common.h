@@ -102,8 +102,19 @@ struct login_t {
         char fstype[DSM_MAX_FSTYPE_LENGTH + 1];
 };
 
+struct kv {
+	char key[MAX_OPTIONS_LENGTH + 1];
+	char val[MAX_OPTIONS_LENGTH + 1];
+};
+
+struct kv_opt {
+	uint8_t N;
+	struct kv *kv;
+};
+
 ssize_t read_size(int fd, void *ptr, size_t n);
 ssize_t write_size(int fd, const void *ptr, size_t n);
+int parse_conf(const char *filename, struct kv_opt *kv_opt);
 int crc32file(const char *filename, uint32_t *crc32result);
 void login_init(struct login_t *login, const char *servername,
                 const char *node, const char *password,

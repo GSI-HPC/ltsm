@@ -134,16 +134,6 @@ struct session_t {
 	struct tsm_file_t *tsm_file;
 };
 
-struct kv {
-	char key[MAX_OPTIONS_LENGTH + 1];
-	char val[MAX_OPTIONS_LENGTH + 1];
-};
-
-struct kv_opt {
-	uint8_t N;
-	struct kv *kv;
-};
-
 void set_recursive(const dsBool_t recursive);
 void select_latest(const dsBool_t latest);
 void set_prefix(const char *_prefix);
@@ -182,10 +172,6 @@ dsInt16_t tsm_delete_fpath(const char *fs, const char *fpath,
 dsInt16_t tsm_retrieve_fpath(const char *fs, const char *fpath,
 			     const char *desc, int fd,
 			     struct session_t *session);
-
-int parse_conf(const char *filename, struct kv_opt *kv_opt);
-ssize_t read_size(int fd, void *ptr, size_t n);
-ssize_t write_size(int fd, const void *ptr, size_t n);
 
 #ifdef HAVE_LUSTRE
 int xattr_get_lov(const int fd, struct lustre_info_t *lustre_info,
