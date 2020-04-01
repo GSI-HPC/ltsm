@@ -18,7 +18,7 @@
 
 #include "log.h"
 
-static unsigned int api_msg_level = API_MSG_MAX;
+static unsigned int api_msg_level = API_MSG_NORMAL;
 typedef void (*api_log_callback_t)(enum api_message_level level, int err,
 				   const char *fmt, va_list ap);
 
