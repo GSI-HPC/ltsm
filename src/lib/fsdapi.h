@@ -88,7 +88,8 @@ struct fsd_session_t {
 	enum fsd_protocol_state_t state;
 	struct fsd_login_t fsd_login;
 	struct fsd_info_t fsd_info;
-	int sock_fd;
+	int send_fd;
+	int recv_fd;
 	size_t size;
 };
 
@@ -107,7 +108,7 @@ struct fsd_action_item_t {
 
 int fsd_send(struct fsd_session_t *fsd_session,
 	     const enum fsd_protocol_state_t protocol_state);
-int fsd_recv(int fd, struct fsd_session_t *fsd_session,
+int fsd_recv(struct fsd_session_t *fsd_session,
 	     enum fsd_protocol_state_t fsd_protocol_state);
 
 void fsd_init(struct fsd_login_t *fsd_login, const char *servername,

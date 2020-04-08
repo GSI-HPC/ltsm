@@ -711,7 +711,7 @@ static int init_fsd_local(char **fpath_local, int *fd_local,
 	return rc;
 }
 
-static int recv_fsd_data(int *fd_sock, int *fd_local,
+static int recv_fsd_data(int *fd_local,
 			 struct fsd_session_t *fsd_session,
 			 size_t *bytes_recv_total, size_t *bytes_send_total)
 {
@@ -721,8 +721,9 @@ static int recv_fsd_data(int *fd_sock, int *fd_local,
 	ssize_t bytes_send;
 
 	do {
-		rc = fsd_recv(*fd_sock, fsd_session, (FSD_DATA | FSD_CLOSE));
-		CT_DEBUG("[rc=%d,fd=%d] fsd_recv, size %zu", rc, *fd_sock,
+		rc = fsd_recv(fsd_session, (FSD_DATA | FSD_CLOSE));
+		CT_DEBUG("[rc=%d,fd=%d] fsd_recv, size %zu", rc,
+			 fsd_session->recv_fd,
 			 fsd_session->size);
 		if (rc) {
 			CT_ERROR(rc, "fsd_recv failed");
@@ -741,9 +742,9 @@ static int recv_fsd_data(int *fd_sock, int *fd_local,
 			if (fsd_session->size - bytes_total < bytes_to_recv)
 				bytes_to_recv = fsd_session->size - bytes_total;
 
-			bytes_recv = read_size(*fd_sock, buf, bytes_to_recv);
+			bytes_recv = read_size(fsd_session->recv_fd, buf, bytes_to_recv);
 			CT_DEBUG("[fd=%d] read_size %zd, expected %zd, max possible %zd",
-				 *fd_sock, bytes_recv, bytes_to_recv, sizeof(buf));
+				 fsd_session->recv_fd, bytes_recv, bytes_to_recv, sizeof(buf));
 			if (bytes_recv < 0) {
 				CT_ERROR(errno, "recv");
 				goto out;
@@ -766,7 +767,7 @@ static int recv_fsd_data(int *fd_sock, int *fd_local,
 			*bytes_send_total += bytes_send;
 		} while (bytes_total != fsd_session->size);
 		CT_DEBUG("[fd=%d,fd=%d] total read %zu, total written %zu",
-			 *fd_sock, *fd_local, *bytes_recv_total, *bytes_send_total);
+			 fsd_session->recv_fd, *fd_local, *bytes_recv_total, *bytes_send_total);
 	} while (fsd_session->state & FSD_DATA);
 
 out:
@@ -784,10 +785,11 @@ static void *thread_sock_client(void *arg)
 
 	fd_sock = (int *)arg;
 	memset(&fsd_session, 0, sizeof(struct fsd_session_t));
+	fsd_session.recv_fd = *fd_sock;
 
 	/* State 1: Client calls fsd_fconnect(...). */
-	rc = fsd_recv(*fd_sock, &fsd_session, FSD_CONNECT);
-	CT_DEBUG("[rc=%d,fd=%d] fsd_recv", rc, *fd_sock);
+	rc = fsd_recv(&fsd_session, FSD_CONNECT);
+	CT_DEBUG("[rc=%d,fd=%d] fsd_recv", rc, fsd_session.recv_fd);
 	if (rc) {
 		CT_ERROR(rc, "fsd_recv failed");
 		goto out;
@@ -835,9 +837,9 @@ static void *thread_sock_client(void *arg)
 
 	do {
 		/* State 2: Client calls fsd_fopen(...) or fsd_disconnect(...). */
-		rc = fsd_recv(*fd_sock, &fsd_session, (FSD_OPEN | FSD_DISCONNECT));
+		rc = fsd_recv(&fsd_session, (FSD_OPEN | FSD_DISCONNECT));
 		CT_DEBUG("[rc=%d,fd=%d] recv_fsd node '%s' fpath '%s'",
-			 rc, *fd_sock, fsd_session.fsd_login.node,
+			 rc, fsd_session.recv_fd, fsd_session.fsd_login.node,
 			 fsd_session.fsd_info.fpath);
 		if (rc) {
 			CT_ERROR(rc, "recv_fsd failed");
@@ -857,12 +859,9 @@ static void *thread_sock_client(void *arg)
 		size_t bytes_send_total = 0;
 		double ts = time_now();
 		/* State 3: Client calls fsd_fwrite(...) or fsd_fclose(...). */
-		rc = recv_fsd_data(fd_sock,
-				   &fd_local,
-				   &fsd_session,
-				   &bytes_recv_total,
+		rc = recv_fsd_data(&fd_local, &fsd_session, &bytes_recv_total,
 				   &bytes_send_total);
-		CT_DEBUG("[rc=%d,fd=%d] recv_fsd_data", rc, *fd_sock);
+		CT_DEBUG("[rc=%d,fd=%d] recv_fsd_data", rc, fsd_session.recv_fd);
 		if (rc) {
 			CT_ERROR(rc, "recv_fsd_data failed");
 			goto out;
@@ -877,7 +876,7 @@ static void *thread_sock_client(void *arg)
 		}
 		CT_INFO("[fd=%d,fd=%d] data buffer for fpath '%s' of size %zd "
 			"successfully received in seconds %.3f",
-			*fd_sock, fd_local,
+			fsd_session.recv_fd, fd_local,
 			fsd_session.fsd_info.fpath,
 			bytes_recv_total, time_now() - ts);
 
@@ -932,6 +931,7 @@ out:
 		close(*fd_sock);
 		free(fd_sock);
 		fd_sock = NULL;
+		fsd_session.recv_fd = -1;
 	}
 
 	pthread_mutex_lock(&mutex_sock_cnt);
