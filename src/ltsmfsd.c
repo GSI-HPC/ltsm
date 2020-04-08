@@ -696,8 +696,11 @@ static int init_fsd_local(char **fpath_local, int *fd_local,
 
 	snprintf(*fpath_local + strlen(*fpath_local), PATH_MAX, "/%s", ll);
 
-	*fd_local = open(*fpath_local, O_WRONLY | O_TRUNC | O_CREAT,
-			 S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+	*fd_local = open(*fpath_local, O_WRONLY | O_EXCL | O_CREAT,
+			 S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP);
+	/* Note, if file exists, then *fd_local < 0 and errno EEXISTS is
+	   set. This makes sure we do NOT overwrite existing files. To
+	   allow overwriting replace O_EXCL with O_TRUNC. */
 	CT_DEBUG("[fd=%d] open '%s'", *fd_local, *fpath_local);
 	if (*fd_local < 0) {
 		rc = -errno;
@@ -1103,7 +1106,8 @@ static int copy_action(struct fsd_action_item_t *fsd_action_item)
 	}
 
 	fd_write = open(fsd_action_item->fsd_info.fpath,
-			O_WRONLY | O_CREAT | O_EXCL, 00664);
+			O_WRONLY | O_CREAT | O_EXCL,
+			S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP);
 	if (fd_write < 0) {
 		/* Note, if file exists, then fd_write < 0 and errno EEXISTS is
 		   set. This makes sure we do NOT overwrite existing files. To
