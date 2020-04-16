@@ -114,7 +114,7 @@ struct fsd_packet_t {
 struct fsd_session_t {
 	struct fsd_packet_t fsd_packet;
 	int fd;
-} __attribute__ ((packed));
+};
 
 struct fsd_action_item_t {
 	uint32_t fsd_action_state;
