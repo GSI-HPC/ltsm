@@ -134,11 +134,6 @@ int fsd_send(struct fsd_session_t *fsd_session,
 int fsd_recv(struct fsd_session_t *fsd_session,
 	     enum fsd_protocol_state_t fsd_protocol_state);
 
-void fsd_init(struct fsd_login_t *fsd_login, const char *servername,
-	      const char *node, const char *password,
-	      const char *owner, const char *platform,
-	      const char *fsname, const char *fstype,
-	      const char *hostname, const int port);
 int fsd_fconnect(struct fsd_login_t *fsd_login,
 		 struct fsd_session_t *fsd_session);
 void fsd_fdisconnect(struct fsd_session_t *fsd_session);
