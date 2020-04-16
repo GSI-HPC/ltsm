@@ -159,14 +159,16 @@ void fsd_fdisconnect(struct fsd_session_t *fsd_session)
 	close(fsd_session->fd);
 }
 
-int fsd_fopen(const char *fs, const char *fpath, const char *desc,
-	      struct fsd_session_t *fsd_session)
+static int _fsd_fopen(const char *fs, const char *fpath, const char *desc,
+		      enum fsd_storage_dest_t fsd_storage_dest,
+		      struct fsd_session_t *fsd_session)
 {
 	int rc = 0;
 	struct fsd_info_t fsd_info = {
 		.fs		   = {0},
 		.fpath		   = {0},
-		.desc		   = {0}
+		.desc		   = {0},
+		.fsd_storage_dest  = fsd_storage_dest
 	};
 
 	if (!fsd_session)
@@ -190,6 +192,19 @@ int fsd_fopen(const char *fs, const char *fpath, const char *desc,
 		close(fsd_session->fd);
 
 	return rc;
+}
+
+int fsd_fopen(const char *fs, const char *fpath, const char *desc,
+	      struct fsd_session_t *fsd_session)
+{
+	return _fsd_fopen(fs, fpath, desc, FSD_STORAGE_LUSTRE_TSM, fsd_session);
+}
+
+int fsd_fdopen(const char *fs, const char *fpath, const char *desc,
+	       enum fsd_storage_dest_t fsd_storage_dest,
+	       struct fsd_session_t *fsd_session)
+{
+	return _fsd_fopen(fs, fpath, desc, fsd_storage_dest, fsd_session);
 }
 
 ssize_t fsd_fwrite(const void *ptr, size_t size, size_t nmemb,
@@ -223,8 +238,7 @@ int fsd_fclose(struct fsd_session_t *fsd_session)
 	if (rc)
 		close(fsd_session->fd);
 
-	memset(&fsd_session->fsd_packet.fsd_info,
-	       0, sizeof(struct fsd_info_t));
+	memset(&fsd_session->fsd_packet, 0, sizeof(struct fsd_packet_t));
 
 	return rc;
 }

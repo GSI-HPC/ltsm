@@ -13,7 +13,7 @@
  */
 
 /*
- * Copyright (c) 2019, GSI Helmholtz Centre for Heavy Ion Research
+ * Copyright (c) 2019-2020, GSI Helmholtz Centre for Heavy Ion Research
  */
 
 #ifndef XATTR_H
