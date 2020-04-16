@@ -92,7 +92,7 @@ static pthread_mutex_t	 queue_mutex   = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t	 queue_cond    = PTHREAD_COND_INITIALIZER;
 
 /* TSM connect authentication. */
-//static pthread_mutex_t tsm_connect_mutex = PTHREAD_MUTEX_INITIALIZER;
+static pthread_mutex_t tsm_connect_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 /* Lustre HSM request. */
 static pthread_mutex_t llapi_hsm_mutex = PTHREAD_MUTEX_INITIALIZER;
@@ -775,13 +775,59 @@ out:
 	return rc;
 }
 
+static int client_authenticate(struct fsd_session_t *fsd_session,
+			       int *archive_id, uid_t *uid, gid_t *gid)
+{
+	int rc;
+	char servername[MAX_OPTIONS_LENGTH + 1] = {0};
+
+	/* Verify node exists in identmap file. */
+	rc = identmap_entry(&fsd_session->fsd_packet.fsd_login,
+			    servername,
+			    archive_id, uid, gid);
+	CT_DEBUG("[rc=%d] identmap_entry", rc);
+	if (rc) {
+		CT_ERROR(rc, "identmap_entry");
+		return rc;
+	}
+
+	/* Verify node has granted permissions on tsm server. */
+	struct login_t login;
+	struct session_t session;
+
+	memset(&login, 0, sizeof(struct login_t));
+	memset(&session, 0, sizeof(struct session_t));
+	login_init(&login,
+		   servername,
+		   fsd_session->fsd_packet.fsd_login.node,
+		   fsd_session->fsd_packet.fsd_login.password,
+		   DEFAULT_OWNER,
+		   LINUX_PLATFORM,
+		   DEFAULT_FSNAME,
+		   DEFAULT_FSTYPE);
+#if 1
+	pthread_mutex_lock(&tsm_connect_mutex);
+	rc = tsm_connect(&login, &session);
+	CT_DEBUG("[rc=%d] tsm_connect", rc);
+	if (rc) {
+		CT_ERROR(rc, "tsm_connect");
+		tsm_disconnect(&session);
+		pthread_mutex_unlock(&tsm_connect_mutex);
+		return rc;
+	}
+	tsm_disconnect(&session);
+	pthread_mutex_unlock(&tsm_connect_mutex);
+#endif
+
+	return rc;
+}
+
 static void *thread_sock_client(void *arg)
 {
 	int rc;
 	struct fsd_session_t fsd_session;
 	char *fpath_local = NULL;
 	int fd_local = -1;
-	int archive_id = -1;
 	int *fd_ptr = (int *)arg;
 
 	memset(&fsd_session, 0, sizeof(struct fsd_session_t));
@@ -797,47 +843,15 @@ static void *thread_sock_client(void *arg)
 		goto out;
 	}
 
-	char servername[MAX_OPTIONS_LENGTH + 1] = {0};
 	uid_t uid = 65534;	/* User: Nobody. */
 	gid_t gid = 65534;	/* Group: Nobody. */
-
-	/* Verify node exists in identmap file. */
-	rc = identmap_entry(&fsd_session.fsd_packet.fsd_login,
-			    servername,
-			    &archive_id, &uid, &gid);
-	CT_DEBUG("[rc=%d] identmap_entry", rc);
+	int archive_id = -1;
+	rc = client_authenticate(&fsd_session, &archive_id, &uid, &gid);
 	if (rc) {
-		CT_ERROR(rc, "identmap_entry");
+		CT_ERROR(rc, "client_authenticate failed");
 		goto out;
 	}
 
-	/* Verify node has granted permissions on tsm server. */
-	struct login_t login;
-	struct session_t session;
-
-	memset(&login, 0, sizeof(struct login_t));
-	memset(&session, 0, sizeof(struct session_t));
-	login_init(&login,
-		   servername,
-		   fsd_session.fsd_packet.fsd_login.node,
-		   fsd_session.fsd_packet.fsd_login.password,
-		   DEFAULT_OWNER,
-		   LINUX_PLATFORM,
-		   DEFAULT_FSNAME,
-		   DEFAULT_FSTYPE);
-#if 0
-	pthread_mutex_lock(&tsm_connect_mutex);
-	rc = tsm_connect(&login, &session);
-	CT_DEBUG("[rc=%d] tsm_connect", rc);
-	if (rc) {
-		CT_ERROR(rc, "tsm_connect");
-		tsm_disconnect(&session);
-		pthread_mutex_unlock(&tsm_connect_mutex);
-		goto out;
-	}
-	tsm_disconnect(&session);
-	pthread_mutex_unlock(&tsm_connect_mutex);
-#endif
 	do {
 		/* State 2: Client calls fsd_fopen(...) or fsd_disconnect(...). */
 		rc = fsd_recv(&fsd_session, (FSD_OPEN | FSD_DISCONNECT));
