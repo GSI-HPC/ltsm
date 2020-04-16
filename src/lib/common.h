@@ -88,6 +88,11 @@
 #define DSM_MAX_PLATFORM_LENGTH 16
 #endif
 
+/* Length of fsd error message. */
+#ifndef FSD_MAX_ERRMSG_LENGTH
+#define FSD_MAX_ERRMSG_LENGTH 1024
+#endif
+
 #define OPTNCMP(str1, str2)				\
 	((strlen(str1) == strlen(str2)) &&		\
 	 (strncmp(str1, str2, strlen(str1)) == 0))

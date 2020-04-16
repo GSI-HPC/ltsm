@@ -13,7 +13,7 @@
  */
 
 /*
- * Copyright (c) 2019, GSI Helmholtz Centre for Heavy Ion Research
+ * Copyright (c) 2019-2020, GSI Helmholtz Centre for Heavy Ion Research
  */
 
 #ifndef FSDAPI_H
@@ -84,14 +84,29 @@ struct fsd_info_t {
 	char desc[DSM_MAX_DESCR_LENGTH + 1];
 };
 
-struct fsd_session_t {
-	enum fsd_protocol_state_t state;
-	struct fsd_login_t fsd_login;
-	struct fsd_info_t fsd_info;
-	int send_fd;
-	int recv_fd;
+struct fsd_data_t {
 	size_t size;
 };
+
+struct fsd_error_t {
+	int rc;
+	char strerror[FSD_MAX_ERRMSG_LENGTH + 1];
+};
+
+struct fsd_packet_t {
+	union {
+		struct fsd_login_t fsd_login;
+		struct fsd_info_t fsd_info;
+		struct fsd_data_t fsd_data;
+	};
+	enum fsd_protocol_state_t state;
+	struct fsd_error_t fsd_error;
+};
+
+struct fsd_session_t {
+	struct fsd_packet_t fsd_packet;
+	int fd;
+} __attribute__ ((packed));
 
 struct fsd_action_item_t {
 	uint32_t fsd_action_state;
@@ -104,10 +119,10 @@ struct fsd_action_item_t {
 	int archive_id;
 	uid_t uid;
 	gid_t gid;
-};
+} __attribute__ ((packed));
 
 int fsd_send(struct fsd_session_t *fsd_session,
-	     const enum fsd_protocol_state_t protocol_state);
+	     const enum fsd_protocol_state_t fsd_protocol_state);
 int fsd_recv(struct fsd_session_t *fsd_session,
 	     enum fsd_protocol_state_t fsd_protocol_state);
 

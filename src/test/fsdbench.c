@@ -101,16 +101,20 @@ static void sanity_arg_check(const char *argv)
 	if (!opt.o_node[0]) {
 		fprintf(stdout, "missing argument -n, --node <string>\n\n");
 		usage(argv, 1);
-	} else if (!opt.o_password[0]) {
+	}
+	if (!opt.o_password[0]) {
 		fprintf(stdout, "missing argument -p, --password <string>\n\n");
 		usage(argv, 1);
-	} else if (!opt.o_servername[0]) {
+	}
+	if (!opt.o_servername[0]) {
 		fprintf(stdout, "missing argument -s, --servername "
 			"<string>\n\n");
 		usage(argv, 1);
-	} else if (!opt.o_fpath[0])
+	}
+	/* Optional arguments, otherwise use defaults. */
+	if (!opt.o_fpath[0])
 		strncpy(opt.o_fpath, DEFAULT_FPATH_NAME, PATH_MAX);
-	else if (!opt.o_fsname[0])
+	if (!opt.o_fsname[0])
 		strncpy(opt.o_fsname, DEFAULT_FSSPACE_NAME, DSM_MAX_FSNAME_LENGTH);
 }
 
