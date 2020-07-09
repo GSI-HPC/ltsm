@@ -13,7 +13,7 @@
  */
 
 /*
- * Copyright (c) 2019, GSI Helmholtz Centre for Heavy Ion Research
+ * Copyright (c) 2019-2020, GSI Helmholtz Centre for Heavy Ion Research
  */
 
 #include <string.h>
@@ -29,63 +29,80 @@
 #include "log.h"
 #include "common.h"
 
+#define FSD_ERROR(rc, str)					\
+do {								\
+	fsd_session->fsd_packet.fsd_error.rc = rc;		\
+	strncpy(fsd_session->fsd_packet.fsd_error.strerror,	\
+		str,						\
+		FSD_MAX_ERRMSG_LENGTH);				\
+} while (0);							\
+
+
 int fsd_send(struct fsd_session_t *fsd_session,
-	     const enum fsd_protocol_state_t protocol_state)
+	     enum fsd_protocol_state_t fsd_protocol_state)
 {
 	int rc = 0;
 	ssize_t bytes_send;
 
-	fsd_session->state = protocol_state;
-	bytes_send = write_size(fsd_session->sock_fd, fsd_session,
-				sizeof(struct fsd_session_t));
+	if (!fsd_session || fsd_session->fd < 0)
+		return -EINVAL;
+
+	fsd_session->fsd_packet.state = fsd_protocol_state;
+	bytes_send = write_size(fsd_session->fd, &fsd_session->fsd_packet,
+				sizeof(struct fsd_packet_t));
 	CT_DEBUG("[fd=%d] fsd_send %zd, expected size: %zd, state: '%s'",
-		 fsd_session->sock_fd,
-		 bytes_send, sizeof(struct fsd_session_t),
-		 FSD_PROTOCOL_STR(fsd_session->state));
+		 fsd_session->fd,
+		 bytes_send, sizeof(struct fsd_packet_t),
+		 FSD_PROTOCOL_STR(fsd_session->fsd_packet.state));
 	if (bytes_send < 0) {
 		rc = -errno;
-		CT_ERROR(rc, "write_size");
+		CT_ERROR(rc, "bytes_send < 0");
 		goto out;
 	}
-	if ((size_t)bytes_send != sizeof(struct fsd_session_t)) {
+	if ((size_t)bytes_send != sizeof(struct fsd_packet_t)) {
 		rc = -ENOMSG;
-		CT_ERROR(rc, "write_size");
+		CT_ERROR(rc, "bytes_send != sizeof(struct fsd_packet_t)");
 	}
-
 out:
+
 	return rc;
 }
 
-
-int fsd_recv(int fd, struct fsd_session_t *fsd_session,
+int fsd_recv(struct fsd_session_t *fsd_session,
 	     enum fsd_protocol_state_t fsd_protocol_state)
 {
 	int rc = 0;
 	ssize_t bytes_recv;
 
-	if (fd < 0 || !fsd_session)
+	if (!fsd_session || fsd_session->fd < 0)
 		return -EINVAL;
 
-	bytes_recv = read_size(fd, fsd_session, sizeof(struct fsd_session_t));
+	bytes_recv = read_size(fsd_session->fd,
+			       &fsd_session->fsd_packet,
+			       sizeof(struct fsd_packet_t));
 	CT_DEBUG("[fd=%d] fsd_recv %zd, expected size: %zd, "
 		 "state: '%s', expected: '%s'",
-		 fd, bytes_recv, sizeof(struct fsd_session_t),
-		 FSD_PROTOCOL_STR(fsd_session->state),
+		 fsd_session->fd, bytes_recv,
+		 sizeof(struct fsd_packet_t),
+		 FSD_PROTOCOL_STR(fsd_session->fsd_packet.state),
 		 FSD_PROTOCOL_STR(fsd_protocol_state));
 	if (bytes_recv < 0) {
 		rc = -errno;
-		CT_ERROR(rc, "read_size");
-		goto out;
+		CT_ERROR(rc, "bytes_recv < 0");
+		return rc;
 	}
-	if (bytes_recv != sizeof(struct fsd_session_t)) {
+	if (bytes_recv != sizeof(struct fsd_packet_t)) {
 		rc = -ENOMSG;
-		CT_ERROR(rc, "read_size");
-		goto out;
+		CT_ERROR(rc, "bytes_recv != sizeof(struct fsd_packet_t)");
+		return rc;
 	}
-	if (!(fsd_session->state & fsd_protocol_state))
-		rc = -EPROTO;
 
-out:
+	/* Verify received fsd packet matches the requested. */
+	if (!(fsd_session->fsd_packet.state & fsd_protocol_state)) {
+		rc = -EPROTO;
+		CT_ERROR(rc, "fsd protocol error");
+	}
+
 	return rc;
 }
 
@@ -103,8 +120,8 @@ int fsd_fconnect(struct fsd_login_t *fsd_login, struct fsd_session_t *fsd_sessio
 	}
 
         /* Connect to file system daemon (fsd). */
-        fsd_session->sock_fd = socket(AF_INET, SOCK_STREAM, 0);
-        if (fsd_session->sock_fd < 0) {
+        fsd_session->fd = socket(AF_INET, SOCK_STREAM, 0);
+        if (fsd_session->fd < 0) {
                 rc = -errno;
                 CT_ERROR(rc, "socket");
                 goto out;
@@ -116,7 +133,7 @@ int fsd_fconnect(struct fsd_login_t *fsd_login, struct fsd_session_t *fsd_sessio
         sockaddr_cli.sin_port = htons(fsd_login->port);
 
 	CT_INFO("connecting to '%s:%d'", fsd_login->hostname, fsd_login->port);
-        rc = connect(fsd_session->sock_fd,
+        rc = connect(fsd_session->fd,
 		     (struct sockaddr *)&sockaddr_cli,
                      sizeof(sockaddr_cli));
         if (rc < 0) {
@@ -125,12 +142,13 @@ int fsd_fconnect(struct fsd_login_t *fsd_login, struct fsd_session_t *fsd_sessio
                 goto out;
         }
 
-	memcpy(&(fsd_session->fsd_login), fsd_login, sizeof(struct fsd_login_t));
+	memcpy(&fsd_session->fsd_packet.fsd_login,
+	       fsd_login, sizeof(struct fsd_login_t));
 	rc = fsd_send(fsd_session, FSD_CONNECT);
 
 out:
         if (rc)
-                close(fsd_session->sock_fd);
+                close(fsd_session->fd);
 
         return rc;
 }
@@ -138,24 +156,26 @@ out:
 void fsd_fdisconnect(struct fsd_session_t *fsd_session)
 {
 	fsd_send(fsd_session, FSD_DISCONNECT);
-	close(fsd_session->sock_fd);
+	close(fsd_session->fd);
 }
 
-int fsd_fopen(const char *fs, const char *fpath, const char *desc,
-	      struct fsd_session_t *fsd_session)
+static int __fsd_fopen(const char *fs, const char *fpath, const char *desc,
+		       enum fsd_storage_dest_t fsd_storage_dest,
+		       struct fsd_session_t *fsd_session)
 {
 	int rc = 0;
 	struct fsd_info_t fsd_info = {
 		.fs		   = {0},
 		.fpath		   = {0},
-		.desc		   = {0}
+		.desc		   = {0},
+		.fsd_storage_dest  = fsd_storage_dest
 	};
 
 	if (!fsd_session)
 		return -EFAULT;
 
 	if (!(fs && fpath)) {
-		close(fsd_session->sock_fd);
+		close(fsd_session->fd);
 		return -EFAULT;
 	}
 
@@ -164,13 +184,27 @@ int fsd_fopen(const char *fs, const char *fpath, const char *desc,
 	strncpy(fsd_info.fpath, fpath, PATH_MAX);
 	if (desc)
 		strncpy(fsd_info.desc, desc, DSM_MAX_DESCR_LENGTH);
-	memcpy(&(fsd_session->fsd_info), &fsd_info, sizeof(fsd_info));
+	memcpy(&(fsd_session->fsd_packet.fsd_info),
+	       &fsd_info, sizeof(fsd_info));
 
 	rc = fsd_send(fsd_session, FSD_OPEN);
 	if (rc)
-		close(fsd_session->sock_fd);
+		close(fsd_session->fd);
 
 	return rc;
+}
+
+int fsd_fopen(const char *fs, const char *fpath, const char *desc,
+	      struct fsd_session_t *fsd_session)
+{
+	return __fsd_fopen(fs, fpath, desc, FSD_STORAGE_LUSTRE_TSM, fsd_session);
+}
+
+int fsd_fdopen(const char *fs, const char *fpath, const char *desc,
+	       enum fsd_storage_dest_t fsd_storage_dest,
+	       struct fsd_session_t *fsd_session)
+{
+	return __fsd_fopen(fs, fpath, desc, fsd_storage_dest, fsd_session);
 }
 
 ssize_t fsd_fwrite(const void *ptr, size_t size, size_t nmemb,
@@ -179,18 +213,19 @@ ssize_t fsd_fwrite(const void *ptr, size_t size, size_t nmemb,
 	int rc;
 	ssize_t bytes_written;
 
-	fsd_session->size = size * nmemb;
+	fsd_session->fsd_packet.fsd_data.size = size * nmemb;
 
 	rc = fsd_send(fsd_session, FSD_DATA);
 	if (rc) {
-		close(fsd_session->sock_fd);
+		close(fsd_session->fd);
 		return rc;
 	}
 
-	bytes_written = write_size(fsd_session->sock_fd, ptr,
-				   fsd_session->size);
+	bytes_written = write_size(fsd_session->fd, ptr,
+				   fsd_session->fsd_packet.fsd_data.size);
 	CT_DEBUG("[fd=%d] write size %zd, expected size %zd",
-		 fsd_session->sock_fd, bytes_written, fsd_session->size);
+		 fsd_session->fd, bytes_written,
+		 fsd_session->fsd_packet.fsd_data.size);
 
 	return bytes_written;
 }
@@ -201,9 +236,9 @@ int fsd_fclose(struct fsd_session_t *fsd_session)
 
 	rc = fsd_send(fsd_session, FSD_CLOSE);
 	if (rc)
-		close(fsd_session->sock_fd);
+		close(fsd_session->fd);
 
-	memset(&fsd_session->fsd_info, 0, sizeof(struct fsd_info_t));
+	memset(&fsd_session->fsd_packet, 0, sizeof(struct fsd_packet_t));
 
 	return rc;
 }

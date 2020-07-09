@@ -13,7 +13,7 @@
  */
 
 /*
- * Copyright (c) 2019, GSI Helmholtz Centre for Heavy Ion Research
+ * Copyright (c) 2019-2020, GSI Helmholtz Centre for Heavy Ion Research
  */
 
 #ifndef FSDAPI_H
@@ -71,6 +71,13 @@ enum fsd_protocol_state_t {
 	FSD_DISCONNECT = 0x10
 };
 
+enum fsd_storage_dest_t {
+	FSD_STORAGE_LOCAL      = 0x1,
+	FSD_STORAGE_LUSTRE     = 0x2,
+	FSD_STORAGE_LUSTRE_TSM = 0x4,
+	FSD_STORAGE_TSM	       = 0x8
+};
+
 struct fsd_login_t {
 	char node[DSM_MAX_NODE_LENGTH + 1];
 	char password[DSM_MAX_VERIFIER_LENGTH + 1];
@@ -82,14 +89,31 @@ struct fsd_info_t {
 	char fs[DSM_MAX_FSNAME_LENGTH + 1];
 	char fpath[PATH_MAX + 1];
 	char desc[DSM_MAX_DESCR_LENGTH + 1];
+	enum fsd_storage_dest_t fsd_storage_dest;
+};
+
+struct fsd_data_t {
+	size_t size;
+};
+
+struct fsd_error_t {
+	int rc;
+	char strerror[FSD_MAX_ERRMSG_LENGTH + 1];
+};
+
+struct fsd_packet_t {
+	union {
+		struct fsd_login_t fsd_login;
+		struct fsd_info_t fsd_info;
+		struct fsd_data_t fsd_data;
+	};
+	enum fsd_protocol_state_t state;
+	struct fsd_error_t fsd_error;
 };
 
 struct fsd_session_t {
-	enum fsd_protocol_state_t state;
-	struct fsd_login_t fsd_login;
-	struct fsd_info_t fsd_info;
-	int sock_fd;
-	size_t size;
+	struct fsd_packet_t fsd_packet;
+	int fd;
 };
 
 struct fsd_action_item_t {
@@ -103,23 +127,21 @@ struct fsd_action_item_t {
 	int archive_id;
 	uid_t uid;
 	gid_t gid;
-};
+} __attribute__ ((packed));
 
 int fsd_send(struct fsd_session_t *fsd_session,
-	     const enum fsd_protocol_state_t protocol_state);
-int fsd_recv(int fd, struct fsd_session_t *fsd_session,
+	     const enum fsd_protocol_state_t fsd_protocol_state);
+int fsd_recv(struct fsd_session_t *fsd_session,
 	     enum fsd_protocol_state_t fsd_protocol_state);
 
-void fsd_init(struct fsd_login_t *fsd_login, const char *servername,
-	      const char *node, const char *password,
-	      const char *owner, const char *platform,
-	      const char *fsname, const char *fstype,
-	      const char *hostname, const int port);
 int fsd_fconnect(struct fsd_login_t *fsd_login,
 		 struct fsd_session_t *fsd_session);
 void fsd_fdisconnect(struct fsd_session_t *fsd_session);
 int fsd_fopen(const char *fs, const char *fpath, const char *desc,
 	      struct fsd_session_t *fsd_session);
+int fsd_fdopen(const char *fs, const char *fpath, const char *desc,
+	       enum fsd_storage_dest_t fsd_storage_dest,
+	       struct fsd_session_t *fsd_session);
 ssize_t fsd_fwrite(const void *ptr, size_t size, size_t nmemb,
 		   struct fsd_session_t *fsd_session);
 int fsd_fclose(struct fsd_session_t *fsd_session);

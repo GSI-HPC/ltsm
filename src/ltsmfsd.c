@@ -13,7 +13,7 @@
  */
 
 /*
- * Copyright (c) 2019 GSI Helmholtz Centre for Heavy Ion Research
+ * Copyright (c) 2019-2020 GSI Helmholtz Centre for Heavy Ion Research
  */
 
 #ifndef _GNU_SOURCE
@@ -46,7 +46,7 @@
 #define N_THREADS_QUEUE_MAX	64
 #define N_TOL_FILE_ERRORS	16
 #define BACKLOG			32
-#define BUF_SIZE		0xfffff	/* 0xfffff = 1MiB, 0x400000 = 4MiB */
+#define BUF_SIZE		0xfffff /* 0xfffff = 1MiB, 0x400000 = 4MiB */
 
 struct ident_map_t {
 	char node[DSM_MAX_NODE_LENGTH + 1];
@@ -658,7 +658,8 @@ static int init_fsd_local(char **fpath_local, int *fd_local,
 	char hl[DSM_MAX_HL_LENGTH + 1] = {0};
 	char ll[DSM_MAX_LL_LENGTH + 1] = {0};
 
-	rc = extract_hl_ll(fsd_session->fsd_info.fpath, fsd_session->fsd_info.fs,
+	rc = extract_hl_ll(fsd_session->fsd_packet.fsd_info.fpath,
+			   fsd_session->fsd_packet.fsd_info.fs,
 			   hl, ll);
 	if (rc) {
 		rc = -EFAILED;
@@ -711,7 +712,7 @@ static int init_fsd_local(char **fpath_local, int *fd_local,
 	return rc;
 }
 
-static int recv_fsd_data(int *fd_sock, int *fd_local,
+static int recv_fsd_data(int *fd_local,
 			 struct fsd_session_t *fsd_session,
 			 size_t *bytes_recv_total, size_t *bytes_send_total)
 {
@@ -721,29 +722,30 @@ static int recv_fsd_data(int *fd_sock, int *fd_local,
 	ssize_t bytes_send;
 
 	do {
-		rc = fsd_recv(*fd_sock, fsd_session, (FSD_DATA | FSD_CLOSE));
-		CT_DEBUG("[rc=%d,fd=%d] fsd_recv, size %zu", rc, *fd_sock,
-			 fsd_session->size);
+		rc = fsd_recv(fsd_session, (FSD_DATA | FSD_CLOSE));
+		CT_DEBUG("[rc=%d,fd=%d] fsd_recv, size %zu", rc,
+			 fsd_session->fd,
+			 fsd_session->fsd_packet.fsd_data.size);
 		if (rc) {
 			CT_ERROR(rc, "fsd_recv failed");
 			goto out;
 		}
 
-		if (fsd_session->state & FSD_CLOSE)
+		if (fsd_session->fsd_packet.state & FSD_CLOSE)
 			goto out;
 
 		size_t bytes_total = 0;
 		bytes_recv = bytes_send = 0;
 		memset(buf, 0, sizeof(buf));
 		do {
-			bytes_to_recv = fsd_session->size < sizeof(buf) ?
-				fsd_session->size : sizeof(buf);
-			if (fsd_session->size - bytes_total < bytes_to_recv)
-				bytes_to_recv = fsd_session->size - bytes_total;
+			bytes_to_recv = fsd_session->fsd_packet.fsd_data.size < sizeof(buf) ?
+				fsd_session->fsd_packet.fsd_data.size : sizeof(buf);
+			if (fsd_session->fsd_packet.fsd_data.size - bytes_total < bytes_to_recv)
+				bytes_to_recv = fsd_session->fsd_packet.fsd_data.size - bytes_total;
 
-			bytes_recv = read_size(*fd_sock, buf, bytes_to_recv);
+			bytes_recv = read_size(fsd_session->fd, buf, bytes_to_recv);
 			CT_DEBUG("[fd=%d] read_size %zd, expected %zd, max possible %zd",
-				 *fd_sock, bytes_recv, bytes_to_recv, sizeof(buf));
+				 fsd_session->fd, bytes_recv, bytes_to_recv, sizeof(buf));
 			if (bytes_recv < 0) {
 				CT_ERROR(errno, "recv");
 				goto out;
@@ -764,46 +766,29 @@ static int recv_fsd_data(int *fd_sock, int *fd_local,
 				goto out;
 			}
 			*bytes_send_total += bytes_send;
-		} while (bytes_total != fsd_session->size);
+		} while (bytes_total != fsd_session->fsd_packet.fsd_data.size);
 		CT_DEBUG("[fd=%d,fd=%d] total read %zu, total written %zu",
-			 *fd_sock, *fd_local, *bytes_recv_total, *bytes_send_total);
-	} while (fsd_session->state & FSD_DATA);
+			 fsd_session->fd, *fd_local, *bytes_recv_total, *bytes_send_total);
+	} while (fsd_session->fsd_packet.state & FSD_DATA);
 
 out:
 	return rc;
 }
 
-static void *thread_sock_client(void *arg)
+static int client_authenticate(struct fsd_session_t *fsd_session,
+			       int *archive_id, uid_t *uid, gid_t *gid)
 {
 	int rc;
-	int *fd_sock  = NULL;
-	struct fsd_session_t fsd_session;
-	char *fpath_local = NULL;
-	int fd_local = -1;
-	int archive_id = -1;
-
-	fd_sock = (int *)arg;
-	memset(&fsd_session, 0, sizeof(struct fsd_session_t));
-
-	/* State 1: Client calls fsd_fconnect(...). */
-	rc = fsd_recv(*fd_sock, &fsd_session, FSD_CONNECT);
-	CT_DEBUG("[rc=%d,fd=%d] fsd_recv", rc, *fd_sock);
-	if (rc) {
-		CT_ERROR(rc, "fsd_recv failed");
-		goto out;
-	}
-
 	char servername[MAX_OPTIONS_LENGTH + 1] = {0};
-	uid_t uid = 65534;	/* User: Nobody. */
-	gid_t gid = 65534;	/* Group: Nobody. */
 
 	/* Verify node exists in identmap file. */
-	rc = identmap_entry(&fsd_session.fsd_login, servername,
-			    &archive_id, &uid, &gid);
+	rc = identmap_entry(&fsd_session->fsd_packet.fsd_login,
+			    servername,
+			    archive_id, uid, gid);
 	CT_DEBUG("[rc=%d] identmap_entry", rc);
 	if (rc) {
 		CT_ERROR(rc, "identmap_entry");
-		goto out;
+		return rc;
 	}
 
 	/* Verify node has granted permissions on tsm server. */
@@ -814,13 +799,13 @@ static void *thread_sock_client(void *arg)
 	memset(&session, 0, sizeof(struct session_t));
 	login_init(&login,
 		   servername,
-		   fsd_session.fsd_login.node,
-		   fsd_session.fsd_login.password,
+		   fsd_session->fsd_packet.fsd_login.node,
+		   fsd_session->fsd_packet.fsd_login.password,
 		   DEFAULT_OWNER,
 		   LINUX_PLATFORM,
 		   DEFAULT_FSNAME,
 		   DEFAULT_FSTYPE);
-
+#if 1
 	pthread_mutex_lock(&tsm_connect_mutex);
 	rc = tsm_connect(&login, &session);
 	CT_DEBUG("[rc=%d] tsm_connect", rc);
@@ -828,23 +813,59 @@ static void *thread_sock_client(void *arg)
 		CT_ERROR(rc, "tsm_connect");
 		tsm_disconnect(&session);
 		pthread_mutex_unlock(&tsm_connect_mutex);
-		goto out;
+		return rc;
 	}
 	tsm_disconnect(&session);
 	pthread_mutex_unlock(&tsm_connect_mutex);
+#endif
+
+	return rc;
+}
+
+static void *thread_sock_client(void *arg)
+{
+	int rc;
+	struct fsd_session_t fsd_session;
+	char *fpath_local = NULL;
+	int fd_local = -1;
+	int *fd_ptr = (int *)arg;
+
+	memset(&fsd_session, 0, sizeof(struct fsd_session_t));
+	fsd_session.fd = *fd_ptr;
+
+	/* State 1: Client calls fsd_fconnect(...). We receive
+	   fsd_login, check identmap and hand it over to
+	   tsm server for authentication. */
+	rc = fsd_recv(&fsd_session, FSD_CONNECT);
+	CT_DEBUG("[rc=%d,fd=%d] fsd_recv", rc, fsd_session.fd);
+	if (rc) {
+		CT_ERROR(rc, "fsd_recv failed");
+		goto out;
+	}
+
+	uid_t uid = 65534;	/* User: Nobody. */
+	gid_t gid = 65534;	/* Group: Nobody. */
+	int archive_id = -1;
+	rc = client_authenticate(&fsd_session, &archive_id, &uid, &gid);
+	if (rc) {
+		CT_ERROR(rc, "client_authenticate failed");
+		goto out;
+	}
 
 	do {
 		/* State 2: Client calls fsd_fopen(...) or fsd_disconnect(...). */
-		rc = fsd_recv(*fd_sock, &fsd_session, (FSD_OPEN | FSD_DISCONNECT));
-		CT_DEBUG("[rc=%d,fd=%d] recv_fsd node '%s' fpath '%s'",
-			 rc, *fd_sock, fsd_session.fsd_login.node,
-			 fsd_session.fsd_info.fpath);
+		rc = fsd_recv(&fsd_session, (FSD_OPEN | FSD_DISCONNECT));
+		CT_DEBUG("[rc=%d,fd=%d] recv_fsd state '%s' node '%s' fpath '%s'",
+			 rc, fsd_session.fd,
+			 FSD_PROTOCOL_STR(fsd_session.fsd_packet.state),
+			 fsd_session.fsd_packet.fsd_login.node,
+			 fsd_session.fsd_packet.fsd_info.fpath);
 		if (rc) {
 			CT_ERROR(rc, "recv_fsd failed");
 			goto out;
 		}
 
-		if (fsd_session.state & FSD_DISCONNECT)
+		if (fsd_session.fsd_packet.state & FSD_DISCONNECT)
 			goto out;
 
 		rc = init_fsd_local(&fpath_local, &fd_local, &fsd_session);
@@ -857,12 +878,9 @@ static void *thread_sock_client(void *arg)
 		size_t bytes_send_total = 0;
 		double ts = time_now();
 		/* State 3: Client calls fsd_fwrite(...) or fsd_fclose(...). */
-		rc = recv_fsd_data(fd_sock,
-				   &fd_local,
-				   &fsd_session,
-				   &bytes_recv_total,
+		rc = recv_fsd_data(&fd_local, &fsd_session, &bytes_recv_total,
 				   &bytes_send_total);
-		CT_DEBUG("[rc=%d,fd=%d] recv_fsd_data", rc, *fd_sock);
+		CT_DEBUG("[rc=%d,fd=%d] recv_fsd_data", rc, fsd_session.fd);
 		if (rc) {
 			CT_ERROR(rc, "recv_fsd_data failed");
 			goto out;
@@ -877,22 +895,22 @@ static void *thread_sock_client(void *arg)
 		}
 		CT_INFO("[fd=%d,fd=%d] data buffer for fpath '%s' of size %zd "
 			"successfully received in seconds %.3f",
-			*fd_sock, fd_local,
-			fsd_session.fsd_info.fpath,
+			fsd_session.fd, fd_local,
+			fsd_session.fsd_packet.fsd_info.fpath,
 			bytes_recv_total, time_now() - ts);
 
 		rc = xattr_set_fsd(fpath_local,
 				   STATE_FSD_COPY_DONE,
 				   archive_id,
-				   &fsd_session.fsd_info);
+				   &fsd_session.fsd_packet.fsd_info);
 		if (rc)
 			goto out;
-
+#if 0
 		/* Producer. */
 		struct fsd_action_item_t *fsd_action_item = NULL;
 
 		fsd_action_item = create_fsd_item(bytes_recv_total,
-						  &fsd_session.fsd_info,
+						  &fsd_session.fsd_packet.fsd_info,
 						  fpath_local, archive_id,
 						  uid, gid);
 		if (fsd_action_item == NULL)
@@ -903,7 +921,7 @@ static void *thread_sock_client(void *arg)
 			free(fsd_action_item);
 			goto out;
 		}
-
+#endif
 		rc = close(fd_local);
 		CT_DEBUG("[rc=%d,fd=%d] close", rc, fd_local);
 		if (rc < 0) {
@@ -917,7 +935,7 @@ static void *thread_sock_client(void *arg)
 			free(fpath_local);
 			fpath_local = NULL;
 		}
-	} while (fsd_session.state != FSD_DISCONNECT);
+	} while (fsd_session.fsd_packet.state != FSD_DISCONNECT);
 
 out:
 	if (fpath_local) {
@@ -928,10 +946,10 @@ out:
 	if (!(fd_local < 0))
 		close(fd_local);
 
-	if (fd_sock) {
-		close(*fd_sock);
-		free(fd_sock);
-		fd_sock = NULL;
+	if (!(fsd_session.fd < 0)) {
+		close(fsd_session.fd);
+		free(fd_ptr);
+		fd_ptr = NULL;
 	}
 
 	pthread_mutex_lock(&mutex_sock_cnt);
@@ -959,13 +977,14 @@ static int fsd_setup(void)
 		CT_ERROR(rc, "'%s'", opt.o_local_mount);
 		return rc;
 	}
-
+#if 0
 	/* Verify we have a valid Lustre mount point. */
 	rc = llapi_search_fsname(opt.o_mnt_lustre, opt.o_mnt_lustre);
 	if (rc < 0) {
 		CT_ERROR(rc, "cannot find a Lustre filesystem mounted at '%s'",
 			 opt.o_mnt_lustre);
 	}
+#endif
 
 	return rc;
 }
