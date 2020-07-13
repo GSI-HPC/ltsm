@@ -34,12 +34,12 @@
 #define XATTR_FSD_DESC		XATTR_FSD_PREFIX".desc"
 
 #define FSD_PROTOCOL_STR(s)							   \
-	s == FSD_CONNECT    ? "FSD_CONNECT"    :				   \
-	s == FSD_OPEN       ? "FSD_OPEN"       :				   \
-	s == FSD_DATA       ? "FSD_DATA"       :				   \
-	s == FSD_CLOSE      ? "FSD_CLOSE"      :				   \
-	s == FSD_DISCONNECT ? "FSD_DISCONNECT" :				   \
-	s == (FSD_DATA | FSD_CLOSE) ? "FSD_DATA | FSD_CLOSE" :                     \
+	s == FSD_CONNECT                 ? "FSD_CONNECT"               :	   \
+	s == FSD_OPEN                    ? "FSD_OPEN"                  :	   \
+	s == FSD_DATA                    ? "FSD_DATA"                  :	   \
+	s == FSD_CLOSE                   ? "FSD_CLOSE"                 :	   \
+	s == FSD_DISCONNECT              ? "FSD_DISCONNECT"            :	   \
+	s == (FSD_DATA | FSD_CLOSE)      ? "FSD_DATA | FSD_CLOSE"      :           \
 	s == (FSD_DISCONNECT | FSD_OPEN) ? "FSD_DISCONNECT | FSD_OPEN" : "UNKNOWN" \
 
 #define FSD_ACTION_STR(s)						     \
@@ -51,6 +51,12 @@
 	s == STATE_TSM_ARCHIVE_ERROR ? "STATE_TSM_ARCHIVE_ERROR" :           \
 	s == STATE_TSM_ARCHIVE_DONE  ? "STATE_TSM_ARCHIVE_DONE"  :           \
 	s == STATE_FILE_OMITTED      ? "STATE_FILE_OMITTED"      : "UNKNOWN" \
+
+#define FSD_STORAGE_DEST_STR(s)						   \
+	s == FSD_STORAGE_LOCAL      ? "FSD_STORAGE_LOCAL"      :	   \
+	s == FSD_STORAGE_LUSTRE     ? "FSD_STORAGE_LUSTRE"     :	   \
+	s == FSD_STORAGE_LUSTRE_TSM ? "FSD_STORAGE_LUSTRE_TSM" : 	   \
+	s == FSD_STORAGE_TSM        ? "FSD_STORAGE_TSM"        : "UNKNOWN" \
 
 enum fsd_action_state_t {
 	STATE_FSD_COPY_DONE	= 0x1,

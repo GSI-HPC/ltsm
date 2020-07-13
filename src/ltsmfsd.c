@@ -712,7 +712,7 @@ static int init_fsd_local(char **fpath_local, int *fd_local,
 	return rc;
 }
 
-static int recv_fsd_data(int *fd_local,
+static int fsd_recv_data(int *fd_local,
 			 struct fsd_session_t *fsd_session,
 			 size_t *bytes_recv_total, size_t *bytes_send_total)
 {
@@ -723,8 +723,9 @@ static int recv_fsd_data(int *fd_local,
 
 	do {
 		rc = fsd_recv(fsd_session, (FSD_DATA | FSD_CLOSE));
-		CT_DEBUG("[rc=%d,fd=%d] fsd_recv, size %zu", rc,
-			 fsd_session->fd,
+		CT_DEBUG("[rc=%d,fd=%d] fsd_recv state '%s' size %zu",
+			 rc, fsd_session->fd,
+			 FSD_PROTOCOL_STR(fsd_session->fsd_packet.state),
 			 fsd_session->fsd_packet.fsd_data.size);
 		if (rc) {
 			CT_ERROR(rc, "fsd_recv failed");
@@ -805,7 +806,7 @@ static int client_authenticate(struct fsd_session_t *fsd_session,
 		   LINUX_PLATFORM,
 		   DEFAULT_FSNAME,
 		   DEFAULT_FSTYPE);
-#if 1
+
 	pthread_mutex_lock(&tsm_connect_mutex);
 	rc = tsm_connect(&login, &session);
 	CT_DEBUG("[rc=%d] tsm_connect", rc);
@@ -817,7 +818,6 @@ static int client_authenticate(struct fsd_session_t *fsd_session,
 	}
 	tsm_disconnect(&session);
 	pthread_mutex_unlock(&tsm_connect_mutex);
-#endif
 
 	return rc;
 }
@@ -833,11 +833,16 @@ static void *thread_sock_client(void *arg)
 	memset(&fsd_session, 0, sizeof(struct fsd_session_t));
 	fsd_session.fd = *fd_ptr;
 
-	/* State 1: Client calls fsd_fconnect(...). We receive
-	   fsd_login, check identmap and hand it over to
-	   tsm server for authentication. */
+	/* State 1: Client calls fsd_fconnect(...). Receive fsd_packet with
+	   fsd_login_t, check identmap and hand it over to tsm server for
+	   authentication. */
 	rc = fsd_recv(&fsd_session, FSD_CONNECT);
-	CT_DEBUG("[rc=%d,fd=%d] fsd_recv", rc, fsd_session.fd);
+	CT_DEBUG("[rc=%d,fd=%d] fsd_recv state '%s' node '%s' hostname '%s' "
+		 "port %d", rc, fsd_session.fd,
+		 FSD_PROTOCOL_STR(fsd_session.fsd_packet.state),
+		 fsd_session.fsd_packet.fsd_login.node,
+		 fsd_session.fsd_packet.fsd_login.hostname,
+		 fsd_session.fsd_packet.fsd_login.port);
 	if (rc) {
 		CT_ERROR(rc, "fsd_recv failed");
 		goto out;
@@ -853,13 +858,17 @@ static void *thread_sock_client(void *arg)
 	}
 
 	do {
-		/* State 2: Client calls fsd_fopen(...) or fsd_disconnect(...). */
+		/* State 2: Client calls fsd_fopen(...) or fsd_disconnect(...).
+		   Receive fsd_packet with fsd_info_t. */
 		rc = fsd_recv(&fsd_session, (FSD_OPEN | FSD_DISCONNECT));
-		CT_DEBUG("[rc=%d,fd=%d] recv_fsd state '%s' node '%s' fpath '%s'",
+		CT_DEBUG("[rc=%d,fd=%d] fsd_recv state '%s' fs '%s' "
+			 "fpath '%s' desc '%s' storage dest '%s'",
 			 rc, fsd_session.fd,
 			 FSD_PROTOCOL_STR(fsd_session.fsd_packet.state),
-			 fsd_session.fsd_packet.fsd_login.node,
-			 fsd_session.fsd_packet.fsd_info.fpath);
+			 fsd_session.fsd_packet.fsd_info.fs,
+			 fsd_session.fsd_packet.fsd_info.fpath,
+			 fsd_session.fsd_packet.fsd_info.desc,
+			 FSD_STORAGE_DEST_STR(fsd_session.fsd_packet.fsd_info.fsd_storage_dest));
 		if (rc) {
 			CT_ERROR(rc, "recv_fsd failed");
 			goto out;
@@ -874,15 +883,23 @@ static void *thread_sock_client(void *arg)
 			goto out;
 		}
 
+		struct fsd_info_t fsd_info;
 		size_t bytes_recv_total = 0;
 		size_t bytes_send_total = 0;
 		double ts = time_now();
-		/* State 3: Client calls fsd_fwrite(...) or fsd_fclose(...). */
-		rc = recv_fsd_data(&fd_local, &fsd_session, &bytes_recv_total,
+
+		/* Note, subsequent fsd_recv_data(...) overwrites fsd_packet.fsd_info,
+		   due to union structure, thus copy it here for later use. */
+		memcpy(&fsd_info, &fsd_session.fsd_packet.fsd_info,
+		       sizeof(struct fsd_info_t));
+
+		/* State 3: Client calls fsd_fwrite(...) or fsd_fclose(...).
+		   Receive fsd_packet with fsd_data_t. */
+		rc = fsd_recv_data(&fd_local, &fsd_session, &bytes_recv_total,
 				   &bytes_send_total);
-		CT_DEBUG("[rc=%d,fd=%d] recv_fsd_data", rc, fsd_session.fd);
+		CT_DEBUG("[rc=%d,fd=%d] fsd_recv_data", rc, fsd_session.fd);
 		if (rc) {
-			CT_ERROR(rc, "recv_fsd_data failed");
+			CT_ERROR(rc, "fsd_recv_data failed");
 			goto out;
 		}
 		/* Sanity check. */
@@ -896,21 +913,21 @@ static void *thread_sock_client(void *arg)
 		CT_INFO("[fd=%d,fd=%d] data buffer for fpath '%s' of size %zd "
 			"successfully received in seconds %.3f",
 			fsd_session.fd, fd_local,
-			fsd_session.fsd_packet.fsd_info.fpath,
+			fsd_info.fpath,
 			bytes_recv_total, time_now() - ts);
 
 		rc = xattr_set_fsd(fpath_local,
 				   STATE_FSD_COPY_DONE,
 				   archive_id,
-				   &fsd_session.fsd_packet.fsd_info);
+				   &fsd_info);
 		if (rc)
 			goto out;
-#if 0
+
 		/* Producer. */
 		struct fsd_action_item_t *fsd_action_item = NULL;
 
 		fsd_action_item = create_fsd_item(bytes_recv_total,
-						  &fsd_session.fsd_packet.fsd_info,
+						  &fsd_info,
 						  fpath_local, archive_id,
 						  uid, gid);
 		if (fsd_action_item == NULL)
@@ -921,7 +938,7 @@ static void *thread_sock_client(void *arg)
 			free(fsd_action_item);
 			goto out;
 		}
-#endif
+
 		rc = close(fd_local);
 		CT_DEBUG("[rc=%d,fd=%d] close", rc, fd_local);
 		if (rc < 0) {
@@ -977,14 +994,13 @@ static int fsd_setup(void)
 		CT_ERROR(rc, "'%s'", opt.o_local_mount);
 		return rc;
 	}
-#if 0
+
 	/* Verify we have a valid Lustre mount point. */
 	rc = llapi_search_fsname(opt.o_mnt_lustre, opt.o_mnt_lustre);
 	if (rc < 0) {
 		CT_ERROR(rc, "cannot find a Lustre filesystem mounted at '%s'",
 			 opt.o_mnt_lustre);
 	}
-#endif
 
 	return rc;
 }
