@@ -19,10 +19,10 @@ LTSM_FS=${5-/tmp}
 LTSM_OWNER=${6-testowner}
 
 FSDBENCH_BIN="src/test/fsdbench"
-FSDBENCH_SIZE=4194304
+FSDBENCH_SIZE=$((((8 * RANDOM) % 4194304) + 1))
 FSDBENCH_NUMBER=100
 FSDBENCH_THREADS=4
-FSDBENCH_RESULT="/tmp/fsdbench.txt"
+FSDBENCH_RESULT=$(mktemp /tmp/fsdbench.XXXXXX)
 FSD_FSNAME="/lustre"
 FSD_FPATH="${FSD_FSNAME}/fsdbench"
 FSD_SERVER="localhost"
@@ -33,7 +33,7 @@ FSD_SERVER="localhost"
 __check_bin "${LTSM_BIN}"
 __check_bin "${FSDBENCH_BIN}"
 
-echo "sending ${FSDBENCH_NUMBER} files of size ${FSDBENCH_SIZE} with ${FSDBENCH_THREADS} threads to FSD server"
+echo "sending ${FSDBENCH_NUMBER} files of size ${FSDBENCH_SIZE} with ${FSDBENCH_THREADS} threads to FSD server with result ${FSDBENCH_RESULT}"
 ${FSDBENCH_BIN} -v info -z ${FSDBENCH_SIZE} -b ${FSDBENCH_NUMBER} -t ${FSDBENCH_THREADS} \
 		-f ${FSD_FSNAME} -a ${FSD_FPATH} -n ${LTSM_NODE} -p ${LTSM_PASSWORD} \
 		-s ${FSD_SERVER} > ${FSDBENCH_RESULT} 2>&1
