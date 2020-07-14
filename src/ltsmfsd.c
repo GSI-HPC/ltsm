@@ -1340,7 +1340,7 @@ static int process_fsd_action_item(struct fsd_action_item_t *fsd_action_item)
 		 fsd_action_item->ts[2],
 		 queue_size(&queue));
 
-	if (fsd_action_item->action_error_cnt > opt.o_ntol_file_errors) {
+	if (fsd_action_item->action_error_cnt > (size_t)opt.o_ntol_file_errors) {
 		CT_WARN("file '%s' reached maximum number of tolerated errors, "
 			"and is omitted", fsd_action_item->fpath_local);
 		rc = xattr_update_fsd_state(fsd_action_item,
