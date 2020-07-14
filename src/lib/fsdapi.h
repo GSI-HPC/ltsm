@@ -32,6 +32,7 @@
 #define XATTR_FSD_FS		XATTR_FSD_PREFIX".fs"
 #define XATTR_FSD_FPATH		XATTR_FSD_PREFIX".fpath"
 #define XATTR_FSD_DESC		XATTR_FSD_PREFIX".desc"
+#define XATTR_FSD_STOR_DEST	XATTR_FSD_PREFIX".stordest"
 
 #define FSD_PROTOCOL_STR(s)							   \
 	s == FSD_CONNECT                 ? "FSD_CONNECT"               :	   \

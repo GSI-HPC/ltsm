@@ -91,18 +91,30 @@ void test_fsd_xattr(CuTest *tc)
 		struct fsd_info_t fsd_info = {
 			.fs		   = {0},
 			.fpath		   = {0},
-			.desc		   = {0}
+			.desc		   = {0},
+			.fsd_storage_dest  = 0
 		};
+		enum fsd_storage_dest_t fsd_storage_dest[] = {
+			FSD_STORAGE_LOCAL,
+			FSD_STORAGE_LUSTRE,
+			FSD_STORAGE_LUSTRE_TSM,
+			FSD_STORAGE_TSM
+		};
+
 		rnd_str(fsd_info.fs, rand() % DSM_MAX_FSNAME_LENGTH);
 		rnd_str(fsd_info.fpath, rand() % PATH_MAX_COMPAT);
 		rnd_str(fsd_info.desc, rand() % DSM_MAX_DESCR_LENGTH);
+		fsd_info.fsd_storage_dest = fsd_storage_dest[rand() %
+							     (sizeof(fsd_storage_dest) /
+							      sizeof(fsd_storage_dest[0]))];
 
 		uint32_t fsd_action_state_ac = 0;
 		int archive_id_ac = 0;
 		struct fsd_info_t fsd_info_ac = {
 			.fs		      = {0},
 			.fpath		      = {0},
-			.desc		      = {0}
+			.desc		      = {0},
+			.fsd_storage_dest  = 0
 		};
 
 		rc = xattr_set_fsd(fpath[r], fsd_action_state, archive_id, &fsd_info);
@@ -116,6 +128,7 @@ void test_fsd_xattr(CuTest *tc)
 		CuAssertStrEquals(tc, fsd_info.fs, fsd_info_ac.fs);
 		CuAssertStrEquals(tc, fsd_info.fpath, fsd_info_ac.fpath);
 		CuAssertStrEquals(tc, fsd_info.desc, fsd_info_ac.desc);
+		CuAssertIntEquals(tc, fsd_info.fsd_storage_dest, fsd_info_ac.fsd_storage_dest);
 
 		struct fsd_action_item_t fsd_action_item;
 		memset(&fsd_action_item, 0, sizeof(struct fsd_action_item_t));

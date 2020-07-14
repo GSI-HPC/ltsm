@@ -74,6 +74,12 @@ int xattr_get_fsd(const char *fpath_local,
 	} else
 		strncpy(fsd_info->desc, _fsd_info.desc, sizeof(fsd_info->desc));
 
+	rc = getxattr(fpath_local, XATTR_FSD_STOR_DEST,
+		      (enum fsd_storage_dest_t *)&fsd_info->fsd_storage_dest,
+		      sizeof(enum fsd_storage_dest_t));
+	if (rc < 0)
+		rc = -errno;
+
 out:
 	pthread_mutex_unlock(&xattr_mutex);
 
@@ -126,6 +132,16 @@ int xattr_set_fsd(const char *fpath_local,
 	if (rc < 0) {
 		rc = -errno;
 		CT_ERROR(rc, "setxattr '%s %s'", fpath_local, XATTR_FSD_DESC);
+		goto out;
+	}
+
+	rc = setxattr(fpath_local, XATTR_FSD_STOR_DEST,
+		      (enum fsd_storage_dest_t *)&fsd_info->fsd_storage_dest,
+		      sizeof(enum fsd_storage_dest_t), 0);
+	if (rc < 0) {
+		rc = -errno;
+		CT_ERROR(rc, "setxattr '%s %s'", fpath_local,
+			 XATTR_FSD_STOR_DEST);
 	}
 
 out:
