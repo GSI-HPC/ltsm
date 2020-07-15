@@ -44,7 +44,6 @@
 
 void test_fsd_xattr(CuTest *tc)
 {
-	int rc;
 	char rnd_chars[0xffff] = {0};
 	char fpath[NUM_FILES_XATTR][PATH_MAX];
 
@@ -52,6 +51,7 @@ void test_fsd_xattr(CuTest *tc)
 
 	for (uint16_t r = 0; r < NUM_FILES_XATTR; r++) {
 
+		int rc;
 		FILE *file;
 		char rnd_s[LEN_RND_STR + 1] = {0};
 
