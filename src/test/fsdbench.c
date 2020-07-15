@@ -266,8 +266,8 @@ static void *perform_task(void *thread_data)
 			CT_DEBUG("fsd_fwrite %lu %lu %lu",
 				 buf_size, cwritten, twritten);
 			if (opt.o_wdelay) {
-				CT_DEBUG("usleep %u", opt.o_wdelay);
-				usleep(opt.o_wdelay);
+				CT_DEBUG("sleep %u", opt.o_wdelay);
+				nanosleep(&(struct timespec){opt.o_wdelay, 0}, NULL);
 			}
 			crc32sum_buf = crc32(crc32sum_buf, buf, cwritten);
 		}
