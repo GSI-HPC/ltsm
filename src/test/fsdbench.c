@@ -71,7 +71,7 @@ static struct options opt = {
 static void usage(const char *cmd_name, const int rc)
 {
 	fprintf(stdout, "usage: %s [options]\n"
-		"\t-z, --size <long> [default: %lu bytes]\n"
+		"\t-z, --size <long> [default: %zu bytes]\n"
 		"\t-b, --number <int> [default: %u]\n"
 		"\t-t, --threads <int> [default: %u]\n"
 		"\t-d, --wdelay <int> [default: %u]\n"
