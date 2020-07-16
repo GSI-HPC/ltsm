@@ -13,7 +13,7 @@
  */
 
 /*
- * Copyright (c) 2019, GSI Helmholtz Centre for Heavy Ion Research
+ * Copyright (c) 2019-2020, GSI Helmholtz Centre for Heavy Ion Research
  */
 
 #include "common.h"
@@ -25,22 +25,23 @@ static int parse_line(char *line, struct kv_opt *kv_opt)
 
 	const char *delim = " \t\r\n";
 	char *token;
+	char *saveptr;
 	uint16_t cnt = 0;
 	struct kv _kv = {.key = {0},
 			 .val = {0}};
 
-	token = strtok(line, delim);
+	token = strtok_r(line, delim, &saveptr);
 	while(token != NULL) {
 		if (token[0] == '#')
 			break;
 		strncpy(_kv.key, token, MAX_OPTIONS_LENGTH);
 		cnt++;
-		token = strtok(NULL, delim);
+		token = strtok_r(NULL, delim, &saveptr);
 		if (token) {
 			strncpy(_kv.val, token, MAX_OPTIONS_LENGTH);
 			cnt++;
 		}
-		token = strtok(NULL, delim);
+		token = strtok_r(NULL, delim, &saveptr);
 	}
 	if (cnt != 2)
 		return -EINVAL;
@@ -119,7 +120,7 @@ int parse_conf(const char *filename, struct kv_opt *kv_opt)
 	}
 
 	errno = 0;
-	while ((nread = getline(&line, &len, file) != -1)) {
+	while ((nread = getline(&line, &len, file)) != -1) {
 		rc = parse_line(line, kv_opt);
 		if (rc == -EINVAL)
 			CT_WARN("malformed option '%s' in conf file '%s'",
