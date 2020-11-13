@@ -3,3 +3,4 @@ lhsmtool_tsm.conf.example
 ltsmc.conf.example
 ltsmfsd.conf.example
 identmap.conf.example
+script/ltsmsync.sh
