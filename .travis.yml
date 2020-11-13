@@ -36,7 +36,7 @@ matrix:
 
 before_install:
   - sudo apt-get update
-  - sudo apt-get install -y autoconf autotools-dev libtool
+  - sudo apt-get install -y autoconf autotools-dev libtool libsnmp-dev
   - wget http://ftp.software.ibm.com/storage/tivoli-storage-management/maintenance/client/v7r1/Linux/LinuxX86_DEB/BA/v716/7.1.6.0-TIV-TSMBAC-LinuxX86_DEB.tar
   - tar xf 7.1.6.0-TIV-TSMBAC-LinuxX86_DEB.tar
   - sudo dpkg -i gskssl64_8.0-50.66.linux.x86_64.deb
