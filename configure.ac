@@ -32,13 +32,13 @@ LT_INIT
 AC_CONFIG_MACRO_DIR([m4])
 
 # Path to Lustre src directory.
-AC_ARG_WITH([lustre-src],
-	AS_HELP_STRING([--with-lustre-src[=PATH]],[path to location of Lustre source files]),
-	LUSTRE_SRC_DIR="$withval", LUSTRE_SRC_DIR="")
+AC_ARG_WITH([lustre-headers],
+	AS_HELP_STRING([--with-lustre-headers[=PATH]],[path to location of Lustre header files [default=/usr/include/lustre]]),
+	LUSTRE_SRC_DIR="$withval", LUSTRE_SRC_DIR="/usr/include/lustre")
 
 lapiheader="no"
-AC_CHECK_FILE("$LUSTRE_SRC_DIR/lustre/include/lustre/lustreapi.h", [lapiheader="yes"],
-	[AC_MSG_WARN([cannot find Lustre source files, use --with-lustre-src=PATH])])
+AC_CHECK_FILE("$LUSTRE_SRC_DIR/lustreapi.h", [lapiheader="yes"],
+	[AC_MSG_WARN([cannot find Lustre header files, use --with-lustre-headers=PATH])])
 
 AS_IF([test "x$lapiheader" = "xyes"],
 	[

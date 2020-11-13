@@ -115,10 +115,10 @@ and execute
 ```
 ./autogen.sh && ./configure CFLAGS='-g -DDEBUG -O0' --enable-tests
 ```
-If Lustre sources are not found you will get the message
+If Lustre header files are not found you will get the message
 ```
 ...
-configure: WARNING: cannot find Lustre source files, use --with-lustre-src=PATH
+configure: WARNING: cannot find Lustre header files, use --with-lustre-headers=PATH
 configure: WARNING: cannot find Lustre API headers and/or Lustre API library
 ...
 configured ltsm:
@@ -128,10 +128,10 @@ build tsmapi library and ltsmc : yes
 build ltsmfsd and lhsmtool_tsm : no
 build test suite               : yes
 ```
-and the console client *ltsmc* as well as the *fsdlib* are built only. For building also the Lustre Copytool thus make sure the Lustre sources
+and the console client *ltsmc* as well as the *fsdlib* are built only. For building also the Lustre Copytool thus make sure the Lustre header files
 and the Lustre library `liblustreapi.so` are available and the paths are correctly specified e.g.
 ```
-./autogen.sh && ./configure CFLAGS='-g -DDEBUG -O0' --with-lustre-src=/usr/local/lustre-release LDFLAGS='-L/usr/local/lib' --with-tsm-headers=/opt/tivoli/tsm/client/api/bin64/sample --enable-tests
+./autogen.sh && ./configure CFLAGS='-g -DDEBUG -O0' --with-lustre-src=/usr/local/include/lustre LDFLAGS='-L/usr/local/lib' --with-tsm-headers=/opt/tivoli/tsm/client/api/bin64/sample --enable-tests
 ```
 
 If *required* TSM and *optional* Lustre header files and libraries are found the following executable files are provided:
