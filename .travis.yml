@@ -1,6 +1,6 @@
 sudo: required
 language: c
-dist: xenial
+dist: bionic
 
 matrix:
   include:
@@ -42,10 +42,10 @@ before_install:
   - sudo dpkg -i gskssl64_8.0-50.66.linux.x86_64.deb
   - sudo dpkg -i gskcrypt64_8.0-50.66.linux.x86_64.deb
   - sudo dpkg -i tivsm-api64.amd64.deb
-  - wget https://github.com/tstibor/ltsm.github.io/raw/master/lustre/lustre-builds/jessie/client/2.10/2.10.1/lustre-client-utils_2.10.1-1_amd64.deb
-  - wget https://github.com/tstibor/ltsm.github.io/raw/master/lustre/lustre-builds/jessie/client/2.10/2.10.1/lustre-dev_2.10.1-1_amd64.deb
-  - sudo dpkg -i lustre-client-utils_2.10.1-1_amd64.deb
-  - sudo dpkg -i lustre-dev_2.10.1-1_amd64.deb
+  - wget https://github.com/tstibor/ltsm.github.io/raw/master/lustre/lustre-builds/buster/client/2.13/lustre-client-utils_2.13.56-63-gde8ed5f-1_amd64.deb
+  - wget https://github.com/tstibor/ltsm.github.io/raw/master/lustre/lustre-builds/buster/client/2.13/lustre-dev_2.13.56-63-gde8ed5f-1_amd64.deb
+  - sudo dpkg -i lustre-client-utils_2.13.56-63-gde8ed5f-1_amd64.deb
+  - sudo dpkg -i lustre-dev_2.13.56-63-gde8ed5f-1_amd64.deb
   - sudo apt-get install libattr1-dev
   - eval "${MATRIX_EVAL}"
 
