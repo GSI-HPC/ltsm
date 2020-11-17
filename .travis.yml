@@ -47,6 +47,7 @@ before_install:
   - sudo dpkg -i lustre-client-utils_2.13.56-63-gde8ed5f-1_amd64.deb
   - sudo dpkg -i lustre-dev_2.13.56-63-gde8ed5f-1_amd64.deb
   - sudo apt-get install libattr1-dev
+  - sudo ldconfig
   - eval "${MATRIX_EVAL}"
 
 script: ./autogen.sh && ./configure --enable-tests && make && ./src/test/test_cds && ./src/test/test_tsmapi
