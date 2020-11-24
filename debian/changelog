@@ -1,8 +1,9 @@
-ltsm (0.8.1-44) unstable; urgency=low
+ltsm (0.8.2) unstable; urgency=low
 
-  * Automated changelog entry update
+  * Autoconf requires Lustre header files not full Lustre sources.
+  * Add script ltsmsync.sh into package.
 
- -- Thomas Stibor <t.stibor@gsi.de>  Fri, 13 Nov 2020 10:06:51 +0100
+ -- Thomas Stibor <t.stibor@gsi.de>  Fri, 24 Nov 2020 11:06:51 +0100
 
 ltsm (0.8.1) unstable; urgency=medium
 

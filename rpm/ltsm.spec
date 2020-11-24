@@ -46,6 +46,7 @@ install -m 600 debian/ltsmfsd.default %{buildroot}/%{_etcdir}/default/ltsmfsd
 
 %files
 %defattr(-,root,root)
+%doc script/ltsmsync.sh
 %{_mandir}/man1/lhsmtool_tsm.1.*
 %{_mandir}/man1/ltsmc.1.*
 %{_mandir}/man1/ltsmfsd.1.*
@@ -73,6 +74,10 @@ install -m 600 debian/ltsmfsd.default %{buildroot}/%{_etcdir}/default/ltsmfsd
 rm -rf %{buildroot}
 
 %changelog
+
+* Tue Nov 24 2020 Thomas Stibor <t.stibor@gsi.de> 0.8.2-1
+- Autoconf requires Lustre header files not full Lustre sources.
+- Add script ltsmsync.sh into package.
 
 * Wed Jan 31 2020 Thomas Stibor <t.stibor@gsi.de> 0.8.1-1
 - TSM file system daemon bug fixes.
