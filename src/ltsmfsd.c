@@ -1235,8 +1235,7 @@ out:
 	return rc;
 }
 
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wunused-function"
+#ifdef LTSMFSD_POLL_ARCHIVE_FINISHED
 static int archive_state(const struct fsd_action_item_t *fsd_action_item,
 			 uint32_t *states)
 {
@@ -1256,7 +1255,7 @@ static int archive_state(const struct fsd_action_item_t *fsd_action_item,
 
 	return rc;
 }
-#pragma GCC diagnostic pop
+#endif
 
 static int archive_action(struct fsd_action_item_t *fsd_action_item)
 {
