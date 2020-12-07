@@ -98,7 +98,8 @@ void test_fsd_xattr(CuTest *tc)
 			FSD_STORAGE_LOCAL,
 			FSD_STORAGE_LUSTRE,
 			FSD_STORAGE_LUSTRE_TSM,
-			FSD_STORAGE_TSM
+			FSD_STORAGE_TSM,
+                        FSD_STORAGE_NULL
 		};
 
 		rnd_str(fsd_info.fs, rand() % DSM_MAX_FSNAME_LENGTH);

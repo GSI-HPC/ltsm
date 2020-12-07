@@ -57,7 +57,8 @@
 	s == FSD_STORAGE_LOCAL      ? "FSD_STORAGE_LOCAL"      :	   \
 	s == FSD_STORAGE_LUSTRE     ? "FSD_STORAGE_LUSTRE"     :	   \
 	s == FSD_STORAGE_LUSTRE_TSM ? "FSD_STORAGE_LUSTRE_TSM" : 	   \
-	s == FSD_STORAGE_TSM        ? "FSD_STORAGE_TSM"        : "UNKNOWN" \
+        s == FSD_STORAGE_TSM        ? "FSD_STORAGE_TSM"        :           \
+        s == FSD_STORAGE_NULL       ? "FSD_STORAGE_NULL"       : "UNKNOWN" \
 
 enum fsd_action_state_t {
 	STATE_FSD_COPY_DONE	= 0x1,
@@ -82,7 +83,8 @@ enum fsd_storage_dest_t {
 	FSD_STORAGE_LOCAL      = 0x1,
 	FSD_STORAGE_LUSTRE     = 0x2,
 	FSD_STORAGE_LUSTRE_TSM = 0x4,
-	FSD_STORAGE_TSM	       = 0x8
+	FSD_STORAGE_TSM	       = 0x8,
+        FSD_STORAGE_NULL       = 0x10
 };
 
 struct fsd_login_t {
