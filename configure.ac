@@ -83,10 +83,12 @@ AS_IF([test "x$tsmheader" = "xyes"],
 	]
 )
 
+tsmheader_and_lapiheader="no"
 AS_IF([test "x$lapiheader" = "xyes" && test "x$tsmheader" = "xyes"],
       [
       AC_DEFINE([HAVE_TSM_LUSTRE], [1], [define to 1 if Lustre and TSM source is available])
       AM_CONDITIONAL([HAVE_TSM_LUSTRE], [true])
+      tsmheader_and_lapiheader="yes"
       ],
       [
       AM_CONDITIONAL([HAVE_TSM_LUSTRE], [false])
@@ -183,6 +185,6 @@ echo "configured ltsm:"
 echo
 echo "build fsdapi library           : yes"
 echo "build tsmapi library and ltsmc : ${tsmheader}"
-echo "build ltsmfsd and lhsmtool_tsm : ${lapiheader}"
+echo "build ltsmfsd and lhsmtool_tsm : ${tsmheader_and_lapiheader}"
 echo "build test suite               : ${enable_tests}"
 echo
