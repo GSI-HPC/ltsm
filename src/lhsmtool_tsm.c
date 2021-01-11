@@ -401,7 +401,7 @@ static int progress_callback(struct progress_size_t *pg_size,
 	int rc;
 
 	session->hai->hai_extent.length = pg_size->cur;
-	session->hai->hai_extent.offset = pg_size->cur_total - pg_size->cur;
+	session->hai->hai_extent.offset = pg_size->cur_total;
 	rc = llapi_hsm_action_progress(session->hcp, &session->hai->hai_extent,
 				       pg_size->total, 0);
 	if (rc == -ECANCELED)
