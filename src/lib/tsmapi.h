@@ -108,9 +108,9 @@ struct qtable_t {
 };
 
 struct progress_size_t {
-	ssize_t cur;
-	ssize_t cur_total;
-	ssize_t total;
+	uint64_t cur;
+	uint64_t cur_total;
+	uint64_t total;
 };
 
 struct tsm_file_t {
