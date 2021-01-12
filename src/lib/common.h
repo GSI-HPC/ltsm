@@ -46,7 +46,7 @@
 #endif
 
 #ifndef TSM_BUF_LENGTH
-#define TSM_BUF_LENGTH	32764	/* (32768 - 4) gives best transfer performance. */
+#define TSM_BUF_LENGTH	262144	/* 256 KiB. */
 #endif
 
 #ifndef MAX_OPTIONS_LENGTH
