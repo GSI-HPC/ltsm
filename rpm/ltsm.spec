@@ -75,6 +75,9 @@ rm -rf %{buildroot}
 
 %changelog
 
+* Thu Jan 14 2021 Thomas Stibor <t.stibor@gsi.de> 0.8.3-1
+- Fix: llapi_hsm_action_progress: Cannot allocate memory (12)
+
 * Tue Nov 24 2020 Thomas Stibor <t.stibor@gsi.de> 0.8.2-1
 - Autoconf requires Lustre header files not full Lustre sources.
 - Add script ltsmsync.sh into package.

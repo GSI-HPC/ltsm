@@ -1,3 +1,9 @@
+ltsm (0.8.3) unstable; urgency=medium
+
+  * Fix: llapi_hsm_action_progress: Cannot allocate memory (12)
+
+ -- Thomas Stibor <thomas@stibor.net>  Thu, 14 Jan 2021 10:22:14 +0100
+
 ltsm (0.8.2) unstable; urgency=low
 
   * Autoconf requires Lustre header files not full Lustre sources.
