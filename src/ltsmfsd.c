@@ -94,9 +94,6 @@ static pthread_cond_t	 queue_cond    = PTHREAD_COND_INITIALIZER;
 /* TSM connect authentication. */
 static pthread_mutex_t tsm_connect_mutex = PTHREAD_MUTEX_INITIALIZER;
 
-/* Lustre HSM request. */
-static pthread_mutex_t llapi_hsm_mutex = PTHREAD_MUTEX_INITIALIZER;
-
 static void usage(const char *cmd_name, const int rc)
 {
 	fprintf(stdout, "usage: %s [options] <lustre_mount_point>\n"
@@ -1290,9 +1287,7 @@ static int archive_action(struct fsd_action_item_t *fsd_action_item)
 	hui = &hur->hur_user_item[0];
 	hui->hui_fid = fid;
 
-	pthread_mutex_lock(&llapi_hsm_mutex);
 	rc = llapi_hsm_request(fsd_action_item->fsd_info.fpath, hur);
-	pthread_mutex_unlock(&llapi_hsm_mutex);
 
 	free(hur);
 
