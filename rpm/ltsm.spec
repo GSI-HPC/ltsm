@@ -75,8 +75,8 @@ rm -rf %{buildroot}
 
 %changelog
 
-* Mon Jan 25 2021 Thomas Stibor <t.stibor@gsi.de> 0.8.3-2
-- Test: Remove mutex lock on llapi_hsm_request
+* Tue Jan 26 2021 Thomas Stibor <t.stibor@gsi.de> 0.8.3-2
+- Improvement: Remove useless mutex lock on llapi_hsm_request
 
 * Thu Jan 14 2021 Thomas Stibor <t.stibor@gsi.de> 0.8.3-1
 - Fix: llapi_hsm_action_progress: Cannot allocate memory (12)
