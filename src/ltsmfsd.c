@@ -1139,7 +1139,7 @@ static int copy_action(struct fsd_action_item_t *fsd_action_item)
 
 	fd_write = open(fsd_action_item->fsd_info.fpath,
 			O_WRONLY | O_CREAT | O_EXCL,
-			S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP);
+			S_IRUSR | S_IWUSR | S_IRGRP);
 	if (fd_write < 0) {
 		/* Note, if file exists, then fd_write < 0 and errno EEXISTS is
 		   set. This makes sure we do NOT overwrite existing files. To
