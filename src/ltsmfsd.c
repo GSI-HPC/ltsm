@@ -13,7 +13,7 @@
  */
 
 /*
- * Copyright (c) 2019-2020 GSI Helmholtz Centre for Heavy Ion Research
+ * Copyright (c) 2019-2021 GSI Helmholtz Centre for Heavy Ion Research
  */
 
 #ifndef _GNU_SOURCE
@@ -648,6 +648,30 @@ static struct fsd_action_item_t* create_fsd_item(const size_t bytes_recv_total,
 	return fsd_action_item;
 }
 
+static int init_fsd_dev_null(char **fpath_local, int *fd_local,
+			     const struct fsd_session_t *fsd_session)
+{
+	int rc = 0;
+
+	/* strlen("/dev/null") + '\0' = 9 + 1. */
+	*fpath_local = calloc(10, sizeof(char));
+	if (!*fpath_local) {
+		rc = -errno;
+		CT_ERROR(rc, "calloc");
+		return rc;
+	}
+	snprintf(*fpath_local, 10, "%s", "/dev/null");
+
+	*fd_local = open(*fpath_local, O_WRONLY);
+	CT_DEBUG("[fd=%d] open '%s'", *fd_local, *fpath_local);
+	if (*fd_local < 0) {
+		rc = -errno;
+		CT_ERROR(rc, "open '%s'", *fpath_local);
+	}
+
+	return rc;
+}
+
 static int init_fsd_local(char **fpath_local, int *fd_local,
 			  const struct fsd_session_t *fsd_session)
 {
@@ -707,6 +731,15 @@ static int init_fsd_local(char **fpath_local, int *fd_local,
 	}
 
 	return rc;
+}
+
+static int init_fsd_storage(char **fpath_local, int *fd_local,
+			    const struct fsd_session_t *fsd_session)
+{
+	if (fsd_session->fsd_packet.fsd_info.fsd_storage_dest == FSD_STORAGE_NULL)
+		return init_fsd_dev_null(fpath_local, fd_local, fsd_session);
+	else
+		return init_fsd_local(fpath_local, fd_local, fsd_session);
 }
 
 static int fsd_recv_data(int *fd_local,
@@ -874,9 +907,9 @@ static void *thread_sock_client(void *arg)
 		if (fsd_session.fsd_packet.state & FSD_DISCONNECT)
 			goto out;
 
-		rc = init_fsd_local(&fpath_local, &fd_local, &fsd_session);
+		rc = init_fsd_storage(&fpath_local, &fd_local, &fsd_session);
 		if (rc) {
-			CT_ERROR(rc, "init_fsd_local");
+			CT_ERROR(rc, "init_fsd_storage");
 			goto out;
 		}
 
@@ -913,6 +946,12 @@ static void *thread_sock_client(void *arg)
 			fsd_info.fpath,
 			bytes_recv_total, time_now() - ts);
 
+		/* Storage destination is FSD_STORAGE_NULL, thus there
+		   is no need to set extended attribute and leverage queue
+		   for processing a fsd_action_item. */
+		if (!strncmp(fpath_local, "/dev/null", 9))
+			goto finish_dev_null;
+
 		rc = xattr_set_fsd(fpath_local,
 				   STATE_FSD_COPY_DONE,
 				   archive_id,
@@ -936,6 +975,7 @@ static void *thread_sock_client(void *arg)
 			goto out;
 		}
 
+	finish_dev_null:
 		rc = close(fd_local);
 		CT_DEBUG("[rc=%d,fd=%d] close", rc, fd_local);
 		if (rc < 0) {
