@@ -854,6 +854,21 @@ static void *thread_sock_client(void *arg)
 		goto out;
 	}
 
+	/* Set the effective uid/group ID of the calling process.
+	   This ensures, process can access only data granted for uid/gid.
+	   In addition, this makes subsequent chown() calls obsolete. However,
+	   make sure, {user,group,other}_request_mask on MDT is set to archive. */
+	rc = setuid(uid);
+	if (rc) {
+		CT_ERROR(rc, "setuid failed");
+		goto out;
+	}
+	rc = setgid(gid);
+	if (rc) {
+		CT_ERROR(rc, "setgid failed");
+		goto out;
+	}
+
 	do {
 		/* State 2: Client calls fsd_fopen(...) or fsd_disconnect(...).
 		   Receive fsd_packet with fsd_info_t. */
@@ -1125,13 +1140,6 @@ static int copy_action(struct fsd_action_item_t *fsd_action_item)
 				}
 				goto next; /* Directory exists, skip it. */
                         }
-			rc = chown(fpath_sub, fsd_action_item->uid, fsd_action_item->gid);
-			if (rc < 0) {
-				rc = -errno;
-				CT_ERROR(rc, "chown '%s', uid %zu, gid %zu",
-					 fpath_sub, fsd_action_item->uid, fsd_action_item->gid);
-				goto out;
-			}
 		}
 	next:
 		i++;
@@ -1209,18 +1217,6 @@ static int copy_action(struct fsd_action_item_t *fsd_action_item)
 		fd_read, fsd_action_item->fpath_local,
 		fd_write, fsd_action_item->fsd_info.fpath,
 		bytes_read_total, time_now() - ts);
-
-	/* Change owner and group. */
-	rc = fchown(fd_write, fsd_action_item->uid, fsd_action_item->gid);
-	CT_DEBUG("[rc=%d,fd=%d] fchown '%s', uid %zu gid %zu", rc, fd_write,
-		 fsd_action_item->fsd_info.fpath,
-		 fsd_action_item->uid, fsd_action_item->gid);
-	if (rc) {
-		rc = -errno;
-		CT_ERROR(rc, "fchown '%s', uid %zu, gid %zu",
-			 fsd_action_item->fsd_info.fpath,
-			 fsd_action_item->uid, fsd_action_item->gid);
-	}
 
 out:
 	if (fd_read != -1)
