@@ -1,14 +1,13 @@
 #!/bin/bash
 # Title       : ltsmsync.sh
-# Date        : Sat 15 Feb 2020 12:12:22 PM CET
-# Version     : 0.1.0
+# Date        : Mon 19 Apr 2021 09:29:43 AM CEST
+# Version     : 0.1.1
 # Author      : "Thomas Stibor" <t.stibor@gsi.de>
 # Description : Query TSM server by means of ltsmc and create from the query result empty files
-#               with appropriate Lustre HSM flags. Subsequent files access, transparently
+#               with appropriate Lustre HSM flags. Subsequent files access, seamlessly
 #               retrieve the raw data of the files by means of the Lustre copytool or ltsmc.
-#               At current this script also retrieve the raw data by reading with command 'head'
-#               this first byte and thus triggers the copytool retrieve process. The retrieving
-#               process is parallized by JOBS=4 concurrent retrieving processes.
+#               The copytool retrieve is triggered by means of command 'head' and
+#               parallized by JOBS=4 concurrent retrieving processes.
 # Note        : Lustre copytool must be running when argument {OMIT_COPYTOOL} equals 'no'.
 
 # Path to 3rd party executables.
@@ -42,6 +41,10 @@ __usage() {
 	 "\t-x, --omit-copytool <yes,no> [default: ${OMIT_COPYTOOL}]\n" \
 	 "\t-d, --dry-run\n"
     exit 1
+}
+
+__log() {
+    echo "[$(date "+%F %T")] $@"
 }
 
 __check_bin() {
@@ -89,7 +92,7 @@ __retrieve_file() {
 			 "${f}"
 	    rc=$?
 	    if [[ ${rc} -ne 0 ]]; then
-		echo "retrieving file ${f} from TSM server failed"
+		__log "retrieving file ${f} from TSM server failed"
 		return ${rc}
 	    fi
 	    sudo ${LFS_BIN} hsm_set --exists --archived --archive-id ${i} ${f} || exit 1
@@ -102,7 +105,7 @@ __retrieve_file() {
 	    rc=0
 	fi
     else
-	echo "file ${f} already exists"
+	__log "file ${f} already exists"
     fi
 
     if [[ ${rc} -ne 0 ]]; then
@@ -115,11 +118,11 @@ __retrieve_file() {
 	RC_ARCHIVE_EXISTS=$?
 
 	if [[ ${RC_RELEASE_EXISTS} -ne 0 && ${RC_ARCHIVE_EXISTS} -ne 0 ]]; then
-	    echo "file ${f} already exists, however with incorrect Lustre HSM flags"
+	    __log "file ${f} already exists, however with incorrect Lustre HSM flags"
 	    rc=1
 	fi
     else
-	echo "successfully retrieved file ${f}"
+	__log "successfully retrieved file ${f}"
 	rc=0
     fi
 
@@ -219,7 +222,7 @@ FILE_LIST=`${LTSMC_BIN} -f ${FSPACE} --query --latest \
 	     --password ${PASSWORD} "${LUSTRE_DIR}" -v message --datelow "${DATE_TIME_DAYS_AGO}" \
 	     | awk '{gsub(/^fs:/, "", $6); gsub(/^hl:/, "", $7); gsub(/^ll:/, "", $8); gsub(/^crc32:/, "@", $9); print $6 $7 $8 $9}'`
 
-[[ -z ${FILE_LIST} ]] && { echo "no files found on TSM server"; exit 1; }
+[[ -z ${FILE_LIST} ]] && { __log "no files found on TSM server"; exit 1; }
 
 for f in ${FILE_LIST}
 do
@@ -229,7 +232,7 @@ do
     # File does not exist, retrieve it.
     if [[ ! -f ${FILE_AND_CRC[0]} ]]; then
 	if [[ ${DRY_RUN} -eq 1 ]]; then
-	    echo "__retrieve_file '${FILE_AND_CRC[0]}' '${ARCHIVE_ID}'"
+	    __log "__retrieve_file '${FILE_AND_CRC[0]}' '${ARCHIVE_ID}'"
 	else
 	    ( __retrieve_file "${FILE_AND_CRC[0]}" "${ARCHIVE_ID}" ) &
 	fi
@@ -238,25 +241,25 @@ do
 	if [[ ${CRC32_VERIFY} -eq 1 ]]; then
 	    file_crc32="`${LTSMC_BIN} --checksum ${FILE_AND_CRC[0]} | awk '{print $2}'`"
 	    if [[ "${file_crc32}"  != "${FILE_AND_CRC[1]}" ]]; then
-		echo "crc32 mismatch of file ${FILE_AND_CRC[0]} (${FILE_AND_CRC[1]},${file_crc32})"
+		__log "crc32 mismatch of file ${FILE_AND_CRC[0]} (${FILE_AND_CRC[1]},${file_crc32})"
 		if [[ ${DRY_RUN} -eq 1 ]]; then
-		    echo "__retrieve_file crc32-verified '${FILE_AND_CRC[0]}' '${ARCHIVE_ID}'"
+		    __log "__retrieve_file crc32-verified '${FILE_AND_CRC[0]}' '${ARCHIVE_ID}'"
 		else
 		    ( __retrieve_file "${FILE_AND_CRC[0]}" "${ARCHIVE_ID}" ) &
 		fi
 	    else
-		echo "file already exists ${FILE_AND_CRC[0]} and has valid crc32 (${FILE_AND_CRC[1]},${file_crc32})"
+		__log "file already exists ${FILE_AND_CRC[0]} and has valid crc32 (${FILE_AND_CRC[1]},${file_crc32})"
 	    fi
 	else # Do not check crc32, but only whether file size is > 0.
 	    file_size=$(wc -c ${FILE_AND_CRC[0]} | awk '{print $1}')
 	    if [[ ${file_size} -eq 0 ]]; then
 		if [[ ${DRY_RUN} -eq 1 ]]; then
-		    echo "__retrieve_file size-verified '${FILE_AND_CRC[0]}' '${ARCHIVE_ID}'"
+		    __log "__retrieve_file size-verified '${FILE_AND_CRC[0]}' '${ARCHIVE_ID}'"
 		else
 		    ( __retrieve_file "${FILE_AND_CRC[0]}" "${ARCHIVE_ID}" ) &
 		fi
 	    else
-		echo "file already exists ${FILE_AND_CRC[0]} and has file size '${file_size}'"
+		__log "file already exists ${FILE_AND_CRC[0]} and has file size '${file_size}'"
 	    fi
 	fi
     fi
