@@ -76,7 +76,7 @@ Syntax in conf \fIFILE\fR is \fIoption\fR \fIvalue\fR where separators are white
 Lower bound of date and time in format YYYY:MM:DD:hh:mm:ss to limit the query result. Uppercase letters specify the date
 and lowercase letters the time. The lower bound is initialized as 0000:01:01:00:00:00 and thus the parser excepts
 substrings of the form: YYYY, YYYY:MM, YYYY:MM:DD, YYYY:MM:DD:hh or YYYY:MM:DD:hh:mm. Example: Lower bound 2018:10 and upper bound 2018:10 will limit the query result from 2018:10:01:00:00:00 to 2018:10:31:23:59:59. Lower bound 2018:05:01:22:00:00 and
-upper bound 2018:05:01:23:00:00 will limit query result at the same date from time 22:00:00 to 23:00:00.
+upper bound 2018:05:01:23:00:00 will limit query result at the same date from time 22:00:00 to 23:00:00. To limit the lower bound for example to the last five days, the date command and following \fISTRING\fR $(date --date="5 days ago" +"%Y:%m:%d:%H:%M:%S") can be employed.
 .TP
 .BR \-z ", " \-\-datehigh =\fISTRING\fR
 Upper bound of date and time in format YYYY:MM:DD:hh:mm:ss to limit the query result. The upper bound is initialized as 65535:12:31:23:59:59. The value 65535 is defined as DATE_PLUS_INFINITE in IBM's TSM SDK.
@@ -115,7 +115,7 @@ It should contain at least the required options SERVERNAME, NODENAME and TCPSERV
 Please report bugs to <http://github.com/tstibor/ltsm/issues>
 
 .SH COPYRIGHT
-Copyright \(co 2017 GSI Helmholtz Centre for Heavy Ion Research
+Copyright \(co 2021 GSI Helmholtz Centre for Heavy Ion Research
 .br
 License GPLv2: GNU GPL version 2 <https://www.gnu.org/licenses/>.
 .br
@@ -123,4 +123,5 @@ This is free software: you are free to change and redistribute it.
 There is NO WARRANTY, to the extent permitted by law.
 
 .SH SEE ALSO
-Github project at <http://github.com/tstibor/ltsm>
+.BR date (1),
+and Github project at <http://github.com/tstibor/ltsm>
