@@ -24,20 +24,20 @@
 
 #include <getopt.h>
 #include <pthread.h>
-#include "fsdapi.h"
+#include "fsqapi.h"
 #include "common.h"
 #include "test_utils.h"
 #include "measurement.h"
 
-MSRT_DECLARE(fsd_fwrite);
+MSRT_DECLARE(fsq_fwrite);
 
 #define BUF_SIZE		0x100000 /* 1MiB */
 #define LEN_FILENAME_RND	32
-#define DEFAULT_FPATH_NAME	"/lustre/fsdbench/"
+#define DEFAULT_FPATH_NAME	"/lustre/fsqbench/"
 #define DEFAULT_FSSPACE_NAME    "/lustre"
 
 static char			**fpaths       = NULL;
-static struct fsd_session_t	 *fsd_sessions = NULL;
+static struct fsq_session_t	 *fsq_sessions = NULL;
 static pthread_t		 *threads      = NULL;
 static pthread_mutex_t		  mutex;
 static uint32_t			  next_idx     = 0;
@@ -214,13 +214,13 @@ static int parseopts(int argc, char *argv[])
 
 static void *perform_task(void *thread_data)
 {
-	struct fsd_session_t *session;
+	struct fsq_session_t *session;
 	char fpath[PATH_MAX + 1] = {0};
 	uint8_t *buf = NULL;
 	int rc = 0;
 	uint32_t crc32sum_buf = 0;
 
-	session = (struct fsd_session_t *)thread_data;
+	session = (struct fsq_session_t *)thread_data;
 
 	buf = malloc(sizeof(uint8_t) * opt.o_filesize);
 	if (!buf) {
@@ -242,12 +242,12 @@ static void *perform_task(void *thread_data)
 		size_t pos = rand() % opt.o_filesize;
 		memcpy(buf, buf + pos, opt.o_filesize - pos);
 
-		rc = fsd_fopen(opt.o_fsname, fpath, NULL, session);
-		CT_DEBUG("[rc=%d] fsd_fopen '%s' '%s' %p",
+		rc = fsq_fopen(opt.o_fsname, fpath, NULL, session);
+		CT_DEBUG("[rc=%d] fsq_fopen '%s' '%s' %p",
 			 rc, opt.o_fsname, fpath, session);
 		if (rc)
 			goto cleanup;
-		CT_INFO("[rc=%d] fsd_fopen '%s' '%s' %p",
+		CT_INFO("[rc=%d] fsq_fopen '%s' '%s' %p",
 			rc, opt.o_fsname, fpath, session);
 
 		ssize_t twritten = 0; /* Total written. */
@@ -258,12 +258,12 @@ static void *perform_task(void *thread_data)
 		while (twritten < (ssize_t)opt.o_filesize) {
 			if (opt.o_filesize - twritten < buf_size)
 				buf_size = opt.o_filesize - twritten;
-			cwritten = fsd_fwrite(buf, buf_size, 1, session);
+			cwritten = fsq_fwrite(buf, buf_size, 1, session);
 			if (cwritten < 0)
 				goto cleanup;
 
 			twritten += cwritten;
-			CT_DEBUG("fsd_fwrite %lu %lu %lu",
+			CT_DEBUG("fsq_fwrite %lu %lu %lu",
 				 buf_size, cwritten, twritten);
 			if (opt.o_wdelay) {
 				CT_DEBUG("sleep %u", opt.o_wdelay);
@@ -276,12 +276,12 @@ static void *perform_task(void *thread_data)
 			goto cleanup;
 		}
 
-		rc = fsd_fclose(session);
-		CT_DEBUG("[rc=%d] fsd_fclose '%s' '%s' crc32 0x%08x %p",
+		rc = fsq_fclose(session);
+		CT_DEBUG("[rc=%d] fsq_fclose '%s' '%s' crc32 0x%08x %p",
 			 rc, opt.o_fsname, fpath, crc32sum_buf, session);
 		if (rc)
 			goto cleanup;
-		CT_INFO("[rc=%d] fsd_fclose '%s' '%s' crc32 0x%08x %p",
+		CT_INFO("[rc=%d] fsq_fclose '%s' '%s' crc32 0x%08x %p",
 			rc, opt.o_fsname, fpath, crc32sum_buf, session);
 		crc32sum_buf = 0;
 	}
@@ -364,13 +364,13 @@ static int run_threads(void)
 	pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
 
 	for (uint16_t n = 0; n < opt.o_nthreads; n++) {
-		rc = pthread_create(&threads[n], &attr, perform_task, &fsd_sessions[n]);
+		rc = pthread_create(&threads[n], &attr, perform_task, &fsq_sessions[n]);
 
 		if (rc)
 			CT_WARN("[rc=%d] pthread_create failed thread '%d'", rc, n);
 		else {
 			snprintf(thread_name, sizeof(thread_name),
-				 "fsdbench/%d", n);
+				 "fsqbench/%d", n);
 			pthread_setname_np(threads[n], thread_name);
 			CT_INFO("created thread '%s'", thread_name);
 		}
@@ -422,51 +422,51 @@ int main(int argc, char *argv[])
 		opt.o_nthreads = opt.o_nfiles;
 	}
 
-	fsd_sessions = calloc(opt.o_nthreads, sizeof(struct fsd_session_t));
-	if (!fsd_sessions) {
+	fsq_sessions = calloc(opt.o_nthreads, sizeof(struct fsq_session_t));
+	if (!fsq_sessions) {
 		rc = -ENOMEM;
 		CT_ERROR(rc, "calloc");
 		goto cleanup;
 	}
 
-	struct fsd_login_t fsd_login;
+	struct fsq_login_t fsq_login;
 
-	memset(&fsd_login, 0, sizeof(fsd_login));
-	strncpy(fsd_login.node, opt.o_node, DSM_MAX_NODE_LENGTH + 1);
-	strncpy(fsd_login.password, opt.o_password, DSM_MAX_VERIFIER_LENGTH + 1);
-	strncpy(fsd_login.hostname, opt.o_servername, HOST_NAME_MAX + 1);
-	fsd_login.port = 7625;
+	memset(&fsq_login, 0, sizeof(fsq_login));
+	strncpy(fsq_login.node, opt.o_node, DSM_MAX_NODE_LENGTH + 1);
+	strncpy(fsq_login.password, opt.o_password, DSM_MAX_VERIFIER_LENGTH + 1);
+	strncpy(fsq_login.hostname, opt.o_servername, HOST_NAME_MAX + 1);
+	fsq_login.port = 7625;
 
 	/* Each thread connects to a session. */
 	for (int n = 0; n < opt.o_nthreads; n++) {
-		rc = fsd_fconnect(&fsd_login, &fsd_sessions[n]);
+		rc = fsq_fconnect(&fsq_login, &fsq_sessions[n]);
 		if (rc)
 			goto cleanup;
 	}
 
 	pthread_mutex_init(&mutex, NULL);
 
-	MSRT_START(fsd_fwrite);
-	MSRT_DATA(fsd_fwrite,
+	MSRT_START(fsq_fwrite);
+	MSRT_DATA(fsq_fwrite,
 		  (uint64_t)opt.o_nfiles * (uint64_t)opt.o_filesize);
 
-	/* Perform fsd_fopen(...), fsd_fwrite(...) and fsd_fclose(...). */
+	/* Perform fsq_fopen(...), fsq_fwrite(...) and fsq_fclose(...). */
 	rc = run_threads();
 	CT_DEBUG("[rc=%d] run_threads", rc);
 	if (rc)
 		goto cleanup;
 
-	MSRT_STOP(fsd_fwrite);
-	MSRT_DISPLAY_RESULT(fsd_fwrite);
+	MSRT_STOP(fsq_fwrite);
+	MSRT_DISPLAY_RESULT(fsq_fwrite);
 
 cleanup:
 	pthread_mutex_destroy(&mutex);
 
-	if (fsd_sessions) {
+	if (fsq_sessions) {
 		for (int n = 0; n < opt.o_nthreads; n++)
-			fsd_fdisconnect(&fsd_sessions[n]);
-		free(fsd_sessions);
-		fsd_sessions = NULL;
+			fsq_fdisconnect(&fsq_sessions[n]);
+		free(fsq_sessions);
+		fsq_sessions = NULL;
 	}
 
 	return rc;

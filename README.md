@@ -1,4 +1,4 @@
-LTSM - Lightweight TSM API, Lustre TSM Copytool for Archiving Data, TSM Console Client and Lustre TSM File System Daemon.
+LTSM - Lightweight TSM API, Lustre TSM Copytool for Archiving Data, TSM Console Client and Lustre TSM File Storage Queue API and Daemon.
 ==============
 
 [![Tag Version](https://img.shields.io/github/tag/tstibor/ltsm.svg)](https://github.com/tstibor/ltsm/tags)
@@ -9,7 +9,7 @@ This project consists of *five* parts:
 2. Lustre TSM Copytool.
 3. TSM console client.
 4. Benchmark and test suite.
-5. Lustre TSM file system daemon.
+5. Lustre TSM storage API/library and daemon.
 
 # Introduction into Lustre HSM
 Lustre has since version 2.5 hierarchical storage management (HSM) capabilities, that is, data can be automatically
@@ -122,12 +122,12 @@ configure: WARNING: cannot find Lustre API headers and/or Lustre API library
 ...
 configured ltsm:
 
-build fsdapi library           : yes
+build fsqapi library           : yes
 build tsmapi library and ltsmc : yes
-build ltsmfsd and lhsmtool_tsm : no
+build ltsmfsq and lhsmtool_tsm : no
 build test suite               : yes
 ```
-and the console client *ltsmc* as well as the *fsdlib* are built only. For building also the Lustre Copytool thus make sure the Lustre header files
+and the console client *ltsmc* as well as the *fsqlib* are built only. For building also the Lustre Copytool thus make sure the Lustre header files
 and the Lustre library `liblustreapi.so` are available and the paths are correctly specified e.g.
 ```
 ./autogen.sh && ./configure CFLAGS='-g -DDEBUG -O0' --with-lustre-src=/usr/local/include/lustre LDFLAGS='-L/usr/local/lib' --with-tsm-headers=/opt/tivoli/tsm/client/api/bin64/sample --enable-tests
@@ -136,10 +136,10 @@ and the Lustre library `liblustreapi.so` are available and the paths are correct
 If *required* TSM and *optional* Lustre header files and libraries are found the following executable files are provided:
   * `src/lhsmtool_tsm` (Lustre TSM Copytool)
   * `src/ltsmc` (Console client)
-  * `src/ltsmfsd` (Lustre TSM File System Daemon)
+  * `src/ltsmfsq` (Lustre TSM File System Daemon)
   * `src/test/test_cds` (Test suite for data structures (linked-list, queue, hashtable, etc.))
   * `src/test/test_tsmapi` (Test suite for *tsmapi*)
-  * `src/test/test_fsdapi` (Test suite for *fsdapi*)
+  * `src/test/test_fsqapi` (Test suite for *fsqapi*)
   * `src/test/ltsmbench` (Benchmark suite for measuring threaded archive/retrieve performance)
 
 ### Install or Build DEB/RPM Package
@@ -340,8 +340,8 @@ lustre stripe count                        : 1
 
 ```
 
-# Lustre TSM File System Daemon
-The goal of the Lustre TSM File System Daemon (short ltsmfsd) is to
+# Lustre TSM File Storage Queue Daemon
+The goal of the Lustre TSM File System Daemon (short ltsmfsq) is to
 efficiently and robustly transfer data to a Lustre file system and
 additionally archive the data seamlessly on a TSM server.
 A deployed Lustre file system is frequently shared and accessed by thousands of users and
@@ -351,38 +351,38 @@ the daemon implements a straightforward socket communication protocol and employ
 *multiple producer-consumer* model to leverage asynchronous data transfer by using an intermediate
 local file system. The daemon can be started as follows:
 ```
->ltsmfsd -l /fsddata -i identmap.conf -s 16 -q 12 -v info /lustre
-[I] 1579167563.378896 [174822] ltsmfsd.c:137 node: 'polaris', servername: 'tsmserver-8', archive_id: 15, uid: 1000, gid: 2000
-[M] 1579167563.382178 [174822] ltsmfsd.c:1618 listening on port 7625 with 16 socket threads, 12 queue worker threads, local fs '/fsddata' and number of tolerated file errors 16
-[M] 1579167563.382268 [174822] ltsmfsd.c:1539 created queue consumer thread fsd_queue/0
-[M] 1579167563.382309 [174822] ltsmfsd.c:1539 created queue consumer thread fsd_queue/1
-[M] 1579167563.382353 [174822] ltsmfsd.c:1539 created queue consumer thread fsd_queue/2
-[M] 1579167563.382387 [174822] ltsmfsd.c:1539 created queue consumer thread fsd_queue/3
-[M] 1579167563.382418 [174822] ltsmfsd.c:1539 created queue consumer thread fsd_queue/4
-[M] 1579167563.382448 [174822] ltsmfsd.c:1539 created queue consumer thread fsd_queue/5
-[M] 1579167563.382480 [174822] ltsmfsd.c:1539 created queue consumer thread fsd_queue/6
-[M] 1579167563.382511 [174822] ltsmfsd.c:1539 created queue consumer thread fsd_queue/7
-[M] 1579167563.382544 [174822] ltsmfsd.c:1539 created queue consumer thread fsd_queue/8
-[M] 1579167563.382575 [174822] ltsmfsd.c:1539 created queue consumer thread fsd_queue/9
-[M] 1579167563.382606 [174822] ltsmfsd.c:1539 created queue consumer thread fsd_queue/10
-[M] 1579167563.382641 [174822] ltsmfsd.c:1539 created queue consumer thread fsd_queue/11
+>ltsmfsq -l /fsqdata -i identmap.conf -s 16 -q 12 -v info /lustre
+[I] 1579167563.378896 [174822] ltsmfsq.c:137 node: 'polaris', servername: 'tsmserver-8', archive_id: 15, uid: 1000, gid: 2000
+[M] 1579167563.382178 [174822] ltsmfsq.c:1618 listening on port 7625 with 16 socket threads, 12 queue worker threads, local fs '/fsqdata' and number of tolerated file errors 16
+[M] 1579167563.382268 [174822] ltsmfsq.c:1539 created queue consumer thread fsq_queue/0
+[M] 1579167563.382309 [174822] ltsmfsq.c:1539 created queue consumer thread fsq_queue/1
+[M] 1579167563.382353 [174822] ltsmfsq.c:1539 created queue consumer thread fsq_queue/2
+[M] 1579167563.382387 [174822] ltsmfsq.c:1539 created queue consumer thread fsq_queue/3
+[M] 1579167563.382418 [174822] ltsmfsq.c:1539 created queue consumer thread fsq_queue/4
+[M] 1579167563.382448 [174822] ltsmfsq.c:1539 created queue consumer thread fsq_queue/5
+[M] 1579167563.382480 [174822] ltsmfsq.c:1539 created queue consumer thread fsq_queue/6
+[M] 1579167563.382511 [174822] ltsmfsq.c:1539 created queue consumer thread fsq_queue/7
+[M] 1579167563.382544 [174822] ltsmfsq.c:1539 created queue consumer thread fsq_queue/8
+[M] 1579167563.382575 [174822] ltsmfsq.c:1539 created queue consumer thread fsq_queue/9
+[M] 1579167563.382606 [174822] ltsmfsq.c:1539 created queue consumer thread fsq_queue/10
+[M] 1579167563.382641 [174822] ltsmfsq.c:1539 created queue consumer thread fsq_queue/11
 ```
 
-For interfacing the daemon from a client, use the function calls provided in: [fsdapi.h](http://github.com/tstibor/ltsm/blob/master/src/lib/fsdapi.h)
+For interfacing the daemon from a client, use the function calls provided in: [fsqapi.h](http://github.com/tstibor/ltsm/blob/master/src/lib/fsqapi.h)
 ```
-void fsd_init(struct fsd_login_t *fsd_login, const char *servername,
+void fsq_init(struct fsq_login_t *fsq_login, const char *servername,
               const char *node, const char *password,
               const char *owner, const char *platform,
               const char *fsname, const char *fstype,
               const char *hostname, const int port);
-int fsd_fconnect(struct fsd_login_t *fsd_login,
-                 struct fsd_session_t *fsd_session);
-void fsd_fdisconnect(struct fsd_session_t *fsd_session);
-int fsd_fopen(const char *fs, const char *fpath, const char *desc,
-              struct fsd_session_t *fsd_session);
-ssize_t fsd_fwrite(const void *ptr, size_t size, size_t nmemb,
-                   struct fsd_session_t *fsd_session);
-int fsd_fclose(struct fsd_session_t *fsd_session);
+int fsq_fconnect(struct fsq_login_t *fsq_login,
+                 struct fsq_session_t *fsq_session);
+void fsq_fdisconnect(struct fsq_session_t *fsq_session);
+int fsq_fopen(const char *fs, const char *fpath, const char *desc,
+              struct fsq_session_t *fsq_session);
+ssize_t fsq_fwrite(const void *ptr, size_t size, size_t nmemb,
+                   struct fsq_session_t *fsq_session);
+int fsq_fclose(struct fsq_session_t *fsq_session);
 ```
 
 # Tips for Tuning
@@ -442,7 +442,7 @@ transfer as depicted below.
 ![Archive performace](https://raw.githubusercontent.com/tstibor/ltsm.github.io/master/doc/images/scaling.png)
 
 ## More Information
-In the manual pages [lhsmtool_tsm.1](http://github.com/tstibor/ltsm/blob/master/man/lhsmtool_tsm.1), [ltsmc.1](http://github.com/tstibor/ltsm/blob/master/man/ltsmc.1) and [ltsmfsd.1](http://github.com/tstibor/ltsm/blob/master/man/ltsmfsd.1) usage details and options of *lhsmtool_tsm*, *ltsmc* and *ltsmfsd*
+In the manual pages [lhsmtool_tsm.1](http://github.com/tstibor/ltsm/blob/master/man/lhsmtool_tsm.1), [ltsmc.1](http://github.com/tstibor/ltsm/blob/master/man/ltsmc.1) and [ltsmfsq.1](http://github.com/tstibor/ltsm/blob/master/man/ltsmfsq.1) usage details and options of *lhsmtool_tsm*, *ltsmc* and *ltsmfsq*
 are provided. In addition, a [screencast](https://github.com/tstibor/ltsm.github.io/raw/master/screencast/ltsm-screencast-2.mp4) of an older version of this project is provided.
 
 ## References

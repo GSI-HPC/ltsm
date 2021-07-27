@@ -1,11 +1,11 @@
-libfsdapi_a_CFLAGS = -m64 -DLINUX_CLIENT -D_FILE_OFFSET_BITS=64 -D_LARGEFILE64_SOURCE -I$(top_srcdir)/src/lib
-libfsdapi_a_SOURCES = fsdapi.c common.c log.c
+libfsqapi_a_CFLAGS = -m64 -DLINUX_CLIENT -D_FILE_OFFSET_BITS=64 -D_LARGEFILE64_SOURCE -I$(top_srcdir)/src/lib
+libfsqapi_a_SOURCES = fsqapi.c common.c log.c
 
 libtsmapi_a_SOURCES = xattr.c
 libtsmapi_a_CFLAGS = -m64 -DLINUX_CLIENT -D_FILE_OFFSET_BITS=64 -D_LARGEFILE64_SOURCE -I$(top_srcdir)/src/lib
 
-noinst_LIBRARIES = libfsdapi.a libtsmapi.a
-noinst_HEADERS = tsmapi.h fsdapi.h xattr.h common.h log.h list.h queue.h chashtable.h qtable.h measurement.h
+noinst_LIBRARIES = libfsqapi.a libtsmapi.a
+noinst_HEADERS = tsmapi.h fsqapi.h xattr.h common.h log.h list.h queue.h chashtable.h qtable.h measurement.h
 
 if HAVE_TSM
     libtsmapi_a_CFLAGS += -I@TSM_SRC_DIR@/

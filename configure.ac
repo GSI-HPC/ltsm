@@ -79,7 +79,7 @@ AS_IF([test "x$tsmheader" = "xyes"],
 	],
 	[
 	AM_CONDITIONAL([HAVE_TSM], [false])
-	AC_MSG_WARN([cannot find TSM API headers and/or TSM API library, only FSD client API will be build])
+	AC_MSG_WARN([cannot find TSM API headers and/or TSM API library, only FSQ library will be build])
 	]
 )
 
@@ -101,7 +101,7 @@ AC_CHECK_LIB([m],[ceil])
 # Check for required zlib library.
 AC_CHECK_LIB([z], [crc32], [], [AC_MSG_ERROR([cannot find library zlib, install zlib package or provide library path e.g. ./configure LDFLAGS='-L/<PATH_TO_LIB>'])])
 
-# Check for required xattr library, otherwise we cannot get Lustre stripe information and FSD library.
+# Check for required xattr library, otherwise we cannot get Lustre stripe information and FSQ library.
 AC_CHECK_LIB([attr], [fgetxattr], [], [AC_MSG_ERROR([cannot find library libattr, install libattr package or provide library path e.g. ./configure LDFLAGS='-L/<PATH_TO_LIB>'])])
 
 # Checks for header files.
@@ -183,8 +183,8 @@ AC_OUTPUT
 echo
 echo "configured ltsm:"
 echo
-echo "build fsdapi library           : yes"
+echo "build fsqapi library           : yes"
 echo "build tsmapi library and ltsmc : ${tsmheader}"
-echo "build ltsmfsd and lhsmtool_tsm : ${tsmheader_and_lapiheader}"
+echo "build ltsmfsq and lhsmtool_tsm : ${tsmheader_and_lapiheader}"
 echo "build test suite               : ${enable_tests}"
 echo

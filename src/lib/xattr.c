@@ -22,13 +22,13 @@
 
 static pthread_mutex_t xattr_mutex = PTHREAD_MUTEX_INITIALIZER;
 
-int xattr_get_fsd(const char *fpath_local,
-		  uint32_t *fsd_action_state,
+int xattr_get_fsq(const char *fpath_local,
+		  uint32_t *fsq_action_state,
 		  int *archive_id,
-		  struct fsd_info_t *fsd_info)
+		  struct fsq_info_t *fsq_info)
 {
 	int rc;
-	struct fsd_info_t _fsd_info = {
+	struct fsq_info_t _fsq_info = {
 		.fs		    = {0},
 		.fpath		    = {0},
 		.desc		    = {0}
@@ -36,47 +36,47 @@ int xattr_get_fsd(const char *fpath_local,
 
 	pthread_mutex_lock(&xattr_mutex);
 
-	rc = getxattr(fpath_local, XATTR_FSD_STATE,
-		      (uint32_t *)fsd_action_state, sizeof(uint32_t));
+	rc = getxattr(fpath_local, XATTR_FSQ_STATE,
+		      (uint32_t *)fsq_action_state, sizeof(uint32_t));
 	if (rc < 0) {
 		rc = -errno;
 		goto out;
 	}
 
-	rc = getxattr(fpath_local, XATTR_FSD_ARCHIVE_ID,
+	rc = getxattr(fpath_local, XATTR_FSQ_ARCHIVE_ID,
 		      (int *)archive_id, sizeof(int));
 	if (rc < 0) {
 		rc = -errno;
 		goto out;
 	}
 
-	rc = getxattr(fpath_local, XATTR_FSD_FS,
-		      (char *)_fsd_info.fs, DSM_MAX_FSNAME_LENGTH);
+	rc = getxattr(fpath_local, XATTR_FSQ_FS,
+		      (char *)_fsq_info.fs, DSM_MAX_FSNAME_LENGTH);
 	if (rc < 0) {
 		rc = -errno;
 		goto out;
 	} else
-		strncpy(fsd_info->fs, _fsd_info.fs, sizeof(fsd_info->fs));
+		strncpy(fsq_info->fs, _fsq_info.fs, sizeof(fsq_info->fs));
 
-	rc = getxattr(fpath_local, XATTR_FSD_FPATH,
-		      (char *)_fsd_info.fpath, PATH_MAX_COMPAT);
+	rc = getxattr(fpath_local, XATTR_FSQ_FPATH,
+		      (char *)_fsq_info.fpath, PATH_MAX_COMPAT);
 	if (rc < 0) {
 		rc = -errno;
 		goto out;
 	} else
-		strncpy(fsd_info->fpath, _fsd_info.fpath, sizeof(fsd_info->fpath));
+		strncpy(fsq_info->fpath, _fsq_info.fpath, sizeof(fsq_info->fpath));
 
-	rc = getxattr(fpath_local, XATTR_FSD_DESC,
-		      (char *)_fsd_info.desc, DSM_MAX_DESCR_LENGTH);
+	rc = getxattr(fpath_local, XATTR_FSQ_DESC,
+		      (char *)_fsq_info.desc, DSM_MAX_DESCR_LENGTH);
 	if (rc < 0) {
 		rc = -errno;
 		goto out;
 	} else
-		strncpy(fsd_info->desc, _fsd_info.desc, sizeof(fsd_info->desc));
+		strncpy(fsq_info->desc, _fsq_info.desc, sizeof(fsq_info->desc));
 
-	rc = getxattr(fpath_local, XATTR_FSD_STOR_DEST,
-		      (enum fsd_storage_dest_t *)&fsd_info->fsd_storage_dest,
-		      sizeof(enum fsd_storage_dest_t));
+	rc = getxattr(fpath_local, XATTR_FSQ_STOR_DEST,
+		      (enum fsq_storage_dest_t *)&fsq_info->fsq_storage_dest,
+		      sizeof(enum fsq_storage_dest_t));
 	if (rc < 0)
 		rc = -errno;
 
@@ -86,62 +86,62 @@ out:
 	return (rc < 0 ? rc : 0);
 }
 
-int xattr_set_fsd(const char *fpath_local,
-		  const uint32_t fsd_action_state,
+int xattr_set_fsq(const char *fpath_local,
+		  const uint32_t fsq_action_state,
 		  const int archive_id,
-		  const struct fsd_info_t *fsd_info)
+		  const struct fsq_info_t *fsq_info)
 {
 	int rc;
 
 	pthread_mutex_lock(&xattr_mutex);
 
-	rc = setxattr(fpath_local, XATTR_FSD_STATE,
-		      (uint32_t *)&fsd_action_state, sizeof(uint32_t), 0);
+	rc = setxattr(fpath_local, XATTR_FSQ_STATE,
+		      (uint32_t *)&fsq_action_state, sizeof(uint32_t), 0);
 	if (rc < 0) {
 		rc = -errno;
-		CT_ERROR(rc, "setxattr '%s %s'", fpath_local, XATTR_FSD_STATE);
+		CT_ERROR(rc, "setxattr '%s %s'", fpath_local, XATTR_FSQ_STATE);
 		goto out;
 	}
 
-	rc = setxattr(fpath_local, XATTR_FSD_ARCHIVE_ID,
+	rc = setxattr(fpath_local, XATTR_FSQ_ARCHIVE_ID,
 		      (int *)&archive_id, sizeof(int), 0);
 	if (rc < 0) {
 		rc = -errno;
-		CT_ERROR(rc, "setxattr '%s %s'", fpath_local, XATTR_FSD_ARCHIVE_ID);
+		CT_ERROR(rc, "setxattr '%s %s'", fpath_local, XATTR_FSQ_ARCHIVE_ID);
 		goto out;
 	}
 
-	rc = setxattr(fpath_local, XATTR_FSD_FS,
-		      (char *)fsd_info->fs, DSM_MAX_FSNAME_LENGTH, 0);
+	rc = setxattr(fpath_local, XATTR_FSQ_FS,
+		      (char *)fsq_info->fs, DSM_MAX_FSNAME_LENGTH, 0);
 	if (rc < 0) {
 		rc = -errno;
-		CT_ERROR(rc, "setxattr '%s %s'", fpath_local, XATTR_FSD_FS);
+		CT_ERROR(rc, "setxattr '%s %s'", fpath_local, XATTR_FSQ_FS);
 		goto out;
 	}
 
-	rc = setxattr(fpath_local, XATTR_FSD_FPATH,
-		      (char *)fsd_info->fpath, PATH_MAX_COMPAT, 0);
+	rc = setxattr(fpath_local, XATTR_FSQ_FPATH,
+		      (char *)fsq_info->fpath, PATH_MAX_COMPAT, 0);
 	if (rc < 0) {
 		rc = -errno;
-		CT_ERROR(rc, "setxattr '%s %s'", fpath_local, XATTR_FSD_FPATH);
+		CT_ERROR(rc, "setxattr '%s %s'", fpath_local, XATTR_FSQ_FPATH);
 		goto out;
 	}
 
-	rc = setxattr(fpath_local, XATTR_FSD_DESC,
-		      (char *)fsd_info->desc, DSM_MAX_DESCR_LENGTH, 0);
+	rc = setxattr(fpath_local, XATTR_FSQ_DESC,
+		      (char *)fsq_info->desc, DSM_MAX_DESCR_LENGTH, 0);
 	if (rc < 0) {
 		rc = -errno;
-		CT_ERROR(rc, "setxattr '%s %s'", fpath_local, XATTR_FSD_DESC);
+		CT_ERROR(rc, "setxattr '%s %s'", fpath_local, XATTR_FSQ_DESC);
 		goto out;
 	}
 
-	rc = setxattr(fpath_local, XATTR_FSD_STOR_DEST,
-		      (enum fsd_storage_dest_t *)&fsd_info->fsd_storage_dest,
-		      sizeof(enum fsd_storage_dest_t), 0);
+	rc = setxattr(fpath_local, XATTR_FSQ_STOR_DEST,
+		      (enum fsq_storage_dest_t *)&fsq_info->fsq_storage_dest,
+		      sizeof(enum fsq_storage_dest_t), 0);
 	if (rc < 0) {
 		rc = -errno;
 		CT_ERROR(rc, "setxattr '%s %s'", fpath_local,
-			 XATTR_FSD_STOR_DEST);
+			 XATTR_FSQ_STOR_DEST);
 	}
 
 out:
@@ -150,21 +150,21 @@ out:
 	return rc;
 }
 
-int xattr_update_fsd_state(struct fsd_action_item_t *fsd_action_item,
-			   const uint32_t fsd_action_state)
+int xattr_update_fsq_state(struct fsq_action_item_t *fsq_action_item,
+			   const uint32_t fsq_action_state)
 {
 	int rc;
 
 	pthread_mutex_lock(&xattr_mutex);
-	rc = setxattr(fsd_action_item->fpath_local, XATTR_FSD_STATE,
-		      (uint32_t *)&fsd_action_state, sizeof(uint32_t), 0);
+	rc = setxattr(fsq_action_item->fpath_local, XATTR_FSQ_STATE,
+		      (uint32_t *)&fsq_action_state, sizeof(uint32_t), 0);
 	pthread_mutex_unlock(&xattr_mutex);
 	if (rc < 0) {
 		rc = -errno;
-		CT_ERROR(rc, "setxattr '%s %s'", fsd_action_item->fpath_local,
-			 XATTR_FSD_STATE);
+		CT_ERROR(rc, "setxattr '%s %s'", fsq_action_item->fpath_local,
+			 XATTR_FSQ_STATE);
 	} else
-		fsd_action_item->fsd_action_state = fsd_action_state;
+		fsq_action_item->fsq_action_state = fsq_action_state;
 
 	return rc;
 }

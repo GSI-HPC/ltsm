@@ -1,8 +1,8 @@
-.TH ltsmfsd 1 "January 2020" TSM "user utilities"
+.TH ltsmfsq 1 "July 2021" TSM "user utilities"
 .SH NAME
-ltsmfsd \- Daemon that receives data via socket communication, copies data to a Lustre file system and finally archive data on TSM server.
+ltsmfsq \- Daemon that receives data via socket communication, copies data to a Lustre file system and finally archive data on TSM server.
 .SH SYNOPSIS
-ltsmfsd [\fIOPTION\fR]... LUSTRE_MOUNT_POINT
+ltsmfsq [\fIOPTION\fR]... LUSTRE_MOUNT_POINT
 .SH DESCRIPTION
 .SS
 .BR OPTIONS:
@@ -37,7 +37,7 @@ Read conf \fIFILE\fR with options: \fIlocalfs\fR, \fIidentmap\fR, \fIport\fR, \f
 Syntax in conf \fIFILE\fR is \fIoption\fR \fIvalue\fR where separators are whitespace(s) and tabulator(s). The character # is treated as a comment and strings after character # are ignored.
 .TP
 .BR \-v ", " \-\-verbose =\fIerror\fR|\fIwarn\fR|\fImessage\fR|\fIinfo\fR|\fIdebug\fR
-Causes ltsmfsd to be more verbose in printing messages. Default is \fImessage\fR.
+Causes ltsmfsq to be more verbose in printing messages. Default is \fImessage\fR.
 .TP
 .BR \-h ", " \-\-help
 Display help and exit.
@@ -50,7 +50,7 @@ Directory where a Lustre filesystem is mounted at. This filesystem needs to have
 Please report bugs to <http://github.com/tstibor/ltsm/issues>
 
 .SH COPYRIGHT
-Copyright \(co 2020 GSI Helmholtz Centre for Heavy Ion Research
+Copyright \(co 2021 GSI Helmholtz Centre for Heavy Ion Research
 .br
 License GPLv2: GNU GPL version 2 <https://www.gnu.org/licenses/>.
 .br

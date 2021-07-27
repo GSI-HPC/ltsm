@@ -35,11 +35,11 @@
 #include <arpa/inet.h>
 #include <lustre/lustreapi.h>
 #include "tsmapi.h"
-#include "fsdapi.h"
+#include "fsqapi.h"
 #include "xattr.h"
 #include "queue.h"
 
-#define PORT_DEFAULT_FSD	7625
+#define PORT_DEFAULT_FSQ	7625
 #define N_THREADS_SOCK_DEFAULT	4
 #define N_THREADS_SOCK_MAX	64
 #define N_THREADS_QUEUE_DEFAULT	4
@@ -71,7 +71,7 @@ struct options {
 static struct options opt   = {
 	.o_local_mount	    = {0},
 	.o_file_ident	    = {0},
-	.o_port		    = PORT_DEFAULT_FSD,
+	.o_port		    = PORT_DEFAULT_FSQ,
 	.o_nthreads_sock    = N_THREADS_SOCK_DEFAULT,
 	.o_nthreads_queue   = N_THREADS_QUEUE_DEFAULT,
 	.o_ntol_file_errors = N_TOL_FILE_ERRORS,
@@ -119,7 +119,7 @@ static void usage(const char *cmd_name, const int rc)
 		"\t\t""show this help\n"
 		"version: %s © 2020 by GSI Helmholtz Centre for Heavy Ion Research\n",
 		cmd_name,
-		PORT_DEFAULT_FSD,
+		PORT_DEFAULT_FSQ,
 		N_THREADS_SOCK_DEFAULT,
 		N_THREADS_QUEUE_DEFAULT,
 		N_TOL_FILE_ERRORS,
@@ -532,7 +532,7 @@ static int parseopts(int argc, char *argv[])
 	return rc;
 }
 
-static int identmap_entry(struct fsd_login_t *fsd_login,
+static int identmap_entry(struct fsq_login_t *fsq_login,
 			  char *servername,
 			  int *archive_id,
 			  uid_t *uid, gid_t *gid)
@@ -546,7 +546,7 @@ static int identmap_entry(struct fsd_login_t *fsd_login,
 
 	while (node) {
 		ident_map = (struct ident_map_t *)list_data(node);
-		if (!strncmp(fsd_login->node, ident_map->node,
+		if (!strncmp(fsq_login->node, ident_map->node,
 			     DSM_MAX_NODE_LENGTH)) {
 			found = true;
 			break;
@@ -564,52 +564,52 @@ static int identmap_entry(struct fsd_login_t *fsd_login,
 		*gid = ident_map->gid;
 	} else {
 		CT_ERROR(0, "identifier mapping for node '%s' not found",
-			 fsd_login->node);
+			 fsq_login->node);
 		rc = -EACCES;
 	}
 
 	return rc;
 }
 
-static int enqueue_fsd_item(struct fsd_action_item_t *fsd_action_item)
+static int enqueue_fsq_item(struct fsq_action_item_t *fsq_action_item)
 {
 	int rc;
 
 	/* Lock queue to avoid thread access. */
 	pthread_mutex_lock(&queue_mutex);
 
-	rc = queue_enqueue(&queue, fsd_action_item);
+	rc = queue_enqueue(&queue, fsq_action_item);
 
 	if (rc) {
 		rc = -EFAILED;
 		CT_ERROR(rc, "failed enqueue operation: "
 			 "%p, state '%s', fs '%s', fpath '%s', size %zu, "
 			 "errors %d, ts[0] %.3f, ts[1] %.3f, ts[2] %.3f, queue size %lu",
-			 fsd_action_item,
-			 FSD_ACTION_STR(fsd_action_item->fsd_action_state),
-			 fsd_action_item->fsd_info.fs,
-			 fsd_action_item->fsd_info.fpath,
-			 fsd_action_item->size,
-			 fsd_action_item->action_error_cnt,
-			 fsd_action_item->ts[0],
-			 fsd_action_item->ts[1],
-			 fsd_action_item->ts[2],
+			 fsq_action_item,
+			 FSQ_ACTION_STR(fsq_action_item->fsq_action_state),
+			 fsq_action_item->fsq_info.fs,
+			 fsq_action_item->fsq_info.fpath,
+			 fsq_action_item->size,
+			 fsq_action_item->action_error_cnt,
+			 fsq_action_item->ts[0],
+			 fsq_action_item->ts[1],
+			 fsq_action_item->ts[2],
 			 queue_size(&queue));
 
-		free(fsd_action_item);
+		free(fsq_action_item);
 	} else
 		CT_INFO("enqueue operation: "
 			"%p, state '%s', fs '%s', fpath '%s', size %zu, "
 			"errors %d, ts[0] %.3f, ts[1] %.3f, ts[2] %.3f, queue size %lu",
-			fsd_action_item,
-			FSD_ACTION_STR(fsd_action_item->fsd_action_state),
-			fsd_action_item->fsd_info.fs,
-			fsd_action_item->fsd_info.fpath,
-			fsd_action_item->size,
-			fsd_action_item->action_error_cnt,
-			fsd_action_item->ts[0],
-			fsd_action_item->ts[1],
-			fsd_action_item->ts[2],
+			fsq_action_item,
+			FSQ_ACTION_STR(fsq_action_item->fsq_action_state),
+			fsq_action_item->fsq_info.fs,
+			fsq_action_item->fsq_info.fpath,
+			fsq_action_item->size,
+			fsq_action_item->action_error_cnt,
+			fsq_action_item->ts[0],
+			fsq_action_item->ts[1],
+			fsq_action_item->ts[2],
 			queue_size(&queue));
 
 	/* Free the lock of the queue. */
@@ -621,42 +621,42 @@ static int enqueue_fsd_item(struct fsd_action_item_t *fsd_action_item)
 	return rc;
 }
 
-static struct fsd_action_item_t* create_fsd_item(const size_t bytes_recv_total,
-						 const struct fsd_info_t *fsd_info,
+static struct fsq_action_item_t* create_fsq_item(const size_t bytes_recv_total,
+						 const struct fsq_info_t *fsq_info,
 						 const char *fpath_local, const int archive_id,
 						 const uid_t uid, const gid_t gid)
 {
-	struct fsd_action_item_t *fsd_action_item;
+	struct fsq_action_item_t *fsq_action_item;
 
-	fsd_action_item = calloc(1, sizeof(struct fsd_action_item_t));
-	if (!fsd_action_item) {
+	fsq_action_item = calloc(1, sizeof(struct fsq_action_item_t));
+	if (!fsq_action_item) {
 		CT_ERROR(-errno, "calloc");
 		return NULL;
 	}
 
-	fsd_action_item->fsd_action_state = STATE_FSD_COPY_DONE;
-	fsd_action_item->size = bytes_recv_total;
-	memcpy(&fsd_action_item->fsd_info, fsd_info, sizeof(struct fsd_info_t));
-	fsd_action_item->ts[0] = time_now();
-	fsd_action_item->ts[1] = 0;
-	fsd_action_item->ts[2] = 0;
-	strncpy(fsd_action_item->fpath_local, fpath_local, PATH_MAX);
-	fsd_action_item->archive_id = archive_id;
-	fsd_action_item->uid = uid;
-	fsd_action_item->gid = gid;
+	fsq_action_item->fsq_action_state = STATE_FSQ_COPY_DONE;
+	fsq_action_item->size = bytes_recv_total;
+	memcpy(&fsq_action_item->fsq_info, fsq_info, sizeof(struct fsq_info_t));
+	fsq_action_item->ts[0] = time_now();
+	fsq_action_item->ts[1] = 0;
+	fsq_action_item->ts[2] = 0;
+	strncpy(fsq_action_item->fpath_local, fpath_local, PATH_MAX);
+	fsq_action_item->archive_id = archive_id;
+	fsq_action_item->uid = uid;
+	fsq_action_item->gid = gid;
 
-	return fsd_action_item;
+	return fsq_action_item;
 }
 
-static int init_fsd_local(char **fpath_local, int *fd_local,
-			  const struct fsd_session_t *fsd_session)
+static int init_fsq_local(char **fpath_local, int *fd_local,
+			  const struct fsq_session_t *fsq_session)
 {
 	int rc;
 	char hl[DSM_MAX_HL_LENGTH + 1] = {0};
 	char ll[DSM_MAX_LL_LENGTH + 1] = {0};
 
-	rc = extract_hl_ll(fsd_session->fsd_packet.fsd_info.fpath,
-			   fsd_session->fsd_packet.fsd_info.fs,
+	rc = extract_hl_ll(fsq_session->fsq_packet.fsq_info.fpath,
+			   fsq_session->fsq_packet.fsq_info.fs,
 			   hl, ll);
 	if (rc) {
 		rc = -EFAILED;
@@ -709,8 +709,8 @@ static int init_fsd_local(char **fpath_local, int *fd_local,
 	return rc;
 }
 
-static int fsd_recv_data(int *fd_local,
-			 struct fsd_session_t *fsd_session,
+static int fsq_recv_data(int *fd_local,
+			 struct fsq_session_t *fsq_session,
 			 size_t *bytes_recv_total, size_t *bytes_send_total)
 {
 	int rc;
@@ -719,31 +719,31 @@ static int fsd_recv_data(int *fd_local,
 	ssize_t bytes_send;
 
 	do {
-		rc = fsd_recv(fsd_session, (FSD_DATA | FSD_CLOSE));
-		CT_DEBUG("[rc=%d,fd=%d] fsd_recv state '%s' size %zu",
-			 rc, fsd_session->fd,
-			 FSD_PROTOCOL_STR(fsd_session->fsd_packet.state),
-			 fsd_session->fsd_packet.fsd_data.size);
+		rc = fsq_recv(fsq_session, (FSQ_DATA | FSQ_CLOSE));
+		CT_DEBUG("[rc=%d,fd=%d] fsq_recv state '%s' size %zu",
+			 rc, fsq_session->fd,
+			 FSQ_PROTOCOL_STR(fsq_session->fsq_packet.state),
+			 fsq_session->fsq_packet.fsq_data.size);
 		if (rc) {
-			CT_ERROR(rc, "fsd_recv failed");
+			CT_ERROR(rc, "fsq_recv failed");
 			goto out;
 		}
 
-		if (fsd_session->fsd_packet.state & FSD_CLOSE)
+		if (fsq_session->fsq_packet.state & FSQ_CLOSE)
 			goto out;
 
 		size_t bytes_total = 0;
 		bytes_recv = bytes_send = 0;
 		memset(buf, 0, sizeof(buf));
 		do {
-			bytes_to_recv = fsd_session->fsd_packet.fsd_data.size < sizeof(buf) ?
-				fsd_session->fsd_packet.fsd_data.size : sizeof(buf);
-			if (fsd_session->fsd_packet.fsd_data.size - bytes_total < bytes_to_recv)
-				bytes_to_recv = fsd_session->fsd_packet.fsd_data.size - bytes_total;
+			bytes_to_recv = fsq_session->fsq_packet.fsq_data.size < sizeof(buf) ?
+				fsq_session->fsq_packet.fsq_data.size : sizeof(buf);
+			if (fsq_session->fsq_packet.fsq_data.size - bytes_total < bytes_to_recv)
+				bytes_to_recv = fsq_session->fsq_packet.fsq_data.size - bytes_total;
 
-			bytes_recv = read_size(fsd_session->fd, buf, bytes_to_recv);
+			bytes_recv = read_size(fsq_session->fd, buf, bytes_to_recv);
 			CT_DEBUG("[fd=%d] read_size %zd, expected %zd, max possible %zd",
-				 fsd_session->fd, bytes_recv, bytes_to_recv, sizeof(buf));
+				 fsq_session->fd, bytes_recv, bytes_to_recv, sizeof(buf));
 			if (bytes_recv < 0) {
 				CT_ERROR(errno, "recv");
 				goto out;
@@ -764,23 +764,23 @@ static int fsd_recv_data(int *fd_local,
 				goto out;
 			}
 			*bytes_send_total += bytes_send;
-		} while (bytes_total != fsd_session->fsd_packet.fsd_data.size);
+		} while (bytes_total != fsq_session->fsq_packet.fsq_data.size);
 		CT_DEBUG("[fd=%d,fd=%d] total read %zu, total written %zu",
-			 fsd_session->fd, *fd_local, *bytes_recv_total, *bytes_send_total);
-	} while (fsd_session->fsd_packet.state & FSD_DATA);
+			 fsq_session->fd, *fd_local, *bytes_recv_total, *bytes_send_total);
+	} while (fsq_session->fsq_packet.state & FSQ_DATA);
 
 out:
 	return rc;
 }
 
-static int client_authenticate(struct fsd_session_t *fsd_session,
+static int client_authenticate(struct fsq_session_t *fsq_session,
 			       int *archive_id, uid_t *uid, gid_t *gid)
 {
 	int rc;
 	char servername[MAX_OPTIONS_LENGTH + 1] = {0};
 
 	/* Verify node exists in identmap file. */
-	rc = identmap_entry(&fsd_session->fsd_packet.fsd_login,
+	rc = identmap_entry(&fsq_session->fsq_packet.fsq_login,
 			    servername,
 			    archive_id, uid, gid);
 	CT_DEBUG("[rc=%d] identmap_entry", rc);
@@ -797,8 +797,8 @@ static int client_authenticate(struct fsd_session_t *fsd_session,
 	memset(&session, 0, sizeof(struct session_t));
 	login_init(&login,
 		   servername,
-		   fsd_session->fsd_packet.fsd_login.node,
-		   fsd_session->fsd_packet.fsd_login.password,
+		   fsq_session->fsq_packet.fsq_login.node,
+		   fsq_session->fsq_packet.fsq_login.password,
 		   DEFAULT_OWNER,
 		   LINUX_PLATFORM,
 		   DEFAULT_FSNAME,
@@ -822,81 +822,81 @@ static int client_authenticate(struct fsd_session_t *fsd_session,
 static void *thread_sock_client(void *arg)
 {
 	int rc;
-	struct fsd_session_t fsd_session;
+	struct fsq_session_t fsq_session;
 	char *fpath_local = NULL;
 	int fd_local = -1;
 	int *fd_ptr = (int *)arg;
 
-	memset(&fsd_session, 0, sizeof(struct fsd_session_t));
-	fsd_session.fd = *fd_ptr;
+	memset(&fsq_session, 0, sizeof(struct fsq_session_t));
+	fsq_session.fd = *fd_ptr;
 
-	/* State 1: Client calls fsd_fconnect(...). Receive fsd_packet with
-	   fsd_login_t, check identmap and hand it over to tsm server for
+	/* State 1: Client calls fsq_fconnect(...). Receive fsq_packet with
+	   fsq_login_t, check identmap and hand it over to tsm server for
 	   authentication. */
-	rc = fsd_recv(&fsd_session, FSD_CONNECT);
-	CT_DEBUG("[rc=%d,fd=%d] fsd_recv state '%s' node '%s' hostname '%s' "
-		 "port %d", rc, fsd_session.fd,
-		 FSD_PROTOCOL_STR(fsd_session.fsd_packet.state),
-		 fsd_session.fsd_packet.fsd_login.node,
-		 fsd_session.fsd_packet.fsd_login.hostname,
-		 fsd_session.fsd_packet.fsd_login.port);
+	rc = fsq_recv(&fsq_session, FSQ_CONNECT);
+	CT_DEBUG("[rc=%d,fd=%d] fsq_recv state '%s' node '%s' hostname '%s' "
+		 "port %d", rc, fsq_session.fd,
+		 FSQ_PROTOCOL_STR(fsq_session.fsq_packet.state),
+		 fsq_session.fsq_packet.fsq_login.node,
+		 fsq_session.fsq_packet.fsq_login.hostname,
+		 fsq_session.fsq_packet.fsq_login.port);
 	if (rc) {
-		CT_ERROR(rc, "fsd_recv failed");
+		CT_ERROR(rc, "fsq_recv failed");
 		goto out;
 	}
 
 	uid_t uid = 65534;	/* User: Nobody. */
 	gid_t gid = 65534;	/* Group: Nobody. */
 	int archive_id = -1;
-	rc = client_authenticate(&fsd_session, &archive_id, &uid, &gid);
+	rc = client_authenticate(&fsq_session, &archive_id, &uid, &gid);
 	if (rc) {
 		CT_ERROR(rc, "client_authenticate failed");
 		goto out;
 	}
 
 	do {
-		/* State 2: Client calls fsd_fopen(...) or fsd_disconnect(...).
-		   Receive fsd_packet with fsd_info_t. */
-		rc = fsd_recv(&fsd_session, (FSD_OPEN | FSD_DISCONNECT));
-		CT_DEBUG("[rc=%d,fd=%d] fsd_recv state '%s' fs '%s' "
+		/* State 2: Client calls fsq_fopen(...) or fsq_disconnect(...).
+		   Receive fsq_packet with fsq_info_t. */
+		rc = fsq_recv(&fsq_session, (FSQ_OPEN | FSQ_DISCONNECT));
+		CT_DEBUG("[rc=%d,fd=%d] fsq_recv state '%s' fs '%s' "
 			 "fpath '%s' desc '%s' storage dest '%s'",
-			 rc, fsd_session.fd,
-			 FSD_PROTOCOL_STR(fsd_session.fsd_packet.state),
-			 fsd_session.fsd_packet.fsd_info.fs,
-			 fsd_session.fsd_packet.fsd_info.fpath,
-			 fsd_session.fsd_packet.fsd_info.desc,
-			 FSD_STORAGE_DEST_STR(fsd_session.fsd_packet.fsd_info.fsd_storage_dest));
+			 rc, fsq_session.fd,
+			 FSQ_PROTOCOL_STR(fsq_session.fsq_packet.state),
+			 fsq_session.fsq_packet.fsq_info.fs,
+			 fsq_session.fsq_packet.fsq_info.fpath,
+			 fsq_session.fsq_packet.fsq_info.desc,
+			 FSQ_STORAGE_DEST_STR(fsq_session.fsq_packet.fsq_info.fsq_storage_dest));
 		if (rc) {
-			CT_ERROR(rc, "recv_fsd failed");
+			CT_ERROR(rc, "recv_fsq failed");
 			goto out;
 		}
 
-		if (fsd_session.fsd_packet.state & FSD_DISCONNECT)
+		if (fsq_session.fsq_packet.state & FSQ_DISCONNECT)
 			goto out;
 
-		rc = init_fsd_local(&fpath_local, &fd_local, &fsd_session);
+		rc = init_fsq_local(&fpath_local, &fd_local, &fsq_session);
 		if (rc) {
-			CT_ERROR(rc, "init_fsd_local");
+			CT_ERROR(rc, "init_fsq_local");
 			goto out;
 		}
 
-		struct fsd_info_t fsd_info;
+		struct fsq_info_t fsq_info;
 		size_t bytes_recv_total = 0;
 		size_t bytes_send_total = 0;
 		double ts = time_now();
 
-		/* Note, subsequent fsd_recv_data(...) overwrites fsd_packet.fsd_info,
+		/* Note, subsequent fsq_recv_data(...) overwrites fsq_packet.fsq_info,
 		   due to union structure, thus copy it here for later use. */
-		memcpy(&fsd_info, &fsd_session.fsd_packet.fsd_info,
-		       sizeof(struct fsd_info_t));
+		memcpy(&fsq_info, &fsq_session.fsq_packet.fsq_info,
+		       sizeof(struct fsq_info_t));
 
-		/* State 3: Client calls fsd_fwrite(...) or fsd_fclose(...).
-		   Receive fsd_packet with fsd_data_t. */
-		rc = fsd_recv_data(&fd_local, &fsd_session, &bytes_recv_total,
+		/* State 3: Client calls fsq_fwrite(...) or fsq_fclose(...).
+		   Receive fsq_packet with fsq_data_t. */
+		rc = fsq_recv_data(&fd_local, &fsq_session, &bytes_recv_total,
 				   &bytes_send_total);
-		CT_DEBUG("[rc=%d,fd=%d] fsd_recv_data", rc, fsd_session.fd);
+		CT_DEBUG("[rc=%d,fd=%d] fsq_recv_data", rc, fsq_session.fd);
 		if (rc) {
-			CT_ERROR(rc, "fsd_recv_data failed");
+			CT_ERROR(rc, "fsq_recv_data failed");
 			goto out;
 		}
 		/* Sanity check. */
@@ -909,30 +909,30 @@ static void *thread_sock_client(void *arg)
 		}
 		CT_INFO("[fd=%d,fd=%d] data buffer for fpath '%s' of size %zd "
 			"successfully received in seconds %.3f",
-			fsd_session.fd, fd_local,
-			fsd_info.fpath,
+			fsq_session.fd, fd_local,
+			fsq_info.fpath,
 			bytes_recv_total, time_now() - ts);
 
-		rc = xattr_set_fsd(fpath_local,
-				   STATE_FSD_COPY_DONE,
+		rc = xattr_set_fsq(fpath_local,
+				   STATE_FSQ_COPY_DONE,
 				   archive_id,
-				   &fsd_info);
+				   &fsq_info);
 		if (rc)
 			goto out;
 
 		/* Producer. */
-		struct fsd_action_item_t *fsd_action_item = NULL;
+		struct fsq_action_item_t *fsq_action_item = NULL;
 
-		fsd_action_item = create_fsd_item(bytes_recv_total,
-						  &fsd_info,
+		fsq_action_item = create_fsq_item(bytes_recv_total,
+						  &fsq_info,
 						  fpath_local, archive_id,
 						  uid, gid);
-		if (fsd_action_item == NULL)
+		if (fsq_action_item == NULL)
 			goto out;
 
-		rc = enqueue_fsd_item(fsd_action_item);
+		rc = enqueue_fsq_item(fsq_action_item);
 		if (rc) {
-			free(fsd_action_item);
+			free(fsq_action_item);
 			goto out;
 		}
 
@@ -949,7 +949,7 @@ static void *thread_sock_client(void *arg)
 			free(fpath_local);
 			fpath_local = NULL;
 		}
-	} while (fsd_session.fsd_packet.state != FSD_DISCONNECT);
+	} while (fsq_session.fsq_packet.state != FSQ_DISCONNECT);
 
 out:
 	if (fpath_local) {
@@ -960,8 +960,8 @@ out:
 	if (!(fd_local < 0))
 		close(fd_local);
 
-	if (!(fsd_session.fd < 0)) {
-		close(fsd_session.fd);
+	if (!(fsq_session.fd < 0)) {
+		close(fsq_session.fd);
 		free(fd_ptr);
 		fd_ptr = NULL;
 	}
@@ -974,7 +974,7 @@ out:
 	return NULL;
 }
 
-static int fsd_setup(void)
+static int fsq_setup(void)
 {
 	int rc;
 	struct stat st_buf;
@@ -1024,24 +1024,24 @@ static void re_enqueue(const char *dpath)
 		case DT_REG: {
 
 			int rc;
-			uint32_t fsd_action_state = 0;
+			uint32_t fsq_action_state = 0;
 			int archive_id = 0;
 			char fpath_local[PATH_MAX + 1] = {0};
-			struct fsd_info_t fsd_info = {
+			struct fsq_info_t fsq_info = {
 				.fs		   = {0},
 				.fpath		   = {0},
 				.desc		   = {0}
 			};
 
 			snprintf(fpath_local, PATH_MAX, "%s/%s", dpath, entry->d_name);
-			rc = xattr_get_fsd(fpath_local, &fsd_action_state,
-					   &archive_id, &fsd_info);
+			rc = xattr_get_fsq(fpath_local, &fsq_action_state,
+					   &archive_id, &fsq_info);
 			if (rc)
-				CT_ERROR(rc, "xattr_get_fsd '%s', "
+				CT_ERROR(rc, "xattr_get_fsq '%s', "
 					 "file cannot be re-enqueued", fpath_local);
 			else {
 				struct stat st;
-				struct fsd_action_item_t *fsd_action_item = NULL;
+				struct fsq_action_item_t *fsq_action_item = NULL;
 
 				rc = stat(fpath_local, &st);
 				if (rc) {
@@ -1049,24 +1049,24 @@ static void re_enqueue(const char *dpath)
 					break;
 				}
 
-				fsd_action_item = create_fsd_item(st.st_size,
-								  &fsd_info,
+				fsq_action_item = create_fsq_item(st.st_size,
+								  &fsq_info,
 								  fpath_local,
 								  archive_id,
 								  st.st_uid,
 								  st.st_uid);
-				if (!fsd_action_item) {
-					CT_WARN("create_fsd_item '%s' failed", fpath_local);
+				if (!fsq_action_item) {
+					CT_WARN("create_fsq_item '%s' failed", fpath_local);
 					break;
 				}
-				if (fsd_action_state & STATE_FILE_OMITTED) {
-					fsd_action_state = STATE_FSD_COPY_DONE;
+				if (fsq_action_state & STATE_FILE_OMITTED) {
+					fsq_action_state = STATE_FSQ_COPY_DONE;
 				}
-				fsd_action_item->fsd_action_state = fsd_action_state;
+				fsq_action_item->fsq_action_state = fsq_action_state;
 
-				rc = enqueue_fsd_item(fsd_action_item);
+				rc = enqueue_fsq_item(fsq_action_item);
 				if (rc) {
-					free(fsd_action_item);
+					free(fsq_action_item);
 					break;
 				}
 				CT_INFO("re-enqueue '%s'", fpath_local);
@@ -1097,7 +1097,7 @@ static void signal_handler(int signal)
 	keep_running = false;
 }
 
-static int copy_action(struct fsd_action_item_t *fsd_action_item)
+static int copy_action(struct fsq_action_item_t *fsq_action_item)
 {
 	int rc;
 	int fd_read = -1;
@@ -1105,16 +1105,16 @@ static int copy_action(struct fsd_action_item_t *fsd_action_item)
 	char fpath_sub[PATH_MAX + 1] = {0};
 	uint16_t i = 0;
 
-	fd_read = open(fsd_action_item->fpath_local, O_RDONLY);
+	fd_read = open(fsq_action_item->fpath_local, O_RDONLY);
 	if (fd_read < 0) {
 		rc = -errno;
-		CT_ERROR(rc, "open '%s'", fsd_action_item->fpath_local);
+		CT_ERROR(rc, "open '%s'", fsq_action_item->fpath_local);
 		return rc;
 	}
 
-	while (fsd_action_item->fsd_info.fpath[i] != '\0') {
-		if (fsd_action_item->fsd_info.fpath[i] == '/' && i > 0) {
-			strncpy(fpath_sub, fsd_action_item->fsd_info.fpath, i);
+	while (fsq_action_item->fsq_info.fpath[i] != '\0') {
+		if (fsq_action_item->fsq_info.fpath[i] == '/' && i > 0) {
+			strncpy(fpath_sub, fsq_action_item->fsq_info.fpath, i);
 			rc = mkdir(fpath_sub,
 				   S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH);
 			if (rc < 0) {
@@ -1125,11 +1125,11 @@ static int copy_action(struct fsd_action_item_t *fsd_action_item)
 				}
 				goto next; /* Directory exists, skip it. */
                         }
-			rc = chown(fpath_sub, fsd_action_item->uid, fsd_action_item->gid);
+			rc = chown(fpath_sub, fsq_action_item->uid, fsq_action_item->gid);
 			if (rc < 0) {
 				rc = -errno;
 				CT_ERROR(rc, "chown '%s', uid %zu, gid %zu",
-					 fpath_sub, fsd_action_item->uid, fsd_action_item->gid);
+					 fpath_sub, fsq_action_item->uid, fsq_action_item->gid);
 				goto out;
 			}
 		}
@@ -1137,7 +1137,7 @@ static int copy_action(struct fsd_action_item_t *fsd_action_item)
 		i++;
 	}
 
-	fd_write = open(fsd_action_item->fsd_info.fpath,
+	fd_write = open(fsq_action_item->fsq_info.fpath,
 			O_WRONLY | O_CREAT | O_EXCL,
 			S_IRUSR | S_IWUSR | S_IRGRP);
 	if (fd_write < 0) {
@@ -1145,7 +1145,7 @@ static int copy_action(struct fsd_action_item_t *fsd_action_item)
 		   set. This makes sure we do NOT overwrite existing files. To
 		   allow overwriting replace O_EXCL with O_TRUNC. */
 		rc = -errno;
-		CT_ERROR(rc, "open '%s'", fsd_action_item->fsd_info.fpath);
+		CT_ERROR(rc, "open '%s'", fsq_action_item->fsq_info.fpath);
 		goto out;
 	}
 
@@ -1157,12 +1157,12 @@ static int copy_action(struct fsd_action_item_t *fsd_action_item)
 		CT_ERROR(rc, "stat");
 		goto out;
 	}
-	if (statbuf.st_size != (off_t)fsd_action_item->size) {
+	if (statbuf.st_size != (off_t)fsq_action_item->size) {
 		rc = -ERANGE;
 		CT_ERROR(rc, "'%s' "
-			 "fstat.st_size %zu != fsd_action_item->size %zu",
-			 fsd_action_item->fsd_info.fpath,
-			 statbuf.st_size, fsd_action_item->size);
+			 "fstat.st_size %zu != fsq_action_item->size %zu",
+			 fsq_action_item->fsq_info.fpath,
+			 statbuf.st_size, fsq_action_item->size);
 		goto out;
 	}
 
@@ -1206,20 +1206,20 @@ static int copy_action(struct fsd_action_item_t *fsd_action_item)
 	}
 	CT_INFO("[fd_read=(%d,'%s'),fd_write=(%d,'%s')] data buffer of "
 		"size %zd successfully read and written seconds %.3f",
-		fd_read, fsd_action_item->fpath_local,
-		fd_write, fsd_action_item->fsd_info.fpath,
+		fd_read, fsq_action_item->fpath_local,
+		fd_write, fsq_action_item->fsq_info.fpath,
 		bytes_read_total, time_now() - ts);
 
 	/* Change owner and group. */
-	rc = fchown(fd_write, fsd_action_item->uid, fsd_action_item->gid);
+	rc = fchown(fd_write, fsq_action_item->uid, fsq_action_item->gid);
 	CT_DEBUG("[rc=%d,fd=%d] fchown '%s', uid %zu gid %zu", rc, fd_write,
-		 fsd_action_item->fsd_info.fpath,
-		 fsd_action_item->uid, fsd_action_item->gid);
+		 fsq_action_item->fsq_info.fpath,
+		 fsq_action_item->uid, fsq_action_item->gid);
 	if (rc) {
 		rc = -errno;
 		CT_ERROR(rc, "fchown '%s', uid %zu, gid %zu",
-			 fsd_action_item->fsd_info.fpath,
-			 fsd_action_item->uid, fsd_action_item->gid);
+			 fsq_action_item->fsq_info.fpath,
+			 fsq_action_item->uid, fsq_action_item->gid);
 	}
 
 out:
@@ -1232,19 +1232,19 @@ out:
 	return rc;
 }
 
-#ifdef LTSMFSD_POLL_ARCHIVE_FINISHED
-static int archive_state(const struct fsd_action_item_t *fsd_action_item,
+#ifdef LTSMFSQ_POLL_ARCHIVE_FINISHED
+static int archive_state(const struct fsq_action_item_t *fsq_action_item,
 			 uint32_t *states)
 {
 	int rc;
 	struct hsm_user_state hus;
 
-	rc = llapi_hsm_state_get(fsd_action_item->fsd_info.fpath, &hus);
+	rc = llapi_hsm_state_get(fsq_action_item->fsq_info.fpath, &hus);
 	CT_DEBUG("[rc=%d] llapi_hsm_state_get '%s'", rc,
-		 fsd_action_item->fsd_info.fpath);
+		 fsq_action_item->fsq_info.fpath);
 	if (rc) {
 		CT_ERROR(rc, "llapi_hsm_state_get '%s'",
-			 fsd_action_item->fsd_info.fpath);
+			 fsq_action_item->fsq_info.fpath);
 		return rc;
 	}
 
@@ -1254,20 +1254,20 @@ static int archive_state(const struct fsd_action_item_t *fsd_action_item,
 }
 #endif
 
-static int archive_action(struct fsd_action_item_t *fsd_action_item)
+static int archive_action(struct fsq_action_item_t *fsq_action_item)
 {
 	int rc;
 	struct hsm_user_request	*hur = NULL;
 	struct hsm_user_item	*hui = NULL;
 	struct lu_fid		fid;
 
-	rc = llapi_path2fid(fsd_action_item->fsd_info.fpath, &fid);
+	rc = llapi_path2fid(fsq_action_item->fsq_info.fpath, &fid);
 	CT_DEBUG("[rc=%d] llapi_path2fid '%s' "DFID"",
-		 rc, fsd_action_item->fsd_info.fpath,
+		 rc, fsq_action_item->fsq_info.fpath,
 		 PFID(&fid));
 	if (rc) {
 		CT_ERROR(rc, "llapi_path2fid '%s'",
-			 fsd_action_item->fsd_info.fpath);
+			 fsq_action_item->fsq_info.fpath);
 		return rc;
 	}
 
@@ -1275,11 +1275,11 @@ static int archive_action(struct fsd_action_item_t *fsd_action_item)
 	if (hur == NULL) {
 		rc = -errno;
 		CT_ERROR(rc, "llapi_hsm_user_request_alloc failed '%s'",
-			 fsd_action_item->fsd_info.fpath);
+			 fsq_action_item->fsq_info.fpath);
 		return rc;
 	}
 	hur->hur_request.hr_action = HUA_ARCHIVE;
-	hur->hur_request.hr_archive_id = fsd_action_item->archive_id;
+	hur->hur_request.hr_archive_id = fsq_action_item->archive_id;
 	hur->hur_request.hr_flags = 0;
 	hur->hur_request.hr_itemcount = 1;
 	hur->hur_request.hr_data_len = 0;
@@ -1287,7 +1287,7 @@ static int archive_action(struct fsd_action_item_t *fsd_action_item)
 	hui = &hur->hur_user_item[0];
 	hui->hui_fid = fid;
 
-	rc = llapi_hsm_request(fsd_action_item->fsd_info.fpath, hur);
+	rc = llapi_hsm_request(fsq_action_item->fsq_info.fpath, hur);
 
 	free(hur);
 
@@ -1298,7 +1298,7 @@ static int archive_action(struct fsd_action_item_t *fsd_action_item)
   The following state diagram is implemented.
 
   +---------------------+        +-----------------------+
-->| STATE_FSD_COPY_DONE +------->+ STATE_LUSTRE_COPY_RUN |
+->| STATE_FSQ_COPY_DONE +------->+ STATE_LUSTRE_COPY_RUN |
   +--------+------------+        +------------+----------+
            ^                                  |
            |   +-------------------------+    |
@@ -1317,155 +1317,155 @@ static int archive_action(struct fsd_action_item_t *fsd_action_item)
  | STATE_TSM_ARCHIVE_DONE |
  +------------------------+
  */
-static int process_fsd_action_item(struct fsd_action_item_t *fsd_action_item)
+static int process_fsq_action_item(struct fsq_action_item_t *fsq_action_item)
 {
 	int rc = 0;
 
-	CT_DEBUG("process_fsd_action_item %p, state '%s', fs '%s', fpath '%s', size %zu, "
+	CT_DEBUG("process_fsq_action_item %p, state '%s', fs '%s', fpath '%s', size %zu, "
 		 "errors %d, ts[0] %.3f, ts[1] %.3f, ts[2] %.3f, queue size %lu",
-		 fsd_action_item,
-		 FSD_ACTION_STR(fsd_action_item->fsd_action_state),
-		 fsd_action_item->fsd_info.fs,
-		 fsd_action_item->fsd_info.fpath,
-		 fsd_action_item->size,
-		 fsd_action_item->action_error_cnt,
-		 fsd_action_item->ts[0],
-		 fsd_action_item->ts[1],
-		 fsd_action_item->ts[2],
+		 fsq_action_item,
+		 FSQ_ACTION_STR(fsq_action_item->fsq_action_state),
+		 fsq_action_item->fsq_info.fs,
+		 fsq_action_item->fsq_info.fpath,
+		 fsq_action_item->size,
+		 fsq_action_item->action_error_cnt,
+		 fsq_action_item->ts[0],
+		 fsq_action_item->ts[1],
+		 fsq_action_item->ts[2],
 		 queue_size(&queue));
 
-	if (fsd_action_item->action_error_cnt > (size_t)opt.o_ntol_file_errors) {
+	if (fsq_action_item->action_error_cnt > (size_t)opt.o_ntol_file_errors) {
 		CT_WARN("file '%s' reached maximum number of tolerated errors, "
-			"and is omitted", fsd_action_item->fpath_local);
-		rc = xattr_update_fsd_state(fsd_action_item,
+			"and is omitted", fsq_action_item->fpath_local);
+		rc = xattr_update_fsq_state(fsq_action_item,
 					    STATE_FILE_OMITTED);
-		free(fsd_action_item);
+		free(fsq_action_item);
 		return 0;
 	}
 
-	switch (fsd_action_item->fsd_action_state) {
-	case STATE_FSD_COPY_DONE: {
-		rc = xattr_update_fsd_state(fsd_action_item,
+	switch (fsq_action_item->fsq_action_state) {
+	case STATE_FSQ_COPY_DONE: {
+		rc = xattr_update_fsq_state(fsq_action_item,
 					    STATE_LUSTRE_COPY_RUN);
 		CT_DEBUG("[rc=%d] setting state from '%s' to '%s'",
 			 rc,
-			 FSD_ACTION_STR(STATE_FSD_COPY_DONE),
-			 FSD_ACTION_STR(STATE_LUSTRE_COPY_RUN));
+			 FSQ_ACTION_STR(STATE_FSQ_COPY_DONE),
+			 FSQ_ACTION_STR(STATE_LUSTRE_COPY_RUN));
 		if (rc) {
-			fsd_action_item->action_error_cnt++;
-			fsd_action_item->fsd_action_state = STATE_FSD_COPY_DONE;
+			fsq_action_item->action_error_cnt++;
+			fsq_action_item->fsq_action_state = STATE_FSQ_COPY_DONE;
 			CT_WARN("setting state from '%s' to '%s' failed, "
 				"going back to state '%s'",
-				FSD_ACTION_STR(STATE_FSD_COPY_DONE),
-				FSD_ACTION_STR(STATE_LUSTRE_COPY_RUN),
-				FSD_ACTION_STR(fsd_action_item->fsd_action_state));
+				FSQ_ACTION_STR(STATE_FSQ_COPY_DONE),
+				FSQ_ACTION_STR(STATE_LUSTRE_COPY_RUN),
+				FSQ_ACTION_STR(fsq_action_item->fsq_action_state));
 			break;
 		}
 
 		double ts = time_now();
-		rc = copy_action(fsd_action_item);
+		rc = copy_action(fsq_action_item);
 		if (rc) {
 			CT_WARN("file '%s' copying to '%s' failed, will "
 				"try again",
-				fsd_action_item->fpath_local,
-				fsd_action_item->fsd_info.fpath);
-			fsd_action_item->action_error_cnt++;
-			fsd_action_item->fsd_action_state = STATE_LUSTRE_COPY_ERROR;
+				fsq_action_item->fpath_local,
+				fsq_action_item->fsq_info.fpath);
+			fsq_action_item->action_error_cnt++;
+			fsq_action_item->fsq_action_state = STATE_LUSTRE_COPY_ERROR;
 			break;
 		}
 		CT_MESSAGE("file '%s' copied to '%s' of size %zu in seconds %.3f",
-			   fsd_action_item->fpath_local,
-			   fsd_action_item->fsd_info.fpath,
-			   fsd_action_item->size,
+			   fsq_action_item->fpath_local,
+			   fsq_action_item->fsq_info.fpath,
+			   fsq_action_item->size,
 			   time_now() - ts);
 
-		rc = xattr_update_fsd_state(fsd_action_item,
+		rc = xattr_update_fsq_state(fsq_action_item,
 					      STATE_LUSTRE_COPY_DONE);
 		CT_DEBUG("[rc=%d] setting state from '%s' to '%s'",
 			 rc,
-			 FSD_ACTION_STR(STATE_LUSTRE_COPY_RUN),
-			 FSD_ACTION_STR(STATE_LUSTRE_COPY_DONE));
+			 FSQ_ACTION_STR(STATE_LUSTRE_COPY_RUN),
+			 FSQ_ACTION_STR(STATE_LUSTRE_COPY_DONE));
 		if (rc) {
-			fsd_action_item->action_error_cnt++;
-			fsd_action_item->fsd_action_state = STATE_FSD_COPY_DONE;
+			fsq_action_item->action_error_cnt++;
+			fsq_action_item->fsq_action_state = STATE_FSQ_COPY_DONE;
 			CT_WARN("setting state from '%s' to '%s' failed, "
 				"going back to state '%s'",
-				FSD_ACTION_STR(STATE_FSD_COPY_DONE),
-				FSD_ACTION_STR(STATE_LUSTRE_COPY_DONE),
-				FSD_ACTION_STR(fsd_action_item->fsd_action_state));
+				FSQ_ACTION_STR(STATE_FSQ_COPY_DONE),
+				FSQ_ACTION_STR(STATE_LUSTRE_COPY_DONE),
+				FSQ_ACTION_STR(fsq_action_item->fsq_action_state));
 			break;
 		}
-		fsd_action_item->ts[1] = time_now();
+		fsq_action_item->ts[1] = time_now();
 		break;
 	}
 	case STATE_LUSTRE_COPY_RUN: {
-		/* TODO: Update fsd_action_item->progress_size. */
+		/* TODO: Update fsq_action_item->progress_size. */
 		break;
 	}
 	case STATE_LUSTRE_COPY_ERROR: {
-		CT_WARN("fsd to lustre copy error, try to copy "
+		CT_WARN("fsq to lustre copy error, try to copy "
 			"file '%s' to '%s' again",
-			fsd_action_item->fpath_local,
-			fsd_action_item->fsd_info.fpath);
-		rc = xattr_update_fsd_state(fsd_action_item,
-					    STATE_FSD_COPY_DONE);
+			fsq_action_item->fpath_local,
+			fsq_action_item->fsq_info.fpath);
+		rc = xattr_update_fsq_state(fsq_action_item,
+					    STATE_FSQ_COPY_DONE);
 		if (rc)
-			fsd_action_item->action_error_cnt++;
+			fsq_action_item->action_error_cnt++;
 		break;
 	}
 	case STATE_LUSTRE_COPY_DONE: {
-		rc = xattr_update_fsd_state(fsd_action_item,
+		rc = xattr_update_fsq_state(fsq_action_item,
 					    STATE_TSM_ARCHIVE_RUN);
 		CT_DEBUG("[rc=%d] setting state from '%s' to '%s'",
 			 rc,
-			 FSD_ACTION_STR(STATE_LUSTRE_COPY_DONE),
-			 FSD_ACTION_STR(STATE_TSM_ARCHIVE_RUN));
+			 FSQ_ACTION_STR(STATE_LUSTRE_COPY_DONE),
+			 FSQ_ACTION_STR(STATE_TSM_ARCHIVE_RUN));
 		if (rc) {
-			fsd_action_item->action_error_cnt++;
-			fsd_action_item->fsd_action_state = STATE_LUSTRE_COPY_DONE;
+			fsq_action_item->action_error_cnt++;
+			fsq_action_item->fsq_action_state = STATE_LUSTRE_COPY_DONE;
 			CT_WARN("setting state from '%s' to '%s' failed, "
 				"going back to state '%s'",
-				FSD_ACTION_STR(STATE_LUSTRE_COPY_DONE),
-				FSD_ACTION_STR(STATE_TSM_ARCHIVE_RUN),
-				FSD_ACTION_STR(fsd_action_item->fsd_action_state));
+				FSQ_ACTION_STR(STATE_LUSTRE_COPY_DONE),
+				FSQ_ACTION_STR(STATE_TSM_ARCHIVE_RUN),
+				FSQ_ACTION_STR(fsq_action_item->fsq_action_state));
 			break;
 		}
-		rc = archive_action(fsd_action_item);
+		rc = archive_action(fsq_action_item);
 		if (rc) {
 			CT_WARN("file '%s' archiving failed, will try again",
-				fsd_action_item->fpath_local);
-			fsd_action_item->action_error_cnt++;
-			fsd_action_item->fsd_action_state = STATE_TSM_ARCHIVE_ERROR;
+				fsq_action_item->fpath_local);
+			fsq_action_item->action_error_cnt++;
+			fsq_action_item->fsq_action_state = STATE_TSM_ARCHIVE_ERROR;
 		}
 		break;
 	}
 	case STATE_TSM_ARCHIVE_RUN: {
 		uint32_t states = 0;
 
-#ifdef LTSMFSD_POLL_ARCHIVE_FINISHED
+#ifdef LTSMFSQ_POLL_ARCHIVE_FINISHED
 		/* We stay in STATE_TSM_ARCHIVE_RUN and poll every 50ms to check,
 		   whether the archive operation finishes successfully. This approach,
 		   however, is not efficient and in addition congests the queue, as the
-		   the fsd_action_item is enqueued/dequeued over and over until the file
+		   the fsq_action_item is enqueued/dequeued over and over until the file
 		   is finally archived. To overcome this problem, we change immediately
-		   (via undefined LTSMFSD_POLL_ARCHIVE_FINISHED) the state from
+		   (via undefined LTSMFSQ_POLL_ARCHIVE_FINISHED) the state from
 		   STATE_TSM_ARCHIVE_RUN to STATE_TSM_ARCHIVE_DONE and assume:
-		   If archive_action(fsd_action_item) returns success, then the file
+		   If archive_action(fsq_action_item) returns success, then the file
 		   is also successfully archived. To reject this assumption, just define
-		   directive LTSMFSD_POLL_ARCHIVE_FINISHED to activate the poll mechanism. */
+		   directive LTSMFSQ_POLL_ARCHIVE_FINISHED to activate the poll mechanism. */
 
 		/* The archive_state check is based on polling, thus employ
 		   sleep(50ms) to avoid high CPU load. */
 		nanosleep(&(struct timespec){0, 50000000UL}, NULL);
 
-		rc = archive_state(fsd_action_item, &states);
+		rc = archive_state(fsq_action_item, &states);
 		CT_DEBUG("[rc=%d] archive_state: %d", states);
 		if (rc) {
 			/* If state cannot be obtained, stay in state
 			   STATE_TSM_ARCHIVE_RUN and try again. */
-			fsd_action_item->action_error_cnt++;
+			fsq_action_item->action_error_cnt++;
 			CT_ERROR(rc, "archive state '%s'",
-				 fsd_action_item->fsd_info.fpath);
+				 fsq_action_item->fsq_info.fpath);
 			break;
 		}
 #else
@@ -1477,28 +1477,28 @@ static int process_fsd_action_item(struct fsd_action_item_t *fsd_action_item)
 		   For an exact match on HS_EXISTS and HS_ARCHIVED, do:
 		   (states == (HS_EXISTS | HS_ARCHIVED)) */
 		if ((states & HS_EXISTS) && (states & HS_ARCHIVED)) {
-			rc = xattr_update_fsd_state(fsd_action_item,
+			rc = xattr_update_fsq_state(fsq_action_item,
 						    STATE_TSM_ARCHIVE_DONE);
 			CT_DEBUG("[rc=%d] setting state from '%s' to '%s'",
 				 rc,
-				 FSD_ACTION_STR(STATE_TSM_ARCHIVE_RUN),
-				 FSD_ACTION_STR(STATE_TSM_ARCHIVE_DONE));
+				 FSQ_ACTION_STR(STATE_TSM_ARCHIVE_RUN),
+				 FSQ_ACTION_STR(STATE_TSM_ARCHIVE_DONE));
 			if (rc) {
-				fsd_action_item->action_error_cnt++;
-				fsd_action_item->fsd_action_state = STATE_LUSTRE_COPY_DONE;
+				fsq_action_item->action_error_cnt++;
+				fsq_action_item->fsq_action_state = STATE_LUSTRE_COPY_DONE;
 				CT_WARN("setting state from '%s' to '%s' failed, "
 					"going back to state '%s'",
-					FSD_ACTION_STR(STATE_TSM_ARCHIVE_RUN),
-					FSD_ACTION_STR(STATE_TSM_ARCHIVE_DONE),
-					FSD_ACTION_STR(fsd_action_item->fsd_action_state));
+					FSQ_ACTION_STR(STATE_TSM_ARCHIVE_RUN),
+					FSQ_ACTION_STR(STATE_TSM_ARCHIVE_DONE),
+					FSQ_ACTION_STR(fsq_action_item->fsq_action_state));
 				break;
 			}
-			fsd_action_item->ts[2] = time_now();
+			fsq_action_item->ts[2] = time_now();
 			CT_MESSAGE("file '%s' of size %zu in queue archived "
 				   "in %.3f seconds",
-				   fsd_action_item->fpath_local,
-				   fsd_action_item->size,
-				   fsd_action_item->ts[2] - fsd_action_item->ts[1]);
+				   fsq_action_item->fpath_local,
+				   fsq_action_item->size,
+				   fsq_action_item->ts[2] - fsq_action_item->ts[1]);
 		}
 
 		/* Stay in state STATE_TSM_ARCHIVE_RUN. */
@@ -1506,36 +1506,36 @@ static int process_fsd_action_item(struct fsd_action_item_t *fsd_action_item)
 	}
 	case STATE_TSM_ARCHIVE_ERROR: {
 		CT_WARN("tsm archive error, try to archive file '%s' again",
-			fsd_action_item->fpath_local);
-		rc = xattr_update_fsd_state(fsd_action_item,
+			fsq_action_item->fpath_local);
+		rc = xattr_update_fsq_state(fsq_action_item,
 					    STATE_LUSTRE_COPY_DONE);
 		if (rc)
-			fsd_action_item->action_error_cnt++;
+			fsq_action_item->action_error_cnt++;
 
 		break;
 	}
 	case STATE_TSM_ARCHIVE_DONE: {
 		CT_MESSAGE("file '%s' of size %zu in queue successfully copied "
 			   "and archived in %.3f seconds",
-			   fsd_action_item->fpath_local,
-			   fsd_action_item->size,
-			   fsd_action_item->ts[2] - fsd_action_item->ts[1]);
-		rc = unlink(fsd_action_item->fpath_local);
-		CT_DEBUG("[rc=%d] unlink '%s'", rc, fsd_action_item->fpath_local);
+			   fsq_action_item->fpath_local,
+			   fsq_action_item->size,
+			   fsq_action_item->ts[2] - fsq_action_item->ts[1]);
+		rc = unlink(fsq_action_item->fpath_local);
+		CT_DEBUG("[rc=%d] unlink '%s'", rc, fsq_action_item->fpath_local);
 		if (rc < 0) {
 			rc = -errno;
-			CT_ERROR(rc, "unlink '%s'", fsd_action_item->fpath_local);
+			CT_ERROR(rc, "unlink '%s'", fsq_action_item->fpath_local);
 			break;
 		}
 		CT_INFO("unlink '%s' and remove action item %p",
-			fsd_action_item->fpath_local, fsd_action_item);
-		free(fsd_action_item);
+			fsq_action_item->fpath_local, fsq_action_item);
+		free(fsq_action_item);
 		return 0;
 	}
 	case STATE_FILE_OMITTED: {
 		CT_MESSAGE("file '%s' is omitted and removed from queue",
-			   fsd_action_item->fpath_local);
-		free(fsd_action_item);
+			   fsq_action_item->fpath_local);
+		free(fsq_action_item);
 		return 0;
 	}
 	default:		/* We should never be here. */
@@ -1544,7 +1544,7 @@ static int process_fsd_action_item(struct fsd_action_item_t *fsd_action_item)
 		return rc;
 	}
 
-	rc = enqueue_fsd_item(fsd_action_item);
+	rc = enqueue_fsq_item(fsq_action_item);
 
 	return rc;
 }
@@ -1552,17 +1552,17 @@ static int process_fsd_action_item(struct fsd_action_item_t *fsd_action_item)
 static void *thread_queue_consumer(void *data)
 {
 	int rc;
-	struct fsd_action_item_t *fsd_action_item;
+	struct fsq_action_item_t *fsq_action_item;
 
 	for (;;) {
 		/* Critical region, lock. */
 		pthread_mutex_lock(&queue_mutex);
 
-		/* While queue is empty wait for new FSD action item. */
+		/* While queue is empty wait for new FSQ action item. */
 		while (queue_size(&queue) == 0)
 			pthread_cond_wait(&queue_cond, &queue_mutex);
 
-		rc = queue_dequeue(&queue, (void **)&fsd_action_item);
+		rc = queue_dequeue(&queue, (void **)&fsq_action_item);
 
 		/* Unlock. */
 		pthread_mutex_unlock(&queue_mutex);
@@ -1572,32 +1572,32 @@ static void *thread_queue_consumer(void *data)
 			CT_ERROR(rc, "failed dequeue operation: "
 				 "%p, state '%s', fs '%s', fpath '%s', size %zu, "
 				 "errors %d, ts[0] %.3f, ts[1] %.3f, ts[2] %.3f, queue size %lu",
-				 fsd_action_item,
-				 FSD_ACTION_STR(fsd_action_item->fsd_action_state),
-				 fsd_action_item->fsd_info.fs,
-				 fsd_action_item->fsd_info.fpath,
-				 fsd_action_item->size,
-				 fsd_action_item->action_error_cnt,
-				 fsd_action_item->ts[0],
-				 fsd_action_item->ts[1],
-				 fsd_action_item->ts[2],
+				 fsq_action_item,
+				 FSQ_ACTION_STR(fsq_action_item->fsq_action_state),
+				 fsq_action_item->fsq_info.fs,
+				 fsq_action_item->fsq_info.fpath,
+				 fsq_action_item->size,
+				 fsq_action_item->action_error_cnt,
+				 fsq_action_item->ts[0],
+				 fsq_action_item->ts[1],
+				 fsq_action_item->ts[2],
 				 queue_size(&queue));
 		} else {
 			CT_INFO("dequeue operation: "
 				"%p, state '%s', fs '%s', fpath '%s', size %zu, "
 				"errors %d, ts[0] %.3f, ts[1] %.3f, ts[2] %.3f, queue size %lu",
-				fsd_action_item,
-				FSD_ACTION_STR(fsd_action_item->fsd_action_state),
-				fsd_action_item->fsd_info.fs,
-				fsd_action_item->fsd_info.fpath,
-				fsd_action_item->size,
-				fsd_action_item->action_error_cnt,
-				fsd_action_item->ts[0],
-				fsd_action_item->ts[1],
-				fsd_action_item->ts[2],
+				fsq_action_item,
+				FSQ_ACTION_STR(fsq_action_item->fsq_action_state),
+				fsq_action_item->fsq_info.fs,
+				fsq_action_item->fsq_info.fpath,
+				fsq_action_item->size,
+				fsq_action_item->action_error_cnt,
+				fsq_action_item->ts[0],
+				fsq_action_item->ts[1],
+				fsq_action_item->ts[2],
 				queue_size(&queue));
 
-			rc = process_fsd_action_item(fsd_action_item);
+			rc = process_fsq_action_item(fsq_action_item);
 		}
 	}
 
@@ -1634,7 +1634,7 @@ static int start_queue_consumer_threads(void)
 		if (rc != 0)
 			CT_ERROR(rc, "cannot create queue consumer thread '%d'", n);
 		else
-			CT_MESSAGE("created queue consumer thread fsd_queue/%d", n);
+			CT_MESSAGE("created queue consumer thread fsq_queue/%d", n);
 	}
 	pthread_attr_destroy(&attr);
 	return rc;
@@ -1669,7 +1669,7 @@ int main(int argc, char *argv[])
 		goto cleanup;
 	}
 
-	rc = fsd_setup();
+	rc = fsq_setup();
 	if (rc < 0)
 		goto cleanup;
 
@@ -1748,7 +1748,7 @@ int main(int argc, char *argv[])
 					 "client '%s'",
 					 inet_ntoa(sockaddr_cli.sin_addr));
 			else {
-				CT_MESSAGE("created socket thread 'fsd_sock/%d' for "
+				CT_MESSAGE("created socket thread 'fsq_sock/%d' for "
 					   "client '%s' and fd %d",
 					   thread_sock_cnt,
 					   inet_ntoa(sockaddr_cli.sin_addr),
