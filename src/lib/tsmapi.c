@@ -942,6 +942,18 @@ dsInt16_t tsm_query_session(struct session_t *session)
 		(appapi_ver_t.applicationLevel * 100) +
 		appapi_ver_t.applicationSubLevel;
 
+	CT_INFO("IBM API library version = %d.%d.%d.%d\n",
+		libapi_ver_t.version,
+		libapi_ver_t.release,
+		libapi_ver_t.level,
+		libapi_ver_t.subLevel);
+
+	CT_INFO("Application version = %d.%d.%d.%d\n",
+		appapi_ver_t.applicationVersion,
+		appapi_ver_t.applicationRelease,
+		appapi_ver_t.applicationLevel,
+		appapi_ver_t.applicationSubLevel);
+
 	if (libapi_ver < appapi_ver) {
 		rc = DSM_RC_UNSUCCESSFUL;
 		TSM_ERROR(session, rc, "TSM API library is lower than the"
@@ -949,12 +961,6 @@ dsInt16_t tsm_query_session(struct session_t *session)
 			  "install the current library version.");
 		return rc;
 	}
-
-	CT_INFO("IBM API library version = %d.%d.%d.%d\n",
-		libapi_ver_t.version,
-		libapi_ver_t.release,
-		libapi_ver_t.level,
-		libapi_ver_t.subLevel);
 
 	return rc;
 }
