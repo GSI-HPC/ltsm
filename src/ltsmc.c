@@ -474,7 +474,7 @@ int main(int argc, char *argv[])
 
 	rc = tsm_init(DSM_SINGLETHREAD);
 	if (rc)
-		goto cleanup_tsm;
+		goto cleanup;
 
 	if (opt.o_pipe) {
 		if (num_files_dirs == 0) {
@@ -487,13 +487,12 @@ int main(int argc, char *argv[])
 
 		rc = tsm_fconnect(&login, &session);
 		if (rc)
-			goto cleanup;
+			goto cleanup_tsm;
 
 		rc = tsm_fopen(opt.o_fsname, files_dirs_arg[0], opt.o_desc,
 			       &session);
 		if (rc) {
-			tsm_cleanup(DSM_SINGLETHREAD);
-			goto cleanup;
+			goto cleanup_tsm;
 		}
 
 		char buf[TSM_BUF_LENGTH] = {0};
@@ -518,8 +517,7 @@ int main(int argc, char *argv[])
 		if (rc)
 			CT_ERROR(errno, "tsm_fclose failed");
 
-		tsm_cleanup(DSM_SINGLETHREAD);
-		goto cleanup;
+		goto cleanup_tsm;
 	}
 
 	session.progress = progress_callback;
