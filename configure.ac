@@ -46,7 +46,7 @@ AS_IF([test "x$lapiheader" = "xyes"],
 	AC_CHECK_LIB([lustreapi],
 		 [llapi_error],
 		 [],
-		 [AC_MSG_ERROR([cannot find Lustre API library lustreapi, fix it by providing library path e.g. ./configure LDFLAGS='-L/<PATH_TO_LIB>'])]
+		 [AC_MSG_ERROR([cannot find Lustre API library lustreapi, fix it by providing library path e.g. ./configure LDFLAGS='-L/<PATH_TO_LIB> -Wl,-rpath,<PATH_TO_LIB>'])]
         )
 	#
 	AC_DEFINE([HAVE_LUSTRE], [1], [define to 1 if Lustre source is available])
@@ -71,7 +71,7 @@ AS_IF([test "x$tsmheader" = "xyes"],
 	AC_CHECK_LIB([ApiTSM64],
 		[dsmInitEx],
 		[],
-		[AC_MSG_ERROR([cannot find proprietary IBM library ApiTSM64, provide library path e.g. ./configure LDFLAGS='-L/<PATH_TO_LIB>'])]
+		[AC_MSG_ERROR([cannot find proprietary IBM library ApiTSM64, provide library path e.g. ./configure LDFLAGS='-L/<PATH_TO_LIB> -Wl,-rpath,<PATH_TO_LIB>'])]
         )
 	#
 	AC_DEFINE([HAVE_TSM], [1], [define to 1 if TSM sdk is available])
@@ -99,10 +99,10 @@ AS_IF([test "x$lapiheader" = "xyes" && test "x$tsmheader" = "xyes"],
 AC_CHECK_LIB([m],[ceil])
 
 # Check for required zlib library.
-AC_CHECK_LIB([z], [crc32], [], [AC_MSG_ERROR([cannot find library zlib, install zlib package or provide library path e.g. ./configure LDFLAGS='-L/<PATH_TO_LIB>'])])
+AC_CHECK_LIB([z], [crc32], [], [AC_MSG_ERROR([cannot find library zlib, install zlib package or provide library path e.g. ./configure LDFLAGS='-L/<PATH_TO_LIB> -Wl,-rpath,<PATH_TO_LIB>'])])
 
 # Check for required xattr library, otherwise we cannot get Lustre stripe information and FSQ library.
-AC_CHECK_LIB([attr], [fgetxattr], [], [AC_MSG_ERROR([cannot find library libattr, install libattr package or provide library path e.g. ./configure LDFLAGS='-L/<PATH_TO_LIB>'])])
+AC_CHECK_LIB([attr], [fgetxattr], [], [AC_MSG_ERROR([cannot find library libattr, install libattr package or provide library path e.g. ./configure LDFLAGS='-L/<PATH_TO_LIB> -Wl,-rpath,<PATH_TO_LIB>'])])
 
 # Checks for header files.
 AC_CHECK_HEADERS([fcntl.h stdint.h stdlib.h string.h strings.h sys/param.h sys/time.h unistd.h pthread.h float.h attr/xattr.h arpa/inet.h limits.h netdb.h netinet/in.h sys/socket.h])
