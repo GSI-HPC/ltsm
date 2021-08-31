@@ -340,8 +340,8 @@ lustre stripe count                        : 1
 
 ```
 
-# Lustre TSM File Storage Queue Daemon
-The goal of the Lustre TSM File System Daemon (short ltsmfsq) is to
+# Lustre TSM File Storage Queue
+The goal of the Lustre TSM File Storage Queue (short ltsmfsq) is to
 efficiently and robustly transfer data to a Lustre file system and
 additionally archive the data seamlessly on a TSM server.
 A deployed Lustre file system is frequently shared and accessed by thousands of users and
