@@ -648,8 +648,7 @@ static struct fsq_action_item_t* create_fsq_item(const size_t bytes_recv_total,
 	return fsq_action_item;
 }
 
-static int init_fsq_local(char **fpath_local, int *fd_local,
-			  const struct fsq_session_t *fsq_session)
+static int init_fsq_local(char *fpath_local, int *fd_local, const struct fsq_session_t *fsq_session)
 {
 	int rc;
 	char hl[DSM_MAX_HL_LENGTH + 1] = {0};
@@ -664,45 +663,36 @@ static int init_fsq_local(char **fpath_local, int *fd_local,
 		return rc;
 	}
 
-	const size_t L = strlen(opt.o_local_mount) + strlen(hl) + strlen(ll);
-	const size_t L_MAX = PATH_MAX + DSM_MAX_HL_LENGTH +
-		DSM_MAX_LL_LENGTH + 1;
+	const size_t L = strlen(opt.o_local_mount) + strlen(hl) + strlen(ll) + 2;
 	if (L > PATH_MAX) {
 		rc = -ENAMETOOLONG;
-		CT_ERROR(rc, "fpath name '%s/%s/%s'",
-			 opt.o_local_mount, hl, ll);
+		CT_ERROR(rc, "fpath name '%s/%s/%s'", opt.o_local_mount, hl, ll);
 		return rc;
 	}
-	/* This twist is necessary to avoid error:
-	   ‘%s’ directive output may be truncated writing up to ... */
-	*fpath_local = calloc(1, L_MAX);
-	if (!*fpath_local) {
-		rc = -errno;
-		CT_ERROR(rc, "calloc");
-		return rc;
-	}
-	snprintf(*fpath_local, L_MAX, "%s/%s", opt.o_local_mount, hl);
+
+	memset(fpath_local, 0, PATH_MAX + 1);
+	snprintf_trunc(fpath_local, PATH_MAX, "%s/%s", opt.o_local_mount, hl);
 
 	/* Make sure the directory exists where to store the file. */
-	rc = mkdir_p(*fpath_local, S_IRWXU | S_IRGRP | S_IXGRP
+	rc = mkdir_p(fpath_local, S_IRWXU | S_IRGRP | S_IXGRP
 		     | S_IROTH | S_IXOTH);
-	CT_DEBUG("[rc=%d] mkdir_p '%s'", rc, *fpath_local);
+	CT_DEBUG("[rc=%d] mkdir_p '%s'", rc, fpath_local);
 	if (rc) {
-		CT_ERROR(rc, "mkdir_p '%s'", *fpath_local);
+		CT_ERROR(rc, "mkdir_p '%s'", fpath_local);
 		return rc;
 	}
 
-	snprintf(*fpath_local + strlen(*fpath_local), PATH_MAX, "/%s", ll);
+	snprintf(fpath_local + strlen(fpath_local), PATH_MAX, "/%s", ll);
 
-	*fd_local = open(*fpath_local, O_WRONLY | O_EXCL | O_CREAT,
+	*fd_local = open(fpath_local, O_WRONLY | O_EXCL | O_CREAT,
 			 S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP);
 	/* Note, if file exists, then *fd_local < 0 and errno EEXISTS is
 	   set. This makes sure we do NOT overwrite existing files. To
 	   allow overwriting replace O_EXCL with O_TRUNC. */
-	CT_DEBUG("[fd=%d] open '%s'", *fd_local, *fpath_local);
+	CT_DEBUG("[fd=%d] open '%s'", *fd_local, fpath_local);
 	if (*fd_local < 0) {
 		rc = -errno;
-		CT_ERROR(rc, "open '%s'", *fpath_local);
+		CT_ERROR(rc, "open '%s'", fpath_local);
 		return rc;
 	}
 
@@ -823,7 +813,7 @@ static void *thread_sock_client(void *arg)
 {
 	int rc;
 	struct fsq_session_t fsq_session;
-	char *fpath_local = NULL;
+	char fpath_local[PATH_MAX + 1] = {0};
 	int fd_local = -1;
 	int *fd_ptr = (int *)arg;
 
@@ -874,7 +864,7 @@ static void *thread_sock_client(void *arg)
 		if (fsq_session.fsq_packet.state & FSQ_DISCONNECT)
 			goto out;
 
-		rc = init_fsq_local(&fpath_local, &fd_local, &fsq_session);
+		rc = init_fsq_local(fpath_local, &fd_local, &fsq_session);
 		if (rc) {
 			CT_ERROR(rc, "init_fsq_local");
 			goto out;
@@ -945,18 +935,9 @@ static void *thread_sock_client(void *arg)
 		}
 		fd_local = -1;
 
-		if (fpath_local) {
-			free(fpath_local);
-			fpath_local = NULL;
-		}
 	} while (fsq_session.fsq_packet.state != FSQ_DISCONNECT);
 
 out:
-	if (fpath_local) {
-		free(fpath_local);
-		fpath_local = NULL;
-	}
-
 	if (!(fd_local < 0))
 		close(fd_local);
 
