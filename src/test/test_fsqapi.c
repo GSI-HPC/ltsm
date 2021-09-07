@@ -133,7 +133,7 @@ void test_fsq_xattr(CuTest *tc)
 
 		struct fsq_action_item_t fsq_action_item;
 		memset(&fsq_action_item, 0, sizeof(struct fsq_action_item_t));
-		strncpy(fsq_action_item.fpath_local, fpath[r], PATH_MAX);
+		strcpy(fsq_action_item.fpath_local, fpath[r]);
 		fsq_action_state = fsq_action_states[rand() %
 						     (sizeof(fsq_action_states) /
 						      sizeof(fsq_action_states[0]))];

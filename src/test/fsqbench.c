@@ -53,6 +53,7 @@ struct options {
 	char		o_password[DSM_MAX_VERIFIER_LENGTH + 1];
 	char		o_fsname[DSM_MAX_FSNAME_LENGTH + 1];
 	char		o_fpath[PATH_MAX + 1];
+	int		o_storage_dest;
 };
 
 static struct options opt = {
@@ -66,6 +67,7 @@ static struct options opt = {
 	.o_password	  = {0},
 	.o_fpath	  = {0},
 	.o_fsname	  = {0},
+	.o_storage_dest   = FSQ_STORAGE_NULL
 };
 
 static void usage(const char *cmd_name, const int rc)
@@ -77,12 +79,13 @@ static void usage(const char *cmd_name, const int rc)
 		"\t-d, --wdelay <int> [default: %u]\n"
 		"\t-f, --fsname <string> [default: '%s']\n"
 		"\t-a, --fpath <string> [default: '%s']\n"
+		"\t-o, --storagedest {null, local, lustre, tsm, lustre_tsm} [default: '%s']\n"
 		"\t-n, --node <string>\n"
 		"\t-p, --password <string>\n"
 		"\t-s, --servername <string>\n"
 		"\t-v, --verbose {error, warn, message, info, debug} [default: message]\n"
 		"\t-h, --help\n"
-		"version: %s © 2017 by GSI Helmholtz Centre for Heavy Ion Research\n",
+		"version: %s © 2021 by GSI Helmholtz Centre for Heavy Ion Research\n",
 		cmd_name,
 		opt.o_filesize,
 		opt.o_nfiles,
@@ -90,6 +93,7 @@ static void usage(const char *cmd_name, const int rc)
 		opt.o_wdelay,
 		DEFAULT_FSSPACE_NAME,
 		DEFAULT_FPATH_NAME,
+		FSQ_STORAGE_DEST_STR(opt.o_storage_dest),
 		PACKAGE_VERSION);
 
 	exit(rc);
@@ -127,6 +131,7 @@ static int parseopts(int argc, char *argv[])
 		{"wdelay",	required_argument, 0, 'd'},
 		{"fsname",	required_argument, 0, 'f'},
 		{"fpath",	required_argument, 0, 'a'},
+		{"storagedest",	required_argument, 0, 'o'},
 		{"node",	required_argument, 0, 'n'},
 		{"password",	required_argument, 0, 'p'},
 		{"servername",	required_argument, 0, 's'},
@@ -135,7 +140,7 @@ static int parseopts(int argc, char *argv[])
 		{0, 0, 0, 0}
 	};
 	int c;
-	while ((c = getopt_long(argc, argv, "z:b:t:d:f:a:n:p:s:v:h",
+	while ((c = getopt_long(argc, argv, "z:b:t:d:f:a:o:n:p:s:v:h",
 				long_opts, NULL)) != -1) {
 		switch (c) {
 		case 'z': {
@@ -160,6 +165,24 @@ static int parseopts(int argc, char *argv[])
 		}
 		case 'a': {
 			strncpy(opt.o_fpath, optarg, PATH_MAX);
+			break;
+		}
+		case 'o': {
+			if (OPTNCMP("null", optarg))
+				opt.o_storage_dest = FSQ_STORAGE_NULL;
+			else if (OPTNCMP("local", optarg))
+				opt.o_storage_dest = FSQ_STORAGE_LOCAL;
+			else if (OPTNCMP("lustre", optarg))
+				opt.o_storage_dest = FSQ_STORAGE_LUSTRE;
+			else if (OPTNCMP("tsm", optarg))
+				opt.o_storage_dest = FSQ_STORAGE_TSM;
+			else if (OPTNCMP("lustre_tsm", optarg))
+				opt.o_storage_dest = FSQ_STORAGE_LUSTRE_TSM;
+			else {
+				fprintf(stdout, "wrong argument for -o, "
+					"--storagedest='%s'\n", optarg);
+				usage(argv[0], 1);
+			}
 			break;
 		}
 		case 'n': {
@@ -242,7 +265,8 @@ static void *perform_task(void *thread_data)
 		size_t pos = rand() % opt.o_filesize;
 		memcpy(buf, buf + pos, opt.o_filesize - pos);
 
-		rc = fsq_fopen(opt.o_fsname, fpath, NULL, session);
+		rc = fsq_fdopen(opt.o_fsname, fpath, NULL, opt.o_storage_dest,
+				session);
 		CT_DEBUG("[rc=%d] fsq_fopen '%s' '%s' %p",
 			 rc, opt.o_fsname, fpath, session);
 		if (rc)

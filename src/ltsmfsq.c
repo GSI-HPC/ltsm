@@ -13,7 +13,7 @@
  */
 
 /*
- * Copyright (c) 2019-2020 GSI Helmholtz Centre for Heavy Ion Research
+ * Copyright (c) 2019-2021 GSI Helmholtz Centre for Heavy Ion Research
  */
 
 #ifndef _GNU_SOURCE
@@ -648,7 +648,27 @@ static struct fsq_action_item_t* create_fsq_item(const size_t bytes_recv_total,
 	return fsq_action_item;
 }
 
-static int init_fsq_local(char *fpath_local, int *fd_local, const struct fsq_session_t *fsq_session)
+
+static int init_fsq_dev_null(char *fpath_local, int *fd_local,
+			     const struct fsq_session_t *fsd_session)
+{
+	int rc = 0;
+
+	/* strlen("/dev/null") + '\0' = 9 + 1. */
+	snprintf_trunc(fpath_local, 10, "%s", "/dev/null");
+
+	*fd_local = open(fpath_local, O_WRONLY);
+	CT_DEBUG("[fd=%d] open '%s'", *fd_local, fpath_local);
+	if (*fd_local < 0) {
+		rc = -errno;
+		CT_ERROR(rc, "open '%s'", fpath_local);
+	}
+
+	return rc;
+}
+
+static int init_fsq_local(char *fpath_local, int *fd_local,
+			  const struct fsq_session_t *fsq_session)
 {
 	int rc;
 	char hl[DSM_MAX_HL_LENGTH + 1] = {0};
@@ -699,8 +719,16 @@ static int init_fsq_local(char *fpath_local, int *fd_local, const struct fsq_ses
 	return rc;
 }
 
-static int fsq_recv_data(int *fd_local,
-			 struct fsq_session_t *fsq_session,
+static int init_fsq_storage(char *fpath_local, int *fd_local,
+			    const struct fsq_session_t *fsq_session)
+{
+	if (fsq_session->fsq_packet.fsq_info.fsq_storage_dest == FSQ_STORAGE_NULL)
+		return init_fsq_dev_null(fpath_local, fd_local, fsq_session);
+	else
+		return init_fsq_local(fpath_local, fd_local, fsq_session);
+}
+
+static int fsq_recv_data(int *fd_local, struct fsq_session_t *fsq_session,
 			 size_t *bytes_recv_total, size_t *bytes_send_total)
 {
 	int rc;
@@ -864,9 +892,9 @@ static void *thread_sock_client(void *arg)
 		if (fsq_session.fsq_packet.state & FSQ_DISCONNECT)
 			goto out;
 
-		rc = init_fsq_local(fpath_local, &fd_local, &fsq_session);
+		rc = init_fsq_storage(fpath_local, &fd_local, &fsq_session);
 		if (rc) {
-			CT_ERROR(rc, "init_fsq_local");
+			CT_ERROR(rc, "init_fsq_storage");
 			goto out;
 		}
 
@@ -903,9 +931,13 @@ static void *thread_sock_client(void *arg)
 			fsq_info.fpath,
 			bytes_recv_total, time_now() - ts);
 
-		rc = xattr_set_fsq(fpath_local,
-				   STATE_FSQ_COPY_DONE,
-				   archive_id,
+		/* Storage destination is FSQ_STORAGE_NULL, thus there
+		   is no need to set extended attribute and leverage queue
+		   for processing a fsq_action_item. */
+		if (!strncmp(fpath_local, "/dev/null", 9))
+			goto finish_dev_null;
+
+		rc = xattr_set_fsq(fpath_local, STATE_FSQ_COPY_DONE, archive_id,
 				   &fsq_info);
 		if (rc)
 			goto out;
@@ -926,6 +958,7 @@ static void *thread_sock_client(void *arg)
 			goto out;
 		}
 
+	finish_dev_null:
 		rc = close(fd_local);
 		CT_DEBUG("[rc=%d,fd=%d] close", rc, fd_local);
 		if (rc < 0) {
