@@ -80,11 +80,11 @@ enum fsq_protocol_state_t {
 };
 
 enum fsq_storage_dest_t {
-	FSQ_STORAGE_LOCAL      = 0x1,
-	FSQ_STORAGE_LUSTRE     = 0x2,
-	FSQ_STORAGE_LUSTRE_TSM = 0x4,
-	FSQ_STORAGE_TSM	       = 0x8,
-        FSQ_STORAGE_NULL       = 0x10
+        FSQ_STORAGE_NULL       = 0,
+	FSQ_STORAGE_LOCAL      = 1,
+	FSQ_STORAGE_LUSTRE     = 2,
+	FSQ_STORAGE_TSM	       = 3,
+	FSQ_STORAGE_LUSTRE_TSM = 4
 };
 
 struct fsq_login_t {
