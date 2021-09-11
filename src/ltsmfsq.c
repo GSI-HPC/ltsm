@@ -634,7 +634,7 @@ static struct fsq_action_item_t* create_fsq_item(const size_t bytes_recv_total,
 		return NULL;
 	}
 
-	fsq_action_item->fsq_action_state = STATE_FSQ_COPY_DONE;
+	fsq_action_item->fsq_action_state = STATE_LOCAL_COPY_DONE;
 	fsq_action_item->size = bytes_recv_total;
 	memcpy(&fsq_action_item->fsq_info, fsq_info, sizeof(struct fsq_info_t));
 	fsq_action_item->ts[0] = time_now();
@@ -934,10 +934,10 @@ static void *thread_sock_client(void *arg)
 		/* Storage destination is FSQ_STORAGE_NULL, thus there
 		   is no need to set extended attribute and leverage queue
 		   for processing a fsq_action_item. */
-		if (!strncmp(fpath_local, "/dev/null", 9))
+		if (fsq_info.fsq_storage_dest == FSQ_STORAGE_NULL)
 			goto finish_dev_null;
 
-		rc = xattr_set_fsq(fpath_local, STATE_FSQ_COPY_DONE, archive_id,
+		rc = xattr_set_fsq(fpath_local, STATE_LOCAL_COPY_DONE, archive_id,
 				   &fsq_info);
 		if (rc)
 			goto out;
@@ -1068,15 +1068,14 @@ static void re_enqueue(const char *dpath)
 								  fpath_local,
 								  archive_id,
 								  st.st_uid,
-								  st.st_uid);
+								  st.st_gid);
 				if (!fsq_action_item) {
 					CT_WARN("create_fsq_item '%s' failed", fpath_local);
 					break;
 				}
-				if (fsq_action_state & STATE_FILE_OMITTED) {
-					fsq_action_state = STATE_FSQ_COPY_DONE;
-				}
-				fsq_action_item->fsq_action_state = fsq_action_state;
+				/* Files having extended attribute OMITTED, start over in state machine. */
+				if (fsq_action_state & STATE_FILE_OMITTED)
+					fsq_action_item->fsq_action_state = STATE_LOCAL_COPY_DONE;
 
 				rc = enqueue_fsq_item(fsq_action_item);
 				if (rc) {
@@ -1308,12 +1307,82 @@ static int archive_action(struct fsq_action_item_t *fsq_action_item)
 	return rc;
 }
 
+static int finalize_fsq_action_item(struct fsq_action_item_t *fsq_action_item)
+{
+	int rc = -EINPROGRESS;
+	enum fsq_action_state_t fsq_action_state = fsq_action_item->fsq_action_state;
+	bool storage_dest_reached =
+		(fsq_action_item->fsq_info.fsq_storage_dest == FSQ_STORAGE_LOCAL &&
+		 fsq_action_item->fsq_action_state == STATE_LOCAL_COPY_DONE) ||
+		(fsq_action_item->fsq_info.fsq_storage_dest == FSQ_STORAGE_LUSTRE &&
+		 fsq_action_item->fsq_action_state == STATE_LUSTRE_COPY_DONE) ||
+		((fsq_action_item->fsq_info.fsq_storage_dest == FSQ_STORAGE_TSM ||
+		  fsq_action_item->fsq_info.fsq_storage_dest == FSQ_STORAGE_LUSTRE_TSM) &&
+		 fsq_action_item->fsq_action_state == STATE_TSM_ARCHIVE_DONE);
+
+	if (storage_dest_reached) {
+		rc = xattr_update_fsq_state(fsq_action_item, STATE_FILE_KEEP);
+		CT_DEBUG("[rc=%d] setting state from '%s' to '%s'",
+			 rc,
+			 FSQ_ACTION_STR(fsq_action_state),
+			 FSQ_ACTION_STR(STATE_FILE_KEEP));
+		if (rc) {
+			fsq_action_item->action_error_cnt++;
+			fsq_action_item->fsq_action_state = fsq_action_state;
+			CT_WARN("setting state from '%s' to '%s' failed, "
+				"going back to state '%s'",
+				FSQ_ACTION_STR(fsq_action_state),
+				FSQ_ACTION_STR(STATE_FILE_KEEP),
+				FSQ_ACTION_STR(fsq_action_item->fsq_action_state));
+		} else {
+			CT_MESSAGE("file '%s' of size %zu stored at target destination '%s' in %.3f seconds",
+				   fsq_action_item->fpath_local,
+				   fsq_action_item->size,
+				   FSQ_STORAGE_DEST_STR(fsq_action_item->fsq_info.fsq_storage_dest),
+				   fsq_action_item->ts[2] - fsq_action_item->ts[1]);
+
+			/* Remove file from Lustre file system. */
+			if (fsq_action_item->fsq_info.fsq_storage_dest == FSQ_STORAGE_TSM &&
+			    fsq_action_item->fsq_action_state == STATE_TSM_ARCHIVE_DONE) {
+				rc = unlink(fsq_action_item->fsq_info.fpath);
+				CT_DEBUG("[rc=%d] unlink '%s'", rc, fsq_action_item->fsq_info.fpath);
+				if (rc < 0) {
+					rc = -errno;
+					CT_ERROR(rc, "unlink '%s'", fsq_action_item->fsq_info.fpath);
+
+					return rc;
+				} else {
+					CT_INFO("unlink '%s' and action item %p",
+						fsq_action_item->fsq_info.fpath, fsq_action_item);
+				}
+			}
+
+			/* Remove file from local storage. */
+			if (fsq_action_item->fsq_info.fsq_storage_dest != FSQ_STORAGE_LOCAL) {
+				rc = unlink(fsq_action_item->fpath_local);
+				CT_DEBUG("[rc=%d] unlink '%s'", rc, fsq_action_item->fpath_local);
+				if (rc < 0) {
+					rc = -errno;
+					CT_ERROR(rc, "unlink '%s'", fsq_action_item->fpath_local);
+
+					return rc;
+				} else {
+					CT_INFO("unlink '%s' and action item %p",
+						fsq_action_item->fpath_local, fsq_action_item);
+				}
+			}
+		}
+	}
+
+	return rc;
+}
+
 /*
   The following state diagram is implemented.
 
-  +---------------------+        +-----------------------+
-->| STATE_FSQ_COPY_DONE +------->+ STATE_LUSTRE_COPY_RUN |
-  +--------+------------+        +------------+----------+
+  +-----------------------+      +-----------------------+
+->| STATE_LOCAL_COPY_DONE +----->+ STATE_LUSTRE_COPY_RUN |
+  +--------+--------------+      +------------+----------+
            ^                                  |
            |   +-------------------------+    |
            +---+ STATE_LUSTRE_COPY_ERROR +<---+
@@ -1335,12 +1404,14 @@ static int process_fsq_action_item(struct fsq_action_item_t *fsq_action_item)
 {
 	int rc = 0;
 
-	CT_DEBUG("process_fsq_action_item %p, state '%s', fs '%s', fpath '%s', size %zu, "
-		 "errors %d, ts[0] %.3f, ts[1] %.3f, ts[2] %.3f, queue size %lu",
+	CT_DEBUG("process_fsq_action_item %p, state '%s', fs '%s', fpath '%s', "
+		 "storage dest '%s', size %zu, errors %d, "
+		 "ts[0] %.3f, ts[1] %.3f, ts[2] %.3f, queue size %lu",
 		 fsq_action_item,
 		 FSQ_ACTION_STR(fsq_action_item->fsq_action_state),
 		 fsq_action_item->fsq_info.fs,
 		 fsq_action_item->fsq_info.fpath,
+		 FSQ_STORAGE_DEST_STR(fsq_action_item->fsq_info.fsq_storage_dest),
 		 fsq_action_item->size,
 		 fsq_action_item->action_error_cnt,
 		 fsq_action_item->ts[0],
@@ -1357,20 +1428,27 @@ static int process_fsq_action_item(struct fsq_action_item_t *fsq_action_item)
 		return 0;
 	}
 
+	rc = finalize_fsq_action_item(fsq_action_item);
+	if (!rc) {
+		free(fsq_action_item);
+		return 0;
+	}
+
 	switch (fsq_action_item->fsq_action_state) {
-	case STATE_FSQ_COPY_DONE: {
+	case STATE_LOCAL_COPY_DONE: {
+
 		rc = xattr_update_fsq_state(fsq_action_item,
 					    STATE_LUSTRE_COPY_RUN);
 		CT_DEBUG("[rc=%d] setting state from '%s' to '%s'",
 			 rc,
-			 FSQ_ACTION_STR(STATE_FSQ_COPY_DONE),
+			 FSQ_ACTION_STR(STATE_LOCAL_COPY_DONE),
 			 FSQ_ACTION_STR(STATE_LUSTRE_COPY_RUN));
 		if (rc) {
 			fsq_action_item->action_error_cnt++;
-			fsq_action_item->fsq_action_state = STATE_FSQ_COPY_DONE;
+			fsq_action_item->fsq_action_state = STATE_LOCAL_COPY_DONE;
 			CT_WARN("setting state from '%s' to '%s' failed, "
 				"going back to state '%s'",
-				FSQ_ACTION_STR(STATE_FSQ_COPY_DONE),
+				FSQ_ACTION_STR(STATE_LOCAL_COPY_DONE),
 				FSQ_ACTION_STR(STATE_LUSTRE_COPY_RUN),
 				FSQ_ACTION_STR(fsq_action_item->fsq_action_state));
 			break;
@@ -1401,10 +1479,10 @@ static int process_fsq_action_item(struct fsq_action_item_t *fsq_action_item)
 			 FSQ_ACTION_STR(STATE_LUSTRE_COPY_DONE));
 		if (rc) {
 			fsq_action_item->action_error_cnt++;
-			fsq_action_item->fsq_action_state = STATE_FSQ_COPY_DONE;
+			fsq_action_item->fsq_action_state = STATE_LOCAL_COPY_DONE;
 			CT_WARN("setting state from '%s' to '%s' failed, "
 				"going back to state '%s'",
-				FSQ_ACTION_STR(STATE_FSQ_COPY_DONE),
+				FSQ_ACTION_STR(STATE_LOCAL_COPY_DONE),
 				FSQ_ACTION_STR(STATE_LUSTRE_COPY_DONE),
 				FSQ_ACTION_STR(fsq_action_item->fsq_action_state));
 			break;
@@ -1422,7 +1500,7 @@ static int process_fsq_action_item(struct fsq_action_item_t *fsq_action_item)
 			fsq_action_item->fpath_local,
 			fsq_action_item->fsq_info.fpath);
 		rc = xattr_update_fsq_state(fsq_action_item,
-					    STATE_FSQ_COPY_DONE);
+					    STATE_LOCAL_COPY_DONE);
 		if (rc)
 			fsq_action_item->action_error_cnt++;
 		break;
@@ -1529,22 +1607,7 @@ static int process_fsq_action_item(struct fsq_action_item_t *fsq_action_item)
 		break;
 	}
 	case STATE_TSM_ARCHIVE_DONE: {
-		CT_MESSAGE("file '%s' of size %zu in queue successfully copied "
-			   "and archived in %.3f seconds",
-			   fsq_action_item->fpath_local,
-			   fsq_action_item->size,
-			   fsq_action_item->ts[2] - fsq_action_item->ts[1]);
-		rc = unlink(fsq_action_item->fpath_local);
-		CT_DEBUG("[rc=%d] unlink '%s'", rc, fsq_action_item->fpath_local);
-		if (rc < 0) {
-			rc = -errno;
-			CT_ERROR(rc, "unlink '%s'", fsq_action_item->fpath_local);
-			break;
-		}
-		CT_INFO("unlink '%s' and remove action item %p",
-			fsq_action_item->fpath_local, fsq_action_item);
-		free(fsq_action_item);
-		return 0;
+		break;
 	}
 	case STATE_FILE_OMITTED: {
 		CT_MESSAGE("file '%s' is omitted and removed from queue",

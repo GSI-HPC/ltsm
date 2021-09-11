@@ -75,7 +75,7 @@ void test_fsq_xattr(CuTest *tc)
 		CuAssertIntEquals(tc, 0, rc);
 
 		const uint32_t fsq_action_states[] = {
-			STATE_FSQ_COPY_DONE,
+			STATE_LOCAL_COPY_DONE,
 			STATE_LUSTRE_COPY_RUN,
 			STATE_LUSTRE_COPY_ERROR,
 			STATE_LUSTRE_COPY_DONE,
