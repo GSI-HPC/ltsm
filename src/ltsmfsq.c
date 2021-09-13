@@ -1073,16 +1073,18 @@ static void re_enqueue(const char *dpath)
 					CT_WARN("create_fsq_item '%s' failed", fpath_local);
 					break;
 				}
-				/* Files having extended attribute OMITTED, start over in state machine. */
-				if (fsq_action_state & STATE_FILE_OMITTED)
+				/* Set state of omitted file back to
+				   STATE_LOCAL_COPY_DONE and start over. */
+				if (fsq_action_state & STATE_FILE_OMITTED) {
 					fsq_action_item->fsq_action_state = STATE_LOCAL_COPY_DONE;
 
-				rc = enqueue_fsq_item(fsq_action_item);
-				if (rc) {
-					free(fsq_action_item);
-					break;
+					rc = enqueue_fsq_item(fsq_action_item);
+					if (rc) {
+						free(fsq_action_item);
+						break;
+					}
+					CT_INFO("re-enqueue '%s'", fpath_local);
 				}
-				CT_INFO("re-enqueue '%s'", fpath_local);
 			}
 			break;
 		}
