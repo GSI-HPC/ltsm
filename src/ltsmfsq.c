@@ -725,6 +725,13 @@ static int init_fsq_local(char *fpath_local, int *fd_local,
 static int init_fsq_storage(char *fpath_local, int *fd_local,
 			    const struct fsq_session_t *fsq_session)
 {
+	if (fsq_session->fsq_packet.fsq_info.fsq_storage_dest == FSQ_STORAGE_TSM)
+	{
+		CT_ERROR(-ENOSYS, "storage destination '%s' not implemented",
+			 FSQ_STORAGE_DEST_STR(FSQ_STORAGE_TSM));
+		return -ENOSYS;
+	}
+
 	if (fsq_session->fsq_packet.fsq_info.fsq_storage_dest == FSQ_STORAGE_NULL)
 		return init_fsq_dev_null(fpath_local, fd_local, fsq_session);
 	else
