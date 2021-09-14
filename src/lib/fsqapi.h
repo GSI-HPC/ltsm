@@ -133,7 +133,7 @@ struct fsq_action_item_t {
 	char fpath_local[PATH_MAX + 1];
 	size_t size;
 	size_t progress_size;
-	double ts[3];
+	double ts[4];
 	size_t action_error_cnt;
 	int archive_id;
 	uid_t uid;

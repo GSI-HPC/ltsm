@@ -584,7 +584,7 @@ static int enqueue_fsq_item(struct fsq_action_item_t *fsq_action_item)
 		rc = -EFAILED;
 		CT_ERROR(rc, "failed enqueue operation: "
 			 "%p, state '%s', fs '%s', fpath '%s', size %zu, "
-			 "errors %d, ts[0] %.3f, ts[1] %.3f, ts[2] %.3f, queue size %lu",
+			 "errors %d, ts[0] %.3f, ts[1] %.3f, ts[2] %.3f, ts[3] %.3f, queue size %lu",
 			 fsq_action_item,
 			 FSQ_ACTION_STR(fsq_action_item->fsq_action_state),
 			 fsq_action_item->fsq_info.fs,
@@ -594,13 +594,14 @@ static int enqueue_fsq_item(struct fsq_action_item_t *fsq_action_item)
 			 fsq_action_item->ts[0],
 			 fsq_action_item->ts[1],
 			 fsq_action_item->ts[2],
+			 fsq_action_item->ts[3],
 			 queue_size(&queue));
 
 		free(fsq_action_item);
 	} else
 		CT_INFO("enqueue operation: "
 			"%p, state '%s', fs '%s', fpath '%s', size %zu, "
-			"errors %d, ts[0] %.3f, ts[1] %.3f, ts[2] %.3f, queue size %lu",
+			"errors %d, ts[0] %.3f, ts[1] %.3f, ts[2] %.3f, ts[3] %.3f, queue size %lu",
 			fsq_action_item,
 			FSQ_ACTION_STR(fsq_action_item->fsq_action_state),
 			fsq_action_item->fsq_info.fs,
@@ -610,6 +611,7 @@ static int enqueue_fsq_item(struct fsq_action_item_t *fsq_action_item)
 			fsq_action_item->ts[0],
 			fsq_action_item->ts[1],
 			fsq_action_item->ts[2],
+			fsq_action_item->ts[3],
 			queue_size(&queue));
 
 	/* Free the lock of the queue. */
@@ -624,7 +626,7 @@ static int enqueue_fsq_item(struct fsq_action_item_t *fsq_action_item)
 static struct fsq_action_item_t* create_fsq_item(const size_t bytes_recv_total,
 						 const struct fsq_info_t *fsq_info,
 						 const char *fpath_local, const int archive_id,
-						 const uid_t uid, const gid_t gid)
+						 const uid_t uid, const gid_t gid, const double ts)
 {
 	struct fsq_action_item_t *fsq_action_item;
 
@@ -637,9 +639,10 @@ static struct fsq_action_item_t* create_fsq_item(const size_t bytes_recv_total,
 	fsq_action_item->fsq_action_state = STATE_LOCAL_COPY_DONE;
 	fsq_action_item->size = bytes_recv_total;
 	memcpy(&fsq_action_item->fsq_info, fsq_info, sizeof(struct fsq_info_t));
-	fsq_action_item->ts[0] = time_now();
-	fsq_action_item->ts[1] = 0;
+	fsq_action_item->ts[0] = ts;
+	fsq_action_item->ts[1] = time_now();
 	fsq_action_item->ts[2] = 0;
+	fsq_action_item->ts[3] = 0;
 	strncpy(fsq_action_item->fpath_local, fpath_local, PATH_MAX);
 	fsq_action_item->archive_id = archive_id;
 	fsq_action_item->uid = uid;
@@ -948,7 +951,7 @@ static void *thread_sock_client(void *arg)
 		fsq_action_item = create_fsq_item(bytes_recv_total,
 						  &fsq_info,
 						  fpath_local, archive_id,
-						  uid, gid);
+						  uid, gid, ts);
 		if (fsq_action_item == NULL)
 			goto out;
 
@@ -1068,7 +1071,8 @@ static void re_enqueue(const char *dpath)
 								  fpath_local,
 								  archive_id,
 								  st.st_uid,
-								  st.st_gid);
+								  st.st_gid,
+								  0);
 				if (!fsq_action_item) {
 					CT_WARN("create_fsq_item '%s' failed", fpath_local);
 					break;
@@ -1337,11 +1341,19 @@ static int finalize_fsq_action_item(struct fsq_action_item_t *fsq_action_item)
 				FSQ_ACTION_STR(STATE_FILE_KEEP),
 				FSQ_ACTION_STR(fsq_action_item->fsq_action_state));
 		} else {
+			double ts = 0;
+			if (fsq_action_item->fsq_info.fsq_storage_dest == FSQ_STORAGE_LOCAL)
+				ts = fsq_action_item->ts[1] - fsq_action_item->ts[0];
+			else if (fsq_action_item->fsq_info.fsq_storage_dest == FSQ_STORAGE_LUSTRE)
+				ts = fsq_action_item->ts[2] - fsq_action_item->ts[0];
+			else if (fsq_action_item->fsq_info.fsq_storage_dest == FSQ_STORAGE_LUSTRE_TSM ||
+				 fsq_action_item->fsq_info.fsq_storage_dest == FSQ_STORAGE_TSM)
+				ts = fsq_action_item->ts[3] - fsq_action_item->ts[0];
 			CT_MESSAGE("file '%s' of size %zu stored at target destination '%s' in %.3f seconds",
 				   fsq_action_item->fpath_local,
 				   fsq_action_item->size,
 				   FSQ_STORAGE_DEST_STR(fsq_action_item->fsq_info.fsq_storage_dest),
-				   fsq_action_item->ts[2] - fsq_action_item->ts[1]);
+				   ts);
 
 			/* Remove file from Lustre file system. */
 			if (fsq_action_item->fsq_info.fsq_storage_dest == FSQ_STORAGE_TSM &&
@@ -1489,7 +1501,7 @@ static int process_fsq_action_item(struct fsq_action_item_t *fsq_action_item)
 				FSQ_ACTION_STR(fsq_action_item->fsq_action_state));
 			break;
 		}
-		fsq_action_item->ts[1] = time_now();
+		fsq_action_item->ts[2] = time_now();
 		break;
 	}
 	case STATE_LUSTRE_COPY_RUN: {
@@ -1587,12 +1599,12 @@ static int process_fsq_action_item(struct fsq_action_item_t *fsq_action_item)
 					FSQ_ACTION_STR(fsq_action_item->fsq_action_state));
 				break;
 			}
-			fsq_action_item->ts[2] = time_now();
+			fsq_action_item->ts[3] = time_now();
 			CT_MESSAGE("file '%s' of size %zu in queue archived "
 				   "in %.3f seconds",
 				   fsq_action_item->fpath_local,
 				   fsq_action_item->size,
-				   fsq_action_item->ts[2] - fsq_action_item->ts[1]);
+				   fsq_action_item->ts[3] - fsq_action_item->ts[2]);
 		}
 
 		/* Stay in state STATE_TSM_ARCHIVE_RUN. */
@@ -1650,7 +1662,7 @@ static void *thread_queue_consumer(void *data)
 			rc = -EFAILED;
 			CT_ERROR(rc, "failed dequeue operation: "
 				 "%p, state '%s', fs '%s', fpath '%s', size %zu, "
-				 "errors %d, ts[0] %.3f, ts[1] %.3f, ts[2] %.3f, queue size %lu",
+				 "errors %d, ts[0] %.3f, ts[1] %.3f, ts[2] %.3f, ts[3] %.3f, queue size %lu",
 				 fsq_action_item,
 				 FSQ_ACTION_STR(fsq_action_item->fsq_action_state),
 				 fsq_action_item->fsq_info.fs,
@@ -1660,11 +1672,12 @@ static void *thread_queue_consumer(void *data)
 				 fsq_action_item->ts[0],
 				 fsq_action_item->ts[1],
 				 fsq_action_item->ts[2],
+				 fsq_action_item->ts[3],
 				 queue_size(&queue));
 		} else {
 			CT_INFO("dequeue operation: "
 				"%p, state '%s', fs '%s', fpath '%s', size %zu, "
-				"errors %d, ts[0] %.3f, ts[1] %.3f, ts[2] %.3f, queue size %lu",
+				"errors %d, ts[0] %.3f, ts[1] %.3f, ts[2] %.3f, ts[3] %.3f, queue size %lu",
 				fsq_action_item,
 				FSQ_ACTION_STR(fsq_action_item->fsq_action_state),
 				fsq_action_item->fsq_info.fs,
@@ -1674,6 +1687,7 @@ static void *thread_queue_consumer(void *data)
 				fsq_action_item->ts[0],
 				fsq_action_item->ts[1],
 				fsq_action_item->ts[2],
+				fsq_action_item->ts[3],
 				queue_size(&queue));
 
 			rc = process_fsq_action_item(fsq_action_item);
