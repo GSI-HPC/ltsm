@@ -171,6 +171,10 @@ static int __fsq_fopen(const char *fs, const char *fpath, const char *desc,
 		.fsq_storage_dest  = fsq_storage_dest
 	};
 
+	/* Not yet implemented. */
+	if (fsq_storage_dest == FSQ_STORAGE_TSM)
+		return -ENOSYS;
+
 	if (!fsq_session)
 		return -EFAULT;
 

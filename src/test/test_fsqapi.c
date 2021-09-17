@@ -13,7 +13,7 @@
  */
 
 /*
- * Copyright (c) 2019-2020, GSI Helmholtz Centre for Heavy Ion Research
+ * Copyright (c) 2019-2021, GSI Helmholtz Centre for Heavy Ion Research
  */
 
 #include <string.h>
@@ -82,7 +82,8 @@ void test_fsq_xattr(CuTest *tc)
 			STATE_TSM_ARCHIVE_RUN,
 			STATE_TSM_ARCHIVE_ERROR,
 			STATE_TSM_ARCHIVE_DONE,
-			STATE_FILE_OMITTED
+			STATE_FILE_OMITTED,
+			STATE_FILE_KEEP
 		};
 		uint32_t fsq_action_state = fsq_action_states[rand() %
 							      (sizeof(fsq_action_states) /
@@ -165,37 +166,48 @@ void test_fsq_fcalls(CuTest *tc)
 	rc = fsq_fconnect(&fsq_login, &fsq_session);
 	CuAssertIntEquals(tc, 0, rc);
 
-	for (uint16_t r = 0; r < NUM_FILES_FSQ; r++) {
+	for (uint8_t fsq_storage_dest = FSQ_STORAGE_NULL;
+	     fsq_storage_dest <= FSQ_STORAGE_LUSTRE_TSM; ++fsq_storage_dest) {
 
-		char fpath_rnd[PATH_MAX + 1] = {0};
-		char str_rnd[LEN_RND_STR + 1] = {0};
+		for (uint16_t r = 0; r < NUM_FILES_FSQ; r++) {
 
-		for (uint8_t d = 0; d < (rand() % 0x0a) + 1; d++) {
-			rnd_str(str_rnd, LEN_RND_STR);
-			CuAssertPtrNotNull(tc, strcat(fpath_rnd, "/"));
-			CuAssertPtrNotNull(tc, strcat(fpath_rnd, str_rnd));
+			char fpath_rnd[PATH_MAX + 1] = {0};
+			char str_rnd[LEN_RND_STR + 1] = {0};
+
+			for (uint8_t d = 0; d < (rand() % 0x0a) + 1; d++) {
+				rnd_str(str_rnd, LEN_RND_STR);
+				CuAssertPtrNotNull(tc, strcat(fpath_rnd, "/"));
+				CuAssertPtrNotNull(tc,
+						   strcat(fpath_rnd, str_rnd));
+			}
+
+			sprintf(fpath[r], "%s%s", LUSTRE_MOUNTP, fpath_rnd);
+			CT_DEBUG("fpath '%s'", fpath[r]);
+
+			rc = fsq_fdopen(LUSTRE_MOUNTP, fpath[r], NULL,
+					fsq_storage_dest, &fsq_session);
+			/* Not yet implemented. */
+			if (fsq_storage_dest == FSQ_STORAGE_TSM)
+				CuAssertIntEquals(tc, -ENOSYS, rc);
+			else
+				CuAssertIntEquals(tc, 0, rc);
+
+			for (uint8_t b = 0; b < rand() % 0xff; b++) {
+
+				const size_t len = rand() % sizeof(rnd_chars);
+				ssize_t bytes_written;
+
+				rnd_str(rnd_chars, len);
+
+				bytes_written =
+				    fsq_fwrite(rnd_chars, len, 1, &fsq_session);
+				CuAssertIntEquals(tc, len, bytes_written);
+			}
+
+			rc = fsq_fclose(&fsq_session);
+			CuAssertIntEquals(tc, 0, rc);
 		}
-
-		sprintf(fpath[r], "%s%s", LUSTRE_MOUNTP, fpath_rnd);
-		CT_DEBUG("fpath '%s'", fpath[r]);
-
-		rc = fsq_fopen(LUSTRE_MOUNTP, fpath[r], NULL, &fsq_session);
-		CuAssertIntEquals(tc, 0, rc);
-
-		for (uint8_t b = 0; b < rand() % 0xff; b++) {
-
-			const size_t len = rand() % sizeof(rnd_chars);
-			ssize_t bytes_written;
-
-			rnd_str(rnd_chars, len);
-
-			bytes_written = fsq_fwrite(rnd_chars, len, 1, &fsq_session);
-			CuAssertIntEquals(tc, len, bytes_written);
-		}
-
-		rc = fsq_fclose(&fsq_session);
-		CuAssertIntEquals(tc, 0, rc);
-	}
+	} /* End-for all fsq_storage_dest enums. */
 
 	fsq_fdisconnect(&fsq_session);
 }
@@ -235,7 +247,7 @@ void test_fsq_fcalls_with_crc32(CuTest *tc)
 		sprintf(fpath[r], "%s%s", LUSTRE_MOUNTP, fpath_rnd);
 		CT_DEBUG("fpath '%s'", fpath[r]);
 
-		rc = fsq_fopen(LUSTRE_MOUNTP, fpath[r], NULL, &fsq_session);
+		rc = fsq_fdopen(LUSTRE_MOUNTP, fpath[r], NULL, FSQ_STORAGE_LUSTRE, &fsq_session);
 		CuAssertIntEquals(tc, 0, rc);
 
 		for (uint8_t b = 0; b < rand() % 0xff; b++) {
@@ -254,9 +266,6 @@ void test_fsq_fcalls_with_crc32(CuTest *tc)
 		rc = fsq_fclose(&fsq_session);
 		CuAssertIntEquals(tc, 0, rc);
 
-		/* Make sure rc = unlink(...) is commented out, to keep the
-		   file for crc32 verification. */
-#if 0
 		/* Verify data is correctly copied to fsq server. */
 		sprintf(fpath[r], "%s%s", FSQ_MOUNTP, fpath_rnd);
 		CT_DEBUG("fpath fsq '%s'", fpath[r]);
@@ -266,7 +275,6 @@ void test_fsq_fcalls_with_crc32(CuTest *tc)
 			crc32sum_buf, crc32sum_file, fpath[r]);
 		CuAssertIntEquals(tc, 0, rc);
 		CuAssertTrue(tc, crc32sum_buf == crc32sum_file);
-#endif
 
 		/* Verify data is correctly copied to lustre. */
 		sprintf(fpath[r], "%s%s", LUSTRE_MOUNTP, fpath_rnd);
@@ -286,8 +294,8 @@ CuSuite* fsqapi_get_suite()
 {
     CuSuite* suite = CuSuiteNew();
     SUITE_ADD_TEST(suite, test_fsq_xattr);
-    SUITE_ADD_TEST(suite, test_fsq_fcalls_with_crc32);
     SUITE_ADD_TEST(suite, test_fsq_fcalls);
+    SUITE_ADD_TEST(suite, test_fsq_fcalls_with_crc32);
 
     return suite;
 }
