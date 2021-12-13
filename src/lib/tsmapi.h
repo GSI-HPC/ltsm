@@ -37,6 +37,7 @@
 #include <stdbool.h>
 #include <limits.h>
 #include <sys/types.h>
+#include <uuid/uuid.h>
 #include "dsmapitd.h"
 #include "dsmapifp.h"
 #include "dsmapips.h"
@@ -85,6 +86,7 @@ struct obj_info_t {
 	mode_t st_mode;
 	uint32_t crc32;
 	struct lustre_info_t lustre_info;
+	uuid_t uuid;
 };
 
 struct archive_info_t {

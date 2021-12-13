@@ -599,10 +599,12 @@ static void display_qra(const qryRespArchiveData *qra_data, const uint32_t n,
 {
 	char ins_str_date[128] = {0};
 	char exp_str_date[128] = {0};
+	char uuid_str[37] = {0};
 	struct obj_info_t obj_info;
 	memcpy(&obj_info, (char *)qra_data->objInfo, qra_data->objInfolen);
 	date_to_str(ins_str_date, &(qra_data->insDate));
 	date_to_str(exp_str_date, &(qra_data->expDate));
+	uuid_unparse_lower(obj_info.uuid, uuid_str);
 
 	if (api_msg_get_level() == API_MSG_NORMAL) {
 		fprintf(stdout, "%s %16s %20s %14zu, fs:%s hl:%s ll:%s "
@@ -617,66 +619,62 @@ static void display_qra(const qryRespArchiveData *qra_data, const uint32_t n,
 			obj_info.crc32);
 		fflush(stdout);
 	} else if (api_msg_get_level() > API_MSG_NORMAL) {
-		CT_INFO("%s object # %lu\n"
-			"fs: %s, hl: %s, ll: %s\n"
-			"object id (hi,lo)                          : (%u,%u)\n"
-			"object info length                         : %d\n"
-			"object info size (hi,lo)                   : (%u,%u) (%zu bytes)\n"
-			"object type                                : %s\n"
-			"object magic id                            : %d\n"
-			"crc32                                      : 0x%08x (%010u)\n"
-			"archive description                        : %s\n"
-			"owner                                      : %s\n"
-			"insert date                                : %s\n"
-			"expiration date                            : %s\n"
-			"restore order (top,hi_hi,hi_lo,lo_hi,lo_lo): (%u,%u,%u,%u,%u)\n"
-			"estimated size (hi,lo)                     : (%u,%u) (%zu bytes)\n"
+		CT_INFO(
+		    "%s object # %lu\n"
+		    "fs: %s, hl: %s, ll: %s\n"
+		    "object id (hi,lo)                          : (%u,%u)\n"
+		    "object info length                         : %d\n"
+		    "object info size (hi,lo)                   : (%u,%u) "
+		    "(%zu bytes)\n"
+		    "object type                                : %s\n"
+		    "object magic id                            : %d\n"
+		    "crc32                                      : 0x%08x "
+		    "(%010u)\n"
+		    "archive description                        : %s\n"
+		    "owner                                      : %s\n"
+		    "insert date                                : %s\n"
+		    "expiration date                            : %s\n"
+		    "restore order (top,hi_hi,hi_lo,lo_hi,lo_lo): "
+		    "(%u,%u,%u,%u,%u)\n"
+		    "estimated size (hi,lo)                     : (%u,%u) "
+		    "(%zu bytes)\n"
 #ifdef HAVE_LUSTRE
-			"lustre fid                                 : [%#llx:0x%x:0x%x]\n"
-			"lustre stripe size                         : %u\n"
-			"lustre stripe count                        : %u\n"
+		    "lustre fid                                 : "
+		    "[%#llx:0x%x:0x%x]\n"
+		    "lustre stripe size                         : %u\n"
+		    "lustre stripe count                        : %u\n"
 #ifdef LOV_MAGIC_V3
-			"lustre pool name                           : %s\n"
+		    "lustre pool name                           : %s\n"
 #endif
 #endif
-			,
-			msg,
-			n,
-			qra_data->objName.fs,
-			qra_data->objName.hl,
-			qra_data->objName.ll,
-			qra_data->objId.hi,
-			qra_data->objId.lo,
-			qra_data->objInfolen,
-			obj_info.size.hi,
-			obj_info.size.lo,
-			to_off64_t(obj_info.size),
-			OBJ_TYPE(qra_data->objName.objType),
-			obj_info.magic,
-			obj_info.crc32, obj_info.crc32,
-			qra_data->descr,
-			qra_data->owner,
-			ins_str_date,
-			exp_str_date,
-			qra_data->restoreOrderExt.top,
-			qra_data->restoreOrderExt.hi_hi,
-			qra_data->restoreOrderExt.hi_lo,
-			qra_data->restoreOrderExt.lo_hi,
-			qra_data->restoreOrderExt.lo_lo,
-			qra_data->sizeEstimate.hi,
-			qra_data->sizeEstimate.lo,
-			to_off64_t(qra_data->sizeEstimate)
+		    "uuid                                       : %s\n",
+		    msg, n, qra_data->objName.fs, qra_data->objName.hl,
+		    qra_data->objName.ll, qra_data->objId.hi,
+		    qra_data->objId.lo, qra_data->objInfolen, obj_info.size.hi,
+		    obj_info.size.lo, to_off64_t(obj_info.size),
+		    OBJ_TYPE(qra_data->objName.objType), obj_info.magic,
+		    obj_info.crc32, obj_info.crc32, qra_data->descr,
+		    qra_data->owner, ins_str_date, exp_str_date,
+		    qra_data->restoreOrderExt.top,
+		    qra_data->restoreOrderExt.hi_hi,
+		    qra_data->restoreOrderExt.hi_lo,
+		    qra_data->restoreOrderExt.lo_hi,
+		    qra_data->restoreOrderExt.lo_lo, qra_data->sizeEstimate.hi,
+		    qra_data->sizeEstimate.lo,
+		    to_off64_t(qra_data->sizeEstimate)
 #ifdef HAVE_LUSTRE
-			,obj_info.lustre_info.fid.seq,
-			obj_info.lustre_info.fid.oid,
-			obj_info.lustre_info.fid.ver,
-			obj_info.lustre_info.lov.stripe_size,
-			obj_info.lustre_info.lov.stripe_count
+		    ,
+		    obj_info.lustre_info.fid.seq, obj_info.lustre_info.fid.oid,
+		    obj_info.lustre_info.fid.ver,
+		    obj_info.lustre_info.lov.stripe_size,
+		    obj_info.lustre_info.lov.stripe_count
 #ifdef LOV_MAGIC_V3
-			,obj_info.lustre_info.lov.pool_name
+		    ,
+		    obj_info.lustre_info.lov.pool_name
 #endif
 #endif
-			);
+		    ,
+		    uuid_str);
 	}
 }
 
@@ -1771,6 +1769,8 @@ static dsInt16_t tsm_archive_prepare(const char *fs, const char *fpath,
 	archive_info->obj_info.size = to_dsStruct64_t(st_buf.st_size);
 	archive_info->obj_info.magic = MAGIC_ID_V1;
 	archive_info->obj_info.st_mode = st_buf.st_mode;
+
+	uuid_generate(archive_info->obj_info.uuid);
 
 	if (S_ISREG(st_buf.st_mode))
 		archive_info->obj_name.objType = DSM_OBJ_FILE;
