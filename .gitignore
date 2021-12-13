@@ -1,7 +1,12 @@
+# Global
 GPATH
 GRTAGS
 GSYMS
 GTAGS
+
+# LSP and clangd
+/.cache
+compile_commands.json
 
 # Autoconf
 Makefile.in

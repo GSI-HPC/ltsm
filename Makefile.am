@@ -37,7 +37,7 @@ rpms: Makefile
 clean-local: clean-local-check
 .PHONY: clean-local-check
 clean-local-check:
-	-rm -rf debian/{ltsm,.debhelper} rpm/{TMP,BUILD,RPMS,SRPMS,SPECS,SOURCES,BUILDROOT}
+	-rm -rf debian/{ltsm,.debhelper} rpm/{TMP,BUILD,RPMS,SRPMS,SPECS,SOURCES,BUILDROOT} .cache
 
 # Files to be deleted by 'make maintainer-clean'
 MAINTAINERCLEANFILES  = aclocal.m4
@@ -71,6 +71,7 @@ MAINTAINERCLEANFILES += GPATH
 MAINTAINERCLEANFILES += GRTAGS
 MAINTAINERCLEANFILES += GSYMS
 MAINTAINERCLEANFILES += GTAGS
+MAINTAINERCLEANFILES += compile_commands.json
 MAINTAINERCLEANFILES += dsierror.log
 MAINTAINERCLEANFILES += dsmerror.log
 MAINTAINERCLEANFILES += debian/files
