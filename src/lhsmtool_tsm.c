@@ -13,7 +13,7 @@
  */
 
 /*
- * Copyright (c) 2016-2020, GSI Helmholtz Centre for Heavy Ion Research
+ * Copyright (c) 2016-2021, GSI Helmholtz Centre for Heavy Ion Research
  */
 
 #ifndef _GNU_SOURCE
@@ -36,9 +36,13 @@
 #include <sys/syscall.h>
 #include <sys/time.h>
 #include <sys/param.h>
+#include <uuid/uuid.h>
+#include <sys/xattr.h>
 #include <lustre/lustreapi.h>
 #include "tsmapi.h"
 #include "queue.h"
+
+#define XATTR_LUSTRE_UUID "user.lustre.uuid"
 
 /* Lustre commit 3bfb6107ba4e92d8aa02e842502bc44bac7b8b43
    increased the upper limit of maximum HSM backends
@@ -524,7 +528,28 @@ static int ct_archive(struct session_t *session)
 				fpath);
 	}
 
-	rc = tsm_archive_fpath(opt.o_fsname, fpath, NULL /* Description */, fd,
+	uuid_t uuid;
+	char uuid_str[37] = {0}; /* 2 x 16 bytes + 4 x '-' + '\0',
+				    e.g 1b4e28ba-2fa1-11d2-883f-b9a761bde3fb */
+
+	/* Generate an UUID and store it in extended attribute of file
+	   as well as TSM description.
+	   If file is moved, then fpath on Lustre and TSM does not match
+	   anymore, however we still can find the file, by querying for
+	   the UUID stored in the file extended atttribut and
+	   TSM description.
+	*/
+	uuid_generate(uuid);
+	uuid_unparse_lower(uuid, uuid_str);
+
+	rc = fsetxattr(fd, XATTR_LUSTRE_UUID, (uuid_t *)&uuid,
+		       sizeof(uuid_t), 0);
+	CT_DEBUG("[rc=%d,fd=%d] fsetxattr '%s'", rc, fd, fpath);
+	if (rc < 0)
+		CT_WARN("[rc=%d,fd=%d] fsetxattr failed on '%s' ",
+			rc, fd, fpath);
+
+	rc = tsm_archive_fpath(opt.o_fsname, fpath, uuid_str, fd,
 			       &lustre_info, session);
 	if (rc) {
 		CT_ERROR(rc, "tsm_archive_fpath on '%s' failed", fpath);
@@ -588,11 +613,37 @@ static int ct_restore(struct session_t *session)
 		goto cleanup;
 	}
 
+	/* First try to retrieve by fpath. */
 	rc = tsm_retrieve_fpath(opt.o_fsname, fpath, NULL /* Description */,
 				fd, session);
 	if (rc) {
-		CT_ERROR(rc, "tsm_retrieve_fpath on '%s' failed", fpath);
-		goto cleanup;
+		CT_ERROR(rc, "tsm_retrieve_fpath on '%s' failed, try with uuid", fpath);
+
+		/* Second try to retrieve by UUID stored in extended attribute. */
+		uuid_t uuid;
+
+		rc = fgetxattr(fd, XATTR_LUSTRE_UUID, (uuid_t *)&uuid,
+			       sizeof(uuid_t));
+		CT_DEBUG("[rc=%d,fd=%d] fgetxattr '%s'", rc, fd, fpath);
+		if (rc < 0) {
+			rc = -errno;
+			CT_ERROR(rc, "fgetxattr failed on '%s' ", fpath);
+			goto cleanup;
+		}
+
+		char uuid_str[37] = {0}; /* 2 x 16 bytes + 4 x '-' + '\0',
+					    e.g 1b4e28ba-2fa1-11d2-883f-b9a761bde3fb */
+		uuid_unparse_lower(uuid, uuid_str);
+
+		memset(&fpath, 0, sizeof(fpath));
+		snprintf(fpath, sizeof(fpath), "%s*/**", opt.o_fsname);
+
+		rc = tsm_retrieve_fpath(opt.o_fsname, fpath, uuid_str, fd, session);
+		if (rc < 0) {
+			CT_ERROR(rc, "tsm_retrieve_fpath on '%s' and uuid '%s' "
+				 "failed", fpath, uuid_str);
+			goto cleanup;
+		}
 	}
 	CT_MESSAGE("data restore from TSM storage to '%s' done", fpath);
 
