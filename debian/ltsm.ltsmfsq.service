@@ -1,8 +1,6 @@
 [Unit]
 Description=Lustre TSM File Storage Queue Daemon
 Documentation=man:ltsmfsq(1)
-Requires=lhsmtool_tsm.target
-After=lhsmtool_tsm.target
 
 [Service]
 EnvironmentFile=-/etc/default/ltsmfsq
