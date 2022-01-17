@@ -13,7 +13,7 @@
  */
 
 /*
- * Copyright (c) 2016, GSI Helmholtz Centre for Heavy Ion Research
+ * Copyright (c) 2022, GSI Helmholtz Centre for Heavy Ion Research
  */
 
 #include "log.h"
@@ -94,14 +94,17 @@ api_log_callback_t api_info_callback_set(api_log_callback_t cb)
 
 void api_error(enum api_message_level level, int err, const char *fmt, ...)
 {
+	static pthread_mutex_t log_mutex = PTHREAD_MUTEX_INITIALIZER;
         va_list args;
-        int	tmp_errno = errno;
+        int tmp_errno = errno;
 
         if ((level & API_MSG_MASK) > api_msg_level)
                 return;
 
-        va_start(args, fmt);
+	pthread_mutex_lock(&log_mutex);
+	va_start(args, fmt);
         api_error_callback(level, abs(err), fmt, args);
         va_end(args);
-        errno = tmp_errno;
+	errno = tmp_errno;
+	pthread_mutex_unlock(&log_mutex);
 }
