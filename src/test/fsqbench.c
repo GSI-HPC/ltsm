@@ -13,7 +13,7 @@
  */
 
 /*
- * Copyright (c) 2020, GSI Helmholtz Centre for Heavy Ion Research
+ * Copyright (c) 2022, GSI Helmholtz Centre for Heavy Ion Research
  */
 
 #define _GNU_SOURCE
@@ -85,7 +85,7 @@ static void usage(const char *cmd_name, const int rc)
 		"\t-s, --servername <string>\n"
 		"\t-v, --verbose {error, warn, message, info, debug} [default: message]\n"
 		"\t-h, --help\n"
-		"version: %s © 2021 by GSI Helmholtz Centre for Heavy Ion Research\n",
+		"version: %s © 2022 by GSI Helmholtz Centre for Heavy Ion Research\n",
 		cmd_name,
 		opt.o_filesize,
 		opt.o_nfiles,
@@ -464,8 +464,11 @@ int main(int argc, char *argv[])
 	/* Each thread connects to a session. */
 	for (int n = 0; n < opt.o_nthreads; n++) {
 		rc = fsq_fconnect(&fsq_login, &fsq_sessions[n]);
-		if (rc)
+		if (rc) {
+			CT_ERROR(fsq_sessions[n].fsq_packet.fsq_error.rc, "%s",
+				 fsq_sessions[n].fsq_packet.fsq_error.strerror);
 			goto cleanup;
+		}
 	}
 
 	pthread_mutex_init(&mutex, NULL);

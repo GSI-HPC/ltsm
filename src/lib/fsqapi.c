@@ -13,7 +13,7 @@
  */
 
 /*
- * Copyright (c) 2019-2020, GSI Helmholtz Centre for Heavy Ion Research
+ * Copyright (c) 2019-2022, GSI Helmholtz Centre for Heavy Ion Research
  */
 
 #include <string.h>
@@ -29,15 +29,6 @@
 #include "log.h"
 #include "common.h"
 
-#define FSQ_ERROR(rc, str)					\
-do {								\
-	fsq_session->fsq_packet.fsq_error.rc = rc;		\
-	strncpy(fsq_session->fsq_packet.fsq_error.strerror,	\
-		str,						\
-		FSQ_MAX_ERRMSG_LENGTH);				\
-} while (0);							\
-
-
 int fsq_send(struct fsq_session_t *fsq_session,
 	     enum fsq_protocol_state_t fsq_protocol_state)
 {
@@ -50,10 +41,13 @@ int fsq_send(struct fsq_session_t *fsq_session,
 	fsq_session->fsq_packet.state = fsq_protocol_state;
 	bytes_send = write_size(fsq_session->fd, &fsq_session->fsq_packet,
 				sizeof(struct fsq_packet_t));
-	CT_DEBUG("[fd=%d] fsq_send %zd, expected size: %zd, state: '%s'",
+	CT_DEBUG("[fd=%d] fsq_send (%zd, %zd), state: '%s', "
+		 "error: %d, errstr: '%s'",
 		 fsq_session->fd,
 		 bytes_send, sizeof(struct fsq_packet_t),
-		 FSQ_PROTOCOL_STR(fsq_session->fsq_packet.state));
+		 FSQ_PROTOCOL_STR(fsq_session->fsq_packet.state),
+		 fsq_session->fsq_packet.fsq_error.rc,
+		 fsq_session->fsq_packet.fsq_error.strerror);
 	if (bytes_send < 0) {
 		rc = -errno;
 		CT_ERROR(rc, "bytes_send < 0");
@@ -80,12 +74,14 @@ int fsq_recv(struct fsq_session_t *fsq_session,
 	bytes_recv = read_size(fsq_session->fd,
 			       &fsq_session->fsq_packet,
 			       sizeof(struct fsq_packet_t));
-	CT_DEBUG("[fd=%d] fsq_recv %zd, expected size: %zd, "
-		 "state: '%s', expected: '%s'",
+	CT_DEBUG("[fd=%d] fsq_recv (%zd, %zd), "
+		 "state: ('%s', '%s'), error: %d, errstr: '%s'",
 		 fsq_session->fd, bytes_recv,
 		 sizeof(struct fsq_packet_t),
 		 FSQ_PROTOCOL_STR(fsq_session->fsq_packet.state),
-		 FSQ_PROTOCOL_STR(fsq_protocol_state));
+		 FSQ_PROTOCOL_STR(fsq_protocol_state),
+		 fsq_session->fsq_packet.fsq_error.rc,
+		 fsq_session->fsq_packet.fsq_error.strerror);
 	if (bytes_recv < 0) {
 		rc = -errno;
 		CT_ERROR(rc, "bytes_recv < 0");
@@ -97,7 +93,7 @@ int fsq_recv(struct fsq_session_t *fsq_session,
 		return rc;
 	}
 
-	/* Verify received fsq packet matches the requested. */
+	/* Verify received fsq packet matches the requested state. */
 	if (!(fsq_session->fsq_packet.state & fsq_protocol_state)) {
 		rc = -EPROTO;
 		CT_ERROR(rc, "fsq protocol error");
@@ -137,7 +133,7 @@ int fsq_fconnect(struct fsq_login_t *fsq_login, struct fsq_session_t *fsq_sessio
 		     (struct sockaddr *)&sockaddr_cli,
                      sizeof(sockaddr_cli));
         if (rc < 0) {
-                rc = errno;
+                rc = -errno;
                 CT_ERROR(rc, "connect");
                 goto out;
         }
@@ -145,12 +141,16 @@ int fsq_fconnect(struct fsq_login_t *fsq_login, struct fsq_session_t *fsq_sessio
 	memcpy(&fsq_session->fsq_packet.fsq_login,
 	       fsq_login, sizeof(struct fsq_login_t));
 	rc = fsq_send(fsq_session, FSQ_CONNECT);
+	if (rc)
+		goto out;
 
+	rc = fsq_recv(fsq_session, FSQ_REPLY);
 out:
         if (rc)
                 close(fsq_session->fd);
 
-        return rc;
+        return fsq_session->fsq_packet.fsq_error.rc != 0 ?
+		fsq_session->fsq_packet.fsq_error.rc : rc;
 }
 
 void fsq_fdisconnect(struct fsq_session_t *fsq_session)
@@ -191,7 +191,12 @@ static int __fsq_fopen(const char *fs, const char *fpath, const char *desc,
 	if (rc)
 		close(fsq_session->fd);
 
-	return rc;
+	rc = fsq_recv(fsq_session, FSQ_REPLY);
+        if (rc)
+                close(fsq_session->fd);
+
+        return fsq_session->fsq_packet.fsq_error.rc != 0 ?
+		fsq_session->fsq_packet.fsq_error.rc : rc;
 }
 
 int fsq_fopen(const char *fs, const char *fpath, const char *desc,
@@ -232,7 +237,7 @@ ssize_t fsq_fwrite(const void *ptr, size_t size, size_t nmemb,
 
 int fsq_fclose(struct fsq_session_t *fsq_session)
 {
-	int rc = 0;
+	int rc;
 
 	rc = fsq_send(fsq_session, FSQ_CLOSE);
 	if (rc)

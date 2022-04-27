@@ -39,7 +39,8 @@
 	s == FSQ_OPEN                    ? "FSQ_OPEN"                  :	   \
 	s == FSQ_DATA                    ? "FSQ_DATA"                  :	   \
 	s == FSQ_CLOSE                   ? "FSQ_CLOSE"                 :	   \
-	s == FSQ_DISCONNECT              ? "FSQ_DISCONNECT"            :	   \
+	s == FSQ_DISCONNECT              ? "FSQ_DISCONNECT"            :           \
+	s == FSQ_REPLY                   ? "FSQ_REPLY"                 :	   \
 	s == (FSQ_DATA | FSQ_CLOSE)      ? "FSQ_DATA | FSQ_CLOSE"      :           \
 	s == (FSQ_DISCONNECT | FSQ_OPEN) ? "FSQ_DISCONNECT | FSQ_OPEN" : "UNKNOWN" \
 
@@ -59,7 +60,15 @@
 	s == FSQ_STORAGE_LUSTRE     ? "FSQ_STORAGE_LUSTRE"     :	   \
 	s == FSQ_STORAGE_LUSTRE_TSM ? "FSQ_STORAGE_LUSTRE_TSM" : 	   \
         s == FSQ_STORAGE_TSM        ? "FSQ_STORAGE_TSM"        :           \
-        s == FSQ_STORAGE_NULL       ? "FSQ_STORAGE_NULL"       : "UNKNOWN" \
+        s == FSQ_STORAGE_NULL       ? "FSQ_STORAGE_NULL"       : "UNKNOWN"
+
+#define FSQ_ERROR(rc, str)					\
+do {								\
+	fsq_session.fsq_packet.fsq_error.rc = rc;		\
+	strncpy(fsq_session.fsq_packet.fsq_error.strerror,	\
+		str, FSQ_MAX_ERRMSG_LENGTH);			\
+	CT_ERROR(rc, str);					\
+} while (0);
 
 enum fsq_action_state_t {
 	STATE_LOCAL_COPY_DONE	= 0x1,
@@ -78,7 +87,8 @@ enum fsq_protocol_state_t {
 	FSQ_OPEN       = 0x2,
 	FSQ_DATA       = 0x4,
 	FSQ_CLOSE      = 0x8,
-	FSQ_DISCONNECT = 0x10
+	FSQ_DISCONNECT = 0x10,
+	FSQ_REPLY      = 0x20
 };
 
 enum fsq_storage_dest_t {
@@ -120,6 +130,7 @@ struct fsq_packet_t {
 	};
 	enum fsq_protocol_state_t state;
 	struct fsq_error_t fsq_error;
+	uint8_t ver;
 };
 
 struct fsq_session_t {

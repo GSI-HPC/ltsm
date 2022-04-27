@@ -835,12 +835,9 @@ static int client_authenticate(struct fsq_session_t *fsq_session,
 	pthread_mutex_lock(&tsm_connect_mutex);
 	rc = tsm_connect(&login, &session);
 	CT_DEBUG("[rc=%d] tsm_connect", rc);
-	if (rc) {
+	if (rc)
 		CT_ERROR(rc, "tsm_connect");
-		tsm_disconnect(&session);
-		pthread_mutex_unlock(&tsm_connect_mutex);
-		return rc;
-	}
+
 	tsm_disconnect(&session);
 	pthread_mutex_unlock(&tsm_connect_mutex);
 
@@ -878,9 +875,14 @@ static void *thread_sock_client(void *arg)
 	int archive_id = -1;
 	rc = client_authenticate(&fsq_session, &archive_id, &uid, &gid);
 	if (rc) {
-		CT_ERROR(rc, "client_authenticate failed");
+		FSQ_ERROR(rc, "client_authenticate failed");
+		rc = fsq_send(&fsq_session, FSQ_REPLY);
 		goto out;
 	}
+
+	rc = fsq_send(&fsq_session, FSQ_REPLY);
+	if (rc)
+		goto out;
 
 	do {
 		/* State 2: Client calls fsq_fopen(...) or fsq_disconnect(...).
@@ -904,9 +906,14 @@ static void *thread_sock_client(void *arg)
 
 		rc = init_fsq_storage(fpath_local, &fd_local, &fsq_session);
 		if (rc) {
-			CT_ERROR(rc, "init_fsq_storage");
+			FSQ_ERROR(rc, "init_fsq_storage");
+			rc = fsq_send(&fsq_session, FSQ_REPLY);
 			goto out;
 		}
+
+		rc = fsq_send(&fsq_session, FSQ_REPLY);
+		if (rc)
+			goto out;
 
 		struct fsq_info_t fsq_info;
 		size_t bytes_recv_total = 0;
