@@ -97,12 +97,6 @@
 	((strlen(str1) == strlen(str2)) &&		\
 	 (strncmp(str1, str2, strlen(str1)) == 0))
 
-#define snprintf_trunc(dst, size, ...)	\
-do {					\
-	volatile size_t n = size;	\
-	snprintf(dst, n, __VA_ARGS__);  \
-} while (0)
-
 struct login_t {
         char node[DSM_MAX_NODE_LENGTH + 1];
         char password[DSM_MAX_VERIFIER_LENGTH + 1];

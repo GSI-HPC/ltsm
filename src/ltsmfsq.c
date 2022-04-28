@@ -658,7 +658,7 @@ static int init_fsq_dev_null(char *fpath_local, int *fd_local,
 	int rc = 0;
 
 	/* strlen("/dev/null") + '\0' = 9 + 1. */
-	snprintf_trunc(fpath_local, 10, "%s", "/dev/null");
+	snprintf(fpath_local, 10, "%s", "/dev/null");
 
 	*fd_local = open(fpath_local, O_WRONLY);
 	CT_DEBUG("[fd=%d] open '%s'", *fd_local, fpath_local);
@@ -694,7 +694,8 @@ static int init_fsq_local(char *fpath_local, int *fd_local,
 	}
 
 	memset(fpath_local, 0, PATH_MAX + 1);
-	snprintf_trunc(fpath_local, PATH_MAX, "%s/%s", opt.o_local_mount, hl);
+	strncpy(fpath_local, opt.o_local_mount, PATH_MAX);
+	snprintf(fpath_local + strlen(fpath_local), PATH_MAX, "/%s", hl);
 
 	/* Make sure the directory exists where to store the file. */
 	rc = mkdir_p(fpath_local, S_IRWXU | S_IRGRP | S_IXGRP
