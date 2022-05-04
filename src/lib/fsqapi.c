@@ -41,11 +41,12 @@ int fsq_send(struct fsq_session_t *fsq_session,
 	fsq_session->fsq_packet.state = fsq_protocol_state;
 	bytes_send = write_size(fsq_session->fd, &fsq_session->fsq_packet,
 				sizeof(struct fsq_packet_t));
-	CT_DEBUG("[fd=%d] fsq_send (%zd, %zd), state: '%s', "
+	CT_DEBUG("[fd=%d] fsq_send (%zd, %zd), state: '%s' = 0x%.4X, "
 		 "error: %d, errstr: '%s'",
 		 fsq_session->fd,
 		 bytes_send, sizeof(struct fsq_packet_t),
 		 FSQ_PROTOCOL_STR(fsq_session->fsq_packet.state),
+		 fsq_session->fsq_packet.state,
 		 fsq_session->fsq_packet.fsq_error.rc,
 		 fsq_session->fsq_packet.fsq_error.strerror);
 	if (bytes_send < 0) {
@@ -75,11 +76,13 @@ int fsq_recv(struct fsq_session_t *fsq_session,
 			       &fsq_session->fsq_packet,
 			       sizeof(struct fsq_packet_t));
 	CT_DEBUG("[fd=%d] fsq_recv (%zd, %zd), "
-		 "state: ('%s', '%s'), error: %d, errstr: '%s'",
+		 "state: ('%s' = 0x%.4X, '%s' = 0x%.4X), error: %d, errstr: '%s'",
 		 fsq_session->fd, bytes_recv,
 		 sizeof(struct fsq_packet_t),
 		 FSQ_PROTOCOL_STR(fsq_session->fsq_packet.state),
+		 fsq_session->fsq_packet.state,
 		 FSQ_PROTOCOL_STR(fsq_protocol_state),
+		 fsq_protocol_state,
 		 fsq_session->fsq_packet.fsq_error.rc,
 		 fsq_session->fsq_packet.fsq_error.strerror);
 	if (bytes_recv < 0) {
@@ -93,8 +96,9 @@ int fsq_recv(struct fsq_session_t *fsq_session,
 		return rc;
 	}
 
-	/* Verify received fsq packet matches the requested state. */
-	if (!(fsq_session->fsq_packet.state & fsq_protocol_state)) {
+	/* Verify received fsq packet matches the expected state. */
+	if (!(fsq_session->fsq_packet.state == (fsq_protocol_state) ||
+	      fsq_session->fsq_packet.state & (fsq_protocol_state))) {
 		rc = -EPROTO;
 		CT_ERROR(rc, "fsq protocol error");
 	}
@@ -144,7 +148,8 @@ int fsq_fconnect(struct fsq_login_t *fsq_login, struct fsq_session_t *fsq_sessio
 	if (rc)
 		goto out;
 
-	rc = fsq_recv(fsq_session, FSQ_REPLY);
+	rc = fsq_recv(fsq_session, FSQ_CONNECT | FSQ_REPLY);
+
 out:
         if (rc)
                 close(fsq_session->fd);
@@ -188,12 +193,16 @@ static int __fsq_fopen(const char *fs, const char *fpath, const char *desc,
 	       &fsq_info, sizeof(fsq_info));
 
 	rc = fsq_send(fsq_session, FSQ_OPEN);
-	if (rc)
+	if (rc) {
 		close(fsq_session->fd);
+		return rc;
+	}
 
-	rc = fsq_recv(fsq_session, FSQ_REPLY);
-        if (rc)
+	rc = fsq_recv(fsq_session, FSQ_OPEN | FSQ_REPLY);
+        if (rc) {
                 close(fsq_session->fd);
+		return rc;
+	}
 
         return fsq_session->fsq_packet.fsq_error.rc != 0 ?
 		fsq_session->fsq_packet.fsq_error.rc : rc;
@@ -232,6 +241,15 @@ ssize_t fsq_fwrite(const void *ptr, size_t size, size_t nmemb,
 		 fsq_session->fd, bytes_written,
 		 fsq_session->fsq_packet.fsq_data.size);
 
+	rc = fsq_recv(fsq_session, (FSQ_DATA | FSQ_REPLY));
+	if (rc) {
+		close(fsq_session->fd);
+		return rc;
+	}
+
+	if (fsq_session->fsq_packet.fsq_error.rc)
+		return fsq_session->fsq_packet.fsq_error.rc;
+
 	return bytes_written;
 }
 
@@ -240,10 +258,17 @@ int fsq_fclose(struct fsq_session_t *fsq_session)
 	int rc;
 
 	rc = fsq_send(fsq_session, FSQ_CLOSE);
-	if (rc)
+	if (rc) {
 		close(fsq_session->fd);
+		return rc;
+	}
 
-	memset(&fsq_session->fsq_packet, 0, sizeof(struct fsq_packet_t));
+	rc = fsq_recv(fsq_session, (FSQ_CLOSE | FSQ_REPLY));
+	if (rc) {
+		close(fsq_session->fd);
+		return rc;
+	}
 
-	return rc;
+        return fsq_session->fsq_packet.fsq_error.rc != 0 ?
+		fsq_session->fsq_packet.fsq_error.rc : rc;
 }

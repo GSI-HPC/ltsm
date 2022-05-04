@@ -13,7 +13,7 @@
  */
 
 /*
- * Copyright (c) 2019-2021 GSI Helmholtz Centre for Heavy Ion Research
+ * Copyright (c) 2019-2022 GSI Helmholtz Centre for Heavy Ion Research
  */
 
 #ifndef _GNU_SOURCE
@@ -749,12 +749,12 @@ static int fsq_recv_data(int *fd_local, struct fsq_session_t *fsq_session,
 
 	do {
 		rc = fsq_recv(fsq_session, (FSQ_DATA | FSQ_CLOSE));
-		CT_DEBUG("[rc=%d,fd=%d] fsq_recv state '%s' size %zu",
+		CT_DEBUG("[rc=%d,fd=%d] fsq_recv state = '%s' size = %zu",
 			 rc, fsq_session->fd,
 			 FSQ_PROTOCOL_STR(fsq_session->fsq_packet.state),
 			 fsq_session->fsq_packet.fsq_data.size);
 		if (rc) {
-			CT_ERROR(rc, "fsq_recv failed");
+			FSQ_ERROR((*fsq_session), rc, "fsq_recv failed");
 			goto out;
 		}
 
@@ -774,7 +774,8 @@ static int fsq_recv_data(int *fd_local, struct fsq_session_t *fsq_session,
 			CT_DEBUG("[fd=%d] read_size %zd, expected %zd, max possible %zd",
 				 fsq_session->fd, bytes_recv, bytes_to_recv, sizeof(buf));
 			if (bytes_recv < 0) {
-				CT_ERROR(errno, "recv");
+				rc = -errno;
+				FSQ_ERROR((*fsq_session), rc, "read_size error");
 				goto out;
 			}
 			if (bytes_recv == 0) {
@@ -789,16 +790,24 @@ static int fsq_recv_data(int *fd_local, struct fsq_session_t *fsq_session,
 			CT_DEBUG("[fd=%d] write_size %zd, expected %zd, max possible %zd",
 				 *fd_local, bytes_send, bytes_recv, sizeof(buf));
 			if (bytes_send < 0) {
-				CT_ERROR(errno, "send");
+				rc = -errno;
+				FSQ_ERROR((*fsq_session), rc, "write_size error");
 				goto out;
 			}
 			*bytes_send_total += bytes_send;
 		} while (bytes_total != fsq_session->fsq_packet.fsq_data.size);
 		CT_DEBUG("[fd=%d,fd=%d] total read %zu, total written %zu",
 			 fsq_session->fd, *fd_local, *bytes_recv_total, *bytes_send_total);
+
+		fsq_send(fsq_session, (FSQ_DATA | FSQ_REPLY));
 	} while (fsq_session->fsq_packet.state & FSQ_DATA);
 
 out:
+	if (rc)
+		fsq_send(fsq_session, (FSQ_ERROR | FSQ_REPLY));
+	else
+		fsq_send(fsq_session, (FSQ_CLOSE | FSQ_REPLY));
+
 	return rc;
 }
 
@@ -860,9 +869,10 @@ static void *thread_sock_client(void *arg)
 	   fsq_login_t, check identmap and hand it over to tsm server for
 	   authentication. */
 	rc = fsq_recv(&fsq_session, FSQ_CONNECT);
-	CT_DEBUG("[rc=%d,fd=%d] fsq_recv state '%s' node '%s' hostname '%s' "
+	CT_DEBUG("[rc=%d,fd=%d] fsq_recv state '%s' = 0x%.4X node '%s' hostname '%s' "
 		 "port %d", rc, fsq_session.fd,
 		 FSQ_PROTOCOL_STR(fsq_session.fsq_packet.state),
+		 fsq_session.fsq_packet.state,
 		 fsq_session.fsq_packet.fsq_login.node,
 		 fsq_session.fsq_packet.fsq_login.hostname,
 		 fsq_session.fsq_packet.fsq_login.port);
@@ -876,23 +886,23 @@ static void *thread_sock_client(void *arg)
 	int archive_id = -1;
 	rc = client_authenticate(&fsq_session, &archive_id, &uid, &gid);
 	if (rc) {
-		FSQ_ERROR(rc, "client_authenticate failed");
-		rc = fsq_send(&fsq_session, FSQ_REPLY);
+		FSQ_ERROR(fsq_session, rc, "client_authenticate failed");
+		rc = fsq_send(&fsq_session, FSQ_ERROR | FSQ_REPLY);
 		goto out;
 	}
-
-	rc = fsq_send(&fsq_session, FSQ_REPLY);
+	rc = fsq_send(&fsq_session, FSQ_CONNECT | FSQ_REPLY);
 	if (rc)
 		goto out;
 
 	do {
-		/* State 2: Client calls fsq_fopen(...) or fsq_disconnect(...).
-		   Receive fsq_packet with fsq_info_t. */
+		/* State 2: Client calls fsq_fopen(...) or fsq_disconnect(...)
+		   and receives fsq_packet with fsq_info_t. */
 		rc = fsq_recv(&fsq_session, (FSQ_OPEN | FSQ_DISCONNECT));
-		CT_DEBUG("[rc=%d,fd=%d] fsq_recv state '%s' fs '%s' "
+		CT_DEBUG("[rc=%d,fd=%d] fsq_recv state '%s':%d fs '%s' "
 			 "fpath '%s' desc '%s' storage dest '%s'",
 			 rc, fsq_session.fd,
 			 FSQ_PROTOCOL_STR(fsq_session.fsq_packet.state),
+			 fsq_session.fsq_packet.state,
 			 fsq_session.fsq_packet.fsq_info.fs,
 			 fsq_session.fsq_packet.fsq_info.fpath,
 			 fsq_session.fsq_packet.fsq_info.desc,
@@ -907,12 +917,11 @@ static void *thread_sock_client(void *arg)
 
 		rc = init_fsq_storage(fpath_local, &fd_local, &fsq_session);
 		if (rc) {
-			FSQ_ERROR(rc, "init_fsq_storage");
-			rc = fsq_send(&fsq_session, FSQ_REPLY);
+			FSQ_ERROR(fsq_session, rc, "init_fsq_storage");
+			rc = fsq_send(&fsq_session, FSQ_ERROR | FSQ_REPLY);
 			goto out;
 		}
-
-		rc = fsq_send(&fsq_session, FSQ_REPLY);
+		rc = fsq_send(&fsq_session, FSQ_OPEN | FSQ_REPLY);
 		if (rc)
 			goto out;
 
@@ -926,8 +935,8 @@ static void *thread_sock_client(void *arg)
 		memcpy(&fsq_info, &fsq_session.fsq_packet.fsq_info,
 		       sizeof(struct fsq_info_t));
 
-		/* State 3: Client calls fsq_fwrite(...) or fsq_fclose(...).
-		   Receive fsq_packet with fsq_data_t. */
+		/* State 3: Client calls fsq_fwrite(...) or fsq_close(...) and
+		   receives fsq_packet with fsq_data_t. */
 		rc = fsq_recv_data(&fd_local, &fsq_session, &bytes_recv_total,
 				   &bytes_send_total);
 		CT_DEBUG("[rc=%d,fd=%d] fsq_recv_data", rc, fsq_session.fd);
@@ -935,6 +944,7 @@ static void *thread_sock_client(void *arg)
 			CT_ERROR(rc, "fsq_recv_data failed");
 			goto out;
 		}
+
 		/* Sanity check. */
 		if (bytes_recv_total != bytes_send_total) {
 			rc = -EFAILED;
@@ -986,7 +996,7 @@ static void *thread_sock_client(void *arg)
 		}
 		fd_local = -1;
 
-	} while (fsq_session.fsq_packet.state != FSQ_DISCONNECT);
+	} while (1);
 
 out:
 	if (!(fd_local < 0))

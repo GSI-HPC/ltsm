@@ -34,15 +34,20 @@
 #define XATTR_FSQ_DESC		XATTR_FSQ_PREFIX".desc"
 #define XATTR_FSQ_STOR_DEST	XATTR_FSQ_PREFIX".stordest"
 
-#define FSQ_PROTOCOL_STR(s)							   \
-	s == FSQ_CONNECT                 ? "FSQ_CONNECT"               :	   \
-	s == FSQ_OPEN                    ? "FSQ_OPEN"                  :	   \
-	s == FSQ_DATA                    ? "FSQ_DATA"                  :	   \
-	s == FSQ_CLOSE                   ? "FSQ_CLOSE"                 :	   \
-	s == FSQ_DISCONNECT              ? "FSQ_DISCONNECT"            :           \
-	s == FSQ_REPLY                   ? "FSQ_REPLY"                 :	   \
-	s == (FSQ_DATA | FSQ_CLOSE)      ? "FSQ_DATA | FSQ_CLOSE"      :           \
-	s == (FSQ_DISCONNECT | FSQ_OPEN) ? "FSQ_DISCONNECT | FSQ_OPEN" : "UNKNOWN" \
+#define FSQ_PROTOCOL_STR(s)						             \
+	s == FSQ_CONNECT                  ? "FSQ_CONNECT"                :           \
+	s == (FSQ_CONNECT | FSQ_REPLY)    ? "FSQ_CONNECT | FSQ_REPLY"    :           \
+	s == FSQ_OPEN                     ? "FSQ_OPEN"                   :           \
+	s == (FSQ_OPEN | FSQ_REPLY)       ? "FSQ_OPEN | FSQ_REPLY"       :           \
+        s == FSQ_DATA                     ? "FSQ_DATA"                   :           \
+	s == (FSQ_DATA | FSQ_REPLY)       ? "FSQ_DATA | FSQ_REPLY"       :           \
+	s == FSQ_CLOSE                    ? "FSQ_CLOSE"                  :           \
+	s == (FSQ_CLOSE | FSQ_REPLY)      ? "FSQ_CLOSE | FSQ_REPLY"      :           \
+	s == FSQ_DISCONNECT               ? "FSQ_DISCONNECT"             :           \
+	s == (FSQ_DISCONNECT | FSQ_REPLY) ? "FSQ_DISCONNECT | FSQ_REPLY" :           \
+	s == (FSQ_OPEN | FSQ_DISCONNECT)  ? "FSQ_OPEN | FSQ_DISCONNECT"  :           \
+	s == (FSQ_DATA | FSQ_CLOSE)       ? "FSQ_DATA | FSQ_CLOSE"       :           \
+	s == (FSQ_ERROR | FSQ_REPLY)      ? "FSQ_ERROR | FSQ_REPLY"      : "UNKNOWN" \
 
 #define FSQ_ACTION_STR(s)						     \
 	s == STATE_LOCAL_COPY_DONE   ? "STATE_LOCAL_COPY_DONE"   :	     \
@@ -62,7 +67,7 @@
         s == FSQ_STORAGE_TSM        ? "FSQ_STORAGE_TSM"        :           \
         s == FSQ_STORAGE_NULL       ? "FSQ_STORAGE_NULL"       : "UNKNOWN"
 
-#define FSQ_ERROR(rc, str)					\
+#define FSQ_ERROR(fsq_session, rc, str)				\
 do {								\
 	fsq_session.fsq_packet.fsq_error.rc = rc;		\
 	strncpy(fsq_session.fsq_packet.fsq_error.strerror,	\
@@ -88,7 +93,8 @@ enum fsq_protocol_state_t {
 	FSQ_DATA       = 0x4,
 	FSQ_CLOSE      = 0x8,
 	FSQ_DISCONNECT = 0x10,
-	FSQ_REPLY      = 0x20
+	FSQ_REPLY      = 0x20,
+	FSQ_ERROR      = 0x40
 };
 
 enum fsq_storage_dest_t {
