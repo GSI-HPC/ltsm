@@ -204,12 +204,11 @@ int main(int argc, char *argv[])
 	}
 
 	struct fsq_login_t fsq_login;
-
-	memset(&fsq_login, 0, sizeof(fsq_login));
-	strncpy(fsq_login.node, opt.o_node, DSM_MAX_NODE_LENGTH + 1);
-	strncpy(fsq_login.password, opt.o_password, DSM_MAX_VERIFIER_LENGTH + 1);
-	strncpy(fsq_login.hostname, opt.o_servername, HOST_NAME_MAX + 1);
-	fsq_login.port = 7625;
+	rc = fsq_init(&fsq_login, opt.o_node, opt.o_password, opt.o_servername);
+	if (rc) {
+		CT_ERROR(rc, "fsq_init failed");
+		return rc;
+	}
 
 	struct fsq_session_t fsq_session;
 	memset(&fsq_session, 0, sizeof(fsq_session));
