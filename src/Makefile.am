@@ -27,3 +27,8 @@ if HAVE_TSM_LUSTRE
     ltsmfsq_SOURCES = ltsmfsq.c
     ltsmfsq_LDADD = $(top_srcdir)/src/lib/libtsmapi.a $(top_srcdir)/src/lib/libfsqapi.a
 endif
+
+fsqc_CFLAGS = -m64 -D_FILE_OFFSET_BITS=64 -D_LARGEFILE64_SOURCE -I$(top_srcdir)/src/lib
+bin_PROGRAMS = fsqc
+fsqc_SOURCES = fsqc.c
+fsqc_LDADD = $(top_srcdir)/src/lib/libfsqapi.a
