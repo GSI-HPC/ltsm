@@ -39,7 +39,6 @@
 #include "xattr.h"
 #include "queue.h"
 
-#define PORT_DEFAULT_FSQ	7625
 #define N_THREADS_SOCK_DEFAULT	4
 #define N_THREADS_SOCK_MAX	64
 #define N_THREADS_QUEUE_DEFAULT	4
@@ -71,7 +70,7 @@ struct options {
 static struct options opt   = {
 	.o_local_mount	    = {0},
 	.o_file_ident	    = {0},
-	.o_port		    = PORT_DEFAULT_FSQ,
+	.o_port		    = FSQ_PORT_DEFAULT,
 	.o_nthreads_sock    = N_THREADS_SOCK_DEFAULT,
 	.o_nthreads_queue   = N_THREADS_QUEUE_DEFAULT,
 	.o_ntol_file_errors = N_TOL_FILE_ERRORS,
@@ -119,7 +118,7 @@ static void usage(const char *cmd_name, const int rc)
 		"\t\t""show this help\n"
 		"version: %s © 2020 by GSI Helmholtz Centre for Heavy Ion Research\n",
 		cmd_name,
-		PORT_DEFAULT_FSQ,
+		FSQ_PORT_DEFAULT,
 		N_THREADS_SOCK_DEFAULT,
 		N_THREADS_QUEUE_DEFAULT,
 		N_TOL_FILE_ERRORS,

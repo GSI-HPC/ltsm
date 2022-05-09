@@ -1921,7 +1921,7 @@ static dsInt16_t tsm_archive_recursive(struct archive_info_t *archive_info,
 
 				len = snprintf(_fpath, sizeof(_fpath), "%s/%s", dpath, entry->d_name);
 				if (len >= (int)sizeof(archive_info->fpath)) {
-					rc = E2BIG;
+					rc = -ENAMETOOLONG;
 					CT_ERROR(rc, "file path too long '%s/%s'", dpath, entry->d_name);
 					break;
 				}

@@ -13,7 +13,7 @@
  */
 
 /*
- * Copyright (c) 2019-2020, GSI Helmholtz Centre for Heavy Ion Research
+ * Copyright (c) 2019-2022, GSI Helmholtz Centre for Heavy Ion Research
  */
 
 #ifndef FSQAPI_H
@@ -25,6 +25,8 @@
 
 #include <limits.h>
 #include "common.h"
+
+#define FSQ_PORT_DEFAULT        7625
 
 #define XATTR_FSQ_PREFIX	"user.fsq"
 #define XATTR_FSQ_STATE		XATTR_FSQ_PREFIX".state"
@@ -162,6 +164,8 @@ int fsq_send(struct fsq_session_t *fsq_session,
 int fsq_recv(struct fsq_session_t *fsq_session,
 	     enum fsq_protocol_state_t fsq_protocol_state);
 
+int fsq_init(struct fsq_login_t *fsq_login,
+	     const char *node, const char *password, const char *hostname);
 int fsq_fconnect(struct fsq_login_t *fsq_login,
 		 struct fsq_session_t *fsq_session);
 void fsq_fdisconnect(struct fsq_session_t *fsq_session);

@@ -106,6 +106,27 @@ int fsq_recv(struct fsq_session_t *fsq_session,
 	return rc;
 }
 
+int fsq_init(struct fsq_login_t *fsq_login,
+	      const char *node, const char *password, const char *hostname)
+{
+	if (!fsq_login || !node || !password || !hostname)
+		return -EFAULT;
+
+	if (strlen(node) > DSM_MAX_NODE_LENGTH
+	    || strlen(password) > DSM_MAX_VERIFIER_LENGTH
+	    || strlen(hostname) > HOST_NAME_MAX)
+		return -EOVERFLOW;
+
+	memset(fsq_login, 0, sizeof(*fsq_login));
+	strncpy(fsq_login->node, node, DSM_MAX_NODE_LENGTH);
+	strncpy(fsq_login->password, password, DSM_MAX_VERIFIER_LENGTH);
+	strncpy(fsq_login->hostname, hostname, HOST_NAME_MAX);
+	fsq_login->port = FSQ_PORT_DEFAULT;
+
+	return 0;
+}
+
+
 int fsq_fconnect(struct fsq_login_t *fsq_login, struct fsq_session_t *fsq_session)
 {
 	int rc;
@@ -119,7 +140,7 @@ int fsq_fconnect(struct fsq_login_t *fsq_login, struct fsq_session_t *fsq_sessio
 		goto out;
 	}
 
-        /* Connect to file storage queue (fsq). */
+        /* Create communication endpoint to FSQ server. */
         fsq_session->fd = socket(AF_INET, SOCK_STREAM, 0);
         if (fsq_session->fd < 0) {
                 rc = -errno;

@@ -13,7 +13,7 @@
  */
 
 /*
- * Copyright (c) 2019-2021, GSI Helmholtz Centre for Heavy Ion Research
+ * Copyright (c) 2019-2022, GSI Helmholtz Centre for Heavy Ion Research
  */
 
 #include <string.h>
@@ -34,7 +34,6 @@
 #define PASSWORD		"polaris1234"
 #define OWNER			""
 #define FSQ_HOSTNAME		"localhost"
-#define FSQ_PORT		7625
 #define NUM_FILES_XATTR		500
 #define NUM_FILES_FSQ		15
 #define LEN_RND_STR		8
@@ -154,13 +153,42 @@ void test_fsq_fcalls(CuTest *tc)
 		.node		     = NODE,
 		.password	     = PASSWORD,
 		.hostname	     = FSQ_HOSTNAME,
-		.port		     = FSQ_PORT
+		.port		     = FSQ_PORT_DEFAULT
 	};
 	char rnd_chars[0xffff] = {0};
 	char fpath[NUM_FILES_FSQ][PATH_MAX];
+	struct fsq_login_t fsq_login_init;
+	char node_overflow[DSM_MAX_NODE_LENGTH + 2];
 
 	memset(fpath, 0, sizeof(char) * NUM_FILES_FSQ * PATH_MAX);
 	memset(&fsq_session, 0, sizeof(struct fsq_session_t));
+
+	rc = fsq_init(NULL, NULL, NULL, NULL);
+	CuAssertIntEquals(tc, -EFAULT, rc);
+
+	rc = fsq_init(&fsq_login_init, NULL, NULL, NULL);
+	CuAssertIntEquals(tc, -EFAULT, rc);
+
+	rc = fsq_init(&fsq_login_init, NODE, NULL, NULL);
+	CuAssertIntEquals(tc, -EFAULT, rc);
+
+	rc = fsq_init(&fsq_login_init, NODE, PASSWORD, NULL);
+	CuAssertIntEquals(tc, -EFAULT, rc);
+
+	rc = fsq_init(&fsq_login_init, NODE, NULL, FSQ_HOSTNAME);
+	CuAssertIntEquals(tc, -EFAULT, rc);
+
+	memset(node_overflow, 'x', sizeof(node_overflow));
+	rc = fsq_init(&fsq_login_init, node_overflow, PASSWORD, FSQ_HOSTNAME);
+	CuAssertIntEquals(tc, -EOVERFLOW, rc);
+
+	rc = fsq_init(&fsq_login_init, NODE, PASSWORD, FSQ_HOSTNAME);
+	CuAssertIntEquals(tc, 0, rc);
+
+	CuAssertStrEquals(tc, fsq_login.node, fsq_login_init.node);
+	CuAssertStrEquals(tc, fsq_login.password, fsq_login_init.password);
+	CuAssertStrEquals(tc, fsq_login.hostname, fsq_login_init.hostname);
+	CuAssertIntEquals(tc, fsq_login.port, fsq_login_init.port);
 
 	rc = fsq_fconnect(&fsq_login, &fsq_session);
 	CuAssertIntEquals(tc, 0, rc);
