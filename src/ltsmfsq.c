@@ -897,15 +897,20 @@ static void *thread_sock_client(void *arg)
 		/* State 2: Client calls fsq_fopen(...) or fsq_disconnect(...)
 		   and receives fsq_packet with fsq_info_t. */
 		rc = fsq_recv(&fsq_session, (FSQ_OPEN | FSQ_DISCONNECT));
-		CT_DEBUG("[rc=%d,fd=%d] fsq_recv state '%s':%d fs '%s' "
+		CT_DEBUG("[rc=%d,fd=%d] fsq_recv state '%s':0x%.4X fs '%s' "
 			 "fpath '%s' desc '%s' storage dest '%s'",
 			 rc, fsq_session.fd,
 			 FSQ_PROTOCOL_STR(fsq_session.fsq_packet.state),
 			 fsq_session.fsq_packet.state,
-			 fsq_session.fsq_packet.fsq_info.fs,
-			 fsq_session.fsq_packet.fsq_info.fpath,
-			 fsq_session.fsq_packet.fsq_info.desc,
-			 FSQ_STORAGE_DEST_STR(fsq_session.fsq_packet.fsq_info.fsq_storage_dest));
+			 fsq_session.fsq_packet.state == FSQ_OPEN
+			 ? fsq_session.fsq_packet.fsq_info.fs : "",
+			 fsq_session.fsq_packet.state == FSQ_OPEN
+			 ? fsq_session.fsq_packet.fsq_info.fpath : "",
+			 fsq_session.fsq_packet.state == FSQ_OPEN
+			 ? fsq_session.fsq_packet.fsq_info.desc : "",
+			 fsq_session.fsq_packet.state == FSQ_OPEN
+			 ? FSQ_STORAGE_DEST_STR(
+				 fsq_session.fsq_packet.fsq_info.fsq_storage_dest) : "");
 		if (rc) {
 			CT_ERROR(rc, "recv_fsq failed");
 			goto out;
