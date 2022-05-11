@@ -883,6 +883,14 @@ static void *thread_sock_client(void *arg)
 		goto out;
 	}
 
+	/* Verify FSQ protocol matches between client and server. */
+	if (fsq_session.fsq_packet.ver != FSQ_PROTOCOL_VER) {
+		rc = -ENOPROTOOPT;
+		FSQ_ERROR(fsq_session, rc, "fsq protocol mismatch");
+		rc = fsq_send(&fsq_session, FSQ_ERROR | FSQ_REPLY);
+		goto out;
+	}
+
 	uid_t uid = 65534;	/* User: Nobody. */
 	gid_t gid = 65534;	/* Group: Nobody. */
 	int archive_id = -1;

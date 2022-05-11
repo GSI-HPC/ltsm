@@ -41,10 +41,13 @@ int fsq_send(struct fsq_session_t *fsq_session,
 	fsq_session->fsq_packet.state = fsq_protocol_state;
 	bytes_send = write_size(fsq_session->fd, &fsq_session->fsq_packet,
 				sizeof(struct fsq_packet_t));
-	CT_DEBUG("[fd=%d] fsq_send (%zd, %zd), state: '%s' = 0x%.4X, "
+	CT_DEBUG("[fd=%d] fsq_send (%zd, %zd), "
+		 "ver: %s, "
+		 "state: '%s' = 0x%.4X, "
 		 "error: %d, errstr: '%s'",
 		 fsq_session->fd,
 		 bytes_send, sizeof(struct fsq_packet_t),
+		 FSQ_PROTOCOL_VER_STR(fsq_session->fsq_packet.ver),
 		 FSQ_PROTOCOL_STR(fsq_session->fsq_packet.state),
 		 fsq_session->fsq_packet.state,
 		 fsq_session->fsq_packet.fsq_error.rc,
@@ -55,7 +58,7 @@ int fsq_send(struct fsq_session_t *fsq_session,
 		goto out;
 	}
 	if ((size_t)bytes_send != sizeof(struct fsq_packet_t)) {
-		rc = -ENOMSG;
+		rc = -EPROTO;
 		CT_ERROR(rc, "bytes_send != sizeof(struct fsq_packet_t)");
 	}
 
@@ -76,9 +79,13 @@ int fsq_recv(struct fsq_session_t *fsq_session,
 			       &fsq_session->fsq_packet,
 			       sizeof(struct fsq_packet_t));
 	CT_DEBUG("[fd=%d] fsq_recv (%zd, %zd), "
-		 "state: ('%s' = 0x%.4X, '%s' = 0x%.4X), error: %d, errstr: '%s'",
+		 "ver: (%s, %s), "
+		 "state: ('%s' = 0x%.4X, '%s' = 0x%.4X), "
+		 "error: %d, errstr: '%s'",
 		 fsq_session->fd, bytes_recv,
 		 sizeof(struct fsq_packet_t),
+		 FSQ_PROTOCOL_VER_STR(fsq_session->fsq_packet.ver),
+		 FSQ_PROTOCOL_VER_STR(FSQ_PROTOCOL_VER),
 		 FSQ_PROTOCOL_STR(fsq_session->fsq_packet.state),
 		 fsq_session->fsq_packet.state,
 		 FSQ_PROTOCOL_STR(fsq_protocol_state),
@@ -91,7 +98,7 @@ int fsq_recv(struct fsq_session_t *fsq_session,
 		return rc;
 	}
 	if (bytes_recv != sizeof(struct fsq_packet_t)) {
-		rc = -ENOMSG;
+		rc = -EPROTO;
 		CT_ERROR(rc, "bytes_recv != sizeof(struct fsq_packet_t)");
 		return rc;
 	}

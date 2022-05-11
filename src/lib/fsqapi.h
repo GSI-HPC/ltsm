@@ -136,14 +136,14 @@ struct fsq_error_t {
 };
 
 struct fsq_packet_t {
+	uint8_t ver;
+	struct fsq_error_t fsq_error;
+	enum fsq_protocol_state_t state;
 	union {
 		struct fsq_login_t fsq_login;
 		struct fsq_info_t fsq_info;
 		struct fsq_data_t fsq_data;
 	};
-	enum fsq_protocol_state_t state;
-	struct fsq_error_t fsq_error;
-	uint8_t ver;
 };
 
 struct fsq_session_t {
