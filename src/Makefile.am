@@ -7,10 +7,11 @@ endif
 AUTOMAKE_OPTIONS = subdir-objects
 
 ltsmc_CFLAGS =
+bin_PROGRAMS =
 
 if HAVE_TSM
     ltsmc_CFLAGS += -m64 -DLINUX_CLIENT -D_FILE_OFFSET_BITS=64 -D_LARGEFILE64_SOURCE -I$(top_srcdir)/src/lib -I@TSM_SRC_DIR@/
-    bin_PROGRAMS = ltsmc
+    bin_PROGRAMS += ltsmc
     ltsmc_SOURCES = ltsmc.c
     ltsmc_LDADD = $(top_srcdir)/src/lib/libtsmapi.a
 endif
@@ -29,6 +30,6 @@ if HAVE_TSM_LUSTRE
 endif
 
 fsqc_CFLAGS = -m64 -D_FILE_OFFSET_BITS=64 -D_LARGEFILE64_SOURCE -I$(top_srcdir)/src/lib
-bin_PROGRAMS = fsqc
+bin_PROGRAMS += fsqc
 fsqc_SOURCES = fsqc.c
 fsqc_LDADD = $(top_srcdir)/src/lib/libfsqapi.a

@@ -22,7 +22,6 @@ AC_PROG_CPP
 AC_PROG_INSTALL
 AC_PROG_LN_S
 AC_PROG_MAKE_SET
-AC_PROG_RANLIB
 AC_GNU_SOURCE
 
 # Use the C language and compiler for the following checks.
