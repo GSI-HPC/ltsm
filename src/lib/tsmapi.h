@@ -31,6 +31,8 @@
 
 #if HAVE_CONFIG_H
 #include <config.h>
+#else
+#error "Missing autoconf generated config.h file"
 #endif
 
 #include <stdint.h>

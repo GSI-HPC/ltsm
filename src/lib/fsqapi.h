@@ -21,6 +21,8 @@
 
 #if HAVE_CONFIG_H
 #include <config.h>
+#else
+#error "Missing autoconf generated config.h file"
 #endif
 
 #include <limits.h>
@@ -35,6 +37,9 @@
 #define XATTR_FSQ_FPATH		XATTR_FSQ_PREFIX".fpath"
 #define XATTR_FSQ_DESC		XATTR_FSQ_PREFIX".desc"
 #define XATTR_FSQ_STOR_DEST	XATTR_FSQ_PREFIX".stordest"
+
+#define FSQ_PROTOCOL_VER_STR(s) \
+	s == 1 ? "1" : "NA"	\
 
 #define FSQ_PROTOCOL_STR(s)						             \
 	s == FSQ_CONNECT                  ? "FSQ_CONNECT"                :           \

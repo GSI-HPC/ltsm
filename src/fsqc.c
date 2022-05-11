@@ -18,10 +18,6 @@
 
 #define _GNU_SOURCE
 
-#if HAVE_CONFIG_H
-#include <config.h>
-#endif
-
 #include <stdio.h>
 #include <stdint.h>
 #include <stdlib.h>
@@ -52,7 +48,8 @@ static struct options opt = {
 
 static void usage(const char *cmd_name, const int rc)
 {
-	fprintf(stdout, "usage: %s [options] <file>\n"
+	fprintf(stdout,
+		"usage: %s [options] <file>\n"
 		"\t-f, --fsname <string>\n"
 		"\t-a, --fpath <string>\n"
 		"\t-o, --storagedest {null, local, lustre, tsm, lustre_tsm}\n"
@@ -61,9 +58,11 @@ static void usage(const char *cmd_name, const int rc)
 		"\t-s, --servername <string>\n"
 		"\t-v, --verbose {error, warn, message, info, debug} [default: message]\n"
 		"\t-h, --help\n"
-		"version: %s © 2022 by GSI Helmholtz Centre for Heavy Ion Research\n",
+		"version: %s, fsq protocol version: %s "
+		"© 2022 by GSI Helmholtz Centre for Heavy Ion Research\n",
 		cmd_name,
-		PACKAGE_VERSION);
+		PACKAGE_VERSION,
+		FSQ_PROTOCOL_VER_STR(FSQ_PROTOCOL_VER));
 
 	exit(rc);
 }

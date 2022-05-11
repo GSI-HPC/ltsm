@@ -116,13 +116,16 @@ static void usage(const char *cmd_name, const int rc)
 		"\t\t""produce more verbose output\n"
 		"\t-h, --help\n"
 		"\t\t""show this help\n"
-		"version: %s © 2020 by GSI Helmholtz Centre for Heavy Ion Research\n",
+		"version: %s, fsq protocol version: %s "
+		"© 2022 by GSI Helmholtz Centre for Heavy Ion Research\n",
 		cmd_name,
 		FSQ_PORT_DEFAULT,
 		N_THREADS_SOCK_DEFAULT,
 		N_THREADS_QUEUE_DEFAULT,
 		N_TOL_FILE_ERRORS,
-		PACKAGE_VERSION);
+		PACKAGE_VERSION,
+		FSQ_PROTOCOL_VER_STR(FSQ_PROTOCOL_VER));
+
 	exit(rc);
 }
 
