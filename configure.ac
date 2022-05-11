@@ -141,6 +141,8 @@ else
     enable_tests="no"
 fi
 
+AC_DEFINE([FSQ_PROTOCOL_VER], [1], [define used FSQ protocol version])
+
 # Propage flags and dirs among final Makefiles.
 AC_SUBST([AM_CFLAGS])
 AC_SUBST([LUSTRE_SRC_DIR])

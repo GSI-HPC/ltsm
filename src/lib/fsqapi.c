@@ -27,7 +27,6 @@
 #include <netdb.h>
 #include "fsqapi.h"
 #include "log.h"
-#include "common.h"
 
 int fsq_send(struct fsq_session_t *fsq_session,
 	     enum fsq_protocol_state_t fsq_protocol_state)
@@ -38,6 +37,7 @@ int fsq_send(struct fsq_session_t *fsq_session,
 	if (!fsq_session || fsq_session->fd < 0)
 		return -EINVAL;
 
+	fsq_session->fsq_packet.ver = FSQ_PROTOCOL_VER;
 	fsq_session->fsq_packet.state = fsq_protocol_state;
 	bytes_send = write_size(fsq_session->fd, &fsq_session->fsq_packet,
 				sizeof(struct fsq_packet_t));
@@ -58,8 +58,8 @@ int fsq_send(struct fsq_session_t *fsq_session,
 		rc = -ENOMSG;
 		CT_ERROR(rc, "bytes_send != sizeof(struct fsq_packet_t)");
 	}
-out:
 
+out:
 	return rc;
 }
 
