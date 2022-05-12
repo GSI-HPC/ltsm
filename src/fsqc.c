@@ -33,7 +33,9 @@ struct options {
 	char	o_password[DSM_MAX_VERIFIER_LENGTH + 1];
 	char	o_fsname[DSM_MAX_FSNAME_LENGTH + 1];
 	char	o_fpath[PATH_MAX + 1];
+	char	o_filename[PATH_MAX + 1];
 	int	o_storage_dest;
+	int     o_pipe;
 };
 
 static struct options opt = {
@@ -43,6 +45,7 @@ static struct options opt = {
 	.o_password	  = {0},
 	.o_fsname	  = {0},
 	.o_fpath	  = {0},
+	.o_filename	  = {0},
 	.o_storage_dest   = FSQ_STORAGE_NULL
 };
 
@@ -50,8 +53,10 @@ static void usage(const char *cmd_name, const int rc)
 {
 	fprintf(stdout,
 		"usage: %s [options] <file>\n"
+		"\t--pipe\n"
 		"\t-f, --fsname <string>\n"
 		"\t-a, --fpath <string>\n"
+		"\t-l, --filename <string>\n"
 		"\t-o, --storagedest {null, local, lustre, tsm, lustre_tsm}\n"
 		"\t-n, --node <string>\n"
 		"\t-p, --password <string>\n"
@@ -71,43 +76,64 @@ static void sanity_arg_check(const char *argv)
 {
 	/* Required arguments. */
 	if (!opt.o_fsname[0]) {
-		fprintf(stdout, "missing argument -f, --fsname <string>\n\n");
-		usage(argv, EINVAL);
+		fprintf(stderr, "missing argument -f, --fsname <string>\n\n");
+		usage(argv, -EINVAL);
 	}
 	if (!opt.o_fpath[0]) {
-		fprintf(stdout, "missing argument -a, --fpath <string>\n\n");
-		usage(argv, EINVAL);
+		fprintf(stderr, "missing argument -a, --fpath <string>\n\n");
+		usage(argv, -EINVAL);
 	}
 	if (!opt.o_node[0]) {
-		fprintf(stdout, "missing argument -n, --node <string>\n\n");
-		usage(argv, EINVAL);
+		fprintf(stderr, "missing argument -n, --node <string>\n\n");
+		usage(argv, -EINVAL);
 	}
 	if (!opt.o_password[0]) {
-		fprintf(stdout, "missing argument -p, --password <string>\n\n");
-		usage(argv, EINVAL);
+		fprintf(stderr, "missing argument -p, --password <string>\n\n");
+		usage(argv, -EINVAL);
 	}
 	if (!opt.o_servername[0]) {
-		fprintf(stdout, "missing argument -s, --servername "
+		fprintf(stderr, "missing argument -s, --servername "
 			"<string>\n\n");
-		usage(argv, EINVAL);
+		usage(argv, -EINVAL);
+	}
+	if (opt.o_filename[0] && strchr(opt.o_filename, '/')) {
+		fprintf(stderr, "argument -l, --filename '%s' contains "
+			"illegal character(s) '/'\n\n",
+			opt.o_filename);
+		usage(argv, -EINVAL);
+	}
+	if (opt.o_fsname[0] && opt.o_fpath[0]) {
+		size_t len_fsname = strlen(opt.o_fsname);
+		size_t len_fpath = strlen(opt.o_fpath);
+
+		if (len_fpath < len_fsname
+		    || memcmp(opt.o_fsname, opt.o_fpath, len_fsname)
+		    || opt.o_fpath[len_fsname] != '/') {
+			fprintf(stderr, "argument -f, --fsname '%s' is not a prefix "
+				"of argument -a, --fpath '%s'\n\n",
+				opt.o_fsname, opt.o_fpath);
+			usage(argv, -EINVAL);
+		}
 	}
 }
 
 static int parseopts(int argc, char *argv[])
 {
 	struct option long_opts[] = {
-		{.name = "fsname",	.has_arg = required_argument, .flag = NULL, .val = 'f'},
-		{.name = "fpath",	.has_arg = required_argument, .flag = NULL, .val = 'a'},
-		{.name = "storagedest",	.has_arg = required_argument, .flag = NULL, .val = 'o'},
-		{.name = "node",	.has_arg = required_argument, .flag = NULL, .val = 'n'},
-		{.name = "password",	.has_arg = required_argument, .flag = NULL, .val = 'p'},
-		{.name = "servername",	.has_arg = required_argument, .flag = NULL, .val = 's'},
-		{.name = "verbose",	.has_arg = required_argument, .flag = NULL, .val = 'v'},
-		{.name = "help",	.has_arg = no_argument,       .flag = NULL, .val = 'h'},
+		{.name = "fsname",	.has_arg = required_argument, .flag = NULL,        .val = 'f'},
+		{.name = "fpath",	.has_arg = required_argument, .flag = NULL,        .val = 'a'},
+		{.name = "filename",	.has_arg = required_argument, .flag = NULL,        .val = 'l'},
+		{.name = "storagedest",	.has_arg = required_argument, .flag = NULL,        .val = 'o'},
+		{.name = "node",	.has_arg = required_argument, .flag = NULL,        .val = 'n'},
+		{.name = "password",	.has_arg = required_argument, .flag = NULL,        .val = 'p'},
+		{.name = "servername",	.has_arg = required_argument, .flag = NULL,        .val = 's'},
+		{.name = "verbose",	.has_arg = required_argument, .flag = NULL,        .val = 'v'},
+		{.name = "pipe",        .has_arg = no_argument,       .flag = &opt.o_pipe, .val = 1},
+		{.name = "help",	.has_arg = no_argument,       .flag = NULL,        .val = 'h'},
 		{0, 0, 0, 0}
 	};
 	int c;
-	while ((c = getopt_long(argc, argv, "f:a:o:n:p:s:v:h",
+	while ((c = getopt_long(argc, argv, "f:a:l:o:n:p:s:v:h",
 				long_opts, NULL)) != -1) {
 		switch (c) {
 		case 'f': {
@@ -116,6 +142,10 @@ static int parseopts(int argc, char *argv[])
 		}
 		case 'a': {
 			strncpy(opt.o_fpath, optarg, PATH_MAX);
+			break;
+		}
+		case 'l': {
+			strncpy(opt.o_filename, optarg, PATH_MAX);
 			break;
 		}
 		case 'o': {
@@ -130,9 +160,9 @@ static int parseopts(int argc, char *argv[])
 			else if (OPTNCMP("lustre_tsm", optarg))
 				opt.o_storage_dest = FSQ_STORAGE_LUSTRE_TSM;
 			else {
-				fprintf(stdout, "wrong argument for -o, "
+				fprintf(stderr, "wrong argument for -o, "
 					"--storagedest='%s'\n", optarg);
-				usage(argv[0], EINVAL);
+				usage(argv[0], -EINVAL);
 			}
 			break;
 		}
@@ -197,9 +227,27 @@ int main(int argc, char *argv[])
 		return -EINVAL;
 	}
 
-	if (argc - optind != 1) {
-		fprintf(stdout, "missing or incorrect number of arguments <file>\n\n");
-		usage(argv[0], EINVAL);
+	FILE *file = NULL;
+	const char *filename = NULL;
+
+	/* Argument <file> is provided. */
+	if (argc - optind == 1) {
+		/* Argument --pipe is provided and results in exclusionary parameters. */
+		if (opt.o_pipe) {
+			fprintf(stdout, "error two exclusionary parameters --pipe and <file>\n\n");
+			usage(argv[0], -EINVAL);
+		} else
+			filename = argv[argc - 1];
+	} else {
+		if (opt.o_filename[0] && opt.o_pipe && argc - optind == 0)
+			file = stdin;
+		else if (!opt.o_filename[0] && opt.o_pipe && argc - optind == 0) {
+			fprintf(stderr, "missing argument -l, --filename <filename>\n\n");
+			usage(argv[0], -EINVAL);
+		} else {
+			fprintf(stderr, "missing or incorrect number of arguments\n\n");
+			usage(argv[0], -EINVAL);
+		}
 	}
 
 	struct fsq_login_t fsq_login;
@@ -218,19 +266,23 @@ int main(int argc, char *argv[])
 		return rc;
 	}
 
-	FILE *file = NULL;
-	const char *filename = argv[argc - 1];
-
-	file = fopen(filename, "rb");
+	/* Argument <file> is provided and not stdin (--pipe). */
 	if (!file) {
-		rc = -errno;
-		CT_ERROR(rc, "fopen '%s' failed", filename);
-		goto cleanup;
+		file = fopen(filename, "rb");
+		if (!file) {
+			rc = -errno;
+			CT_ERROR(rc, "fopen '%s' failed", filename);
+			goto cleanup;
+		}
 	}
+
+	if (opt.o_filename[0])
+		filename = opt.o_filename;
 
 	const size_t l = strlen(opt.o_fpath);
 	if (opt.o_fpath[l - 1] != '/')
 		opt.o_fpath[l] = '/';
+
 	strncat(opt.o_fpath, basename(filename), PATH_MAX);
 
 	rc = fsq_fdopen(opt.o_fsname, opt.o_fpath, NULL, opt.o_storage_dest,
@@ -272,5 +324,5 @@ cleanup:
 		CT_MESSAGE("successfully sent file '%s' with fpath '%s' to FSQ server '%s'\n",
 			   filename, opt.o_fpath, opt.o_servername);
 
-	return abs(rc);
+	return rc;
 }
