@@ -72,6 +72,21 @@ static void usage(const char *cmd_name, const int rc)
 	exit(rc);
 }
 
+static int is_path_prefix(const char *fsname, const char *fpath)
+{
+	size_t len_fsname = strlen(opt.o_fsname);
+	size_t len_fpath = strlen(opt.o_fpath);
+
+	if (len_fpath < len_fsname)
+		return -EINVAL;
+	if (memcmp(opt.o_fsname, opt.o_fpath, len_fsname))
+		return -EINVAL;
+	if (len_fsname > 1 && opt.o_fpath[len_fsname] != '/')
+		return -EINVAL;
+
+	return 0;
+}
+
 static void sanity_arg_check(const char *argv)
 {
 	/* Required arguments. */
@@ -103,14 +118,9 @@ static void sanity_arg_check(const char *argv)
 		usage(argv, -EINVAL);
 	}
 	if (opt.o_fsname[0] && opt.o_fpath[0]) {
-		size_t len_fsname = strlen(opt.o_fsname);
-		size_t len_fpath = strlen(opt.o_fpath);
-
-		if (len_fpath < len_fsname
-		    || memcmp(opt.o_fsname, opt.o_fpath, len_fsname)
-		    || opt.o_fpath[len_fsname] != '/') {
-			fprintf(stderr, "argument -f, --fsname '%s' is not a prefix "
-				"of argument -a, --fpath '%s'\n\n",
+		if (is_path_prefix(opt.o_fsname, opt.o_fpath)) {
+			fprintf(stderr, "argument -f, --fsname '%s' is not a "
+				"strict path prefix of argument -a, --fpath '%s'\n\n",
 				opt.o_fsname, opt.o_fpath);
 			usage(argv, -EINVAL);
 		}
