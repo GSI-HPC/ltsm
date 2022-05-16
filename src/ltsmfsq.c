@@ -28,6 +28,7 @@
 #include <signal.h>
 #include <stdbool.h>
 #include <dirent.h>
+#include <unistd.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/socket.h>
@@ -573,6 +574,30 @@ static int identmap_entry(struct fsq_login_t *fsq_login,
 	return rc;
 }
 
+static int set_privileges(uid_t uid, gid_t gid)
+{
+	int rc;
+
+	/* Note: Calling first setreuid and then setregid,
+	   results in setregid == -1 error. Calling it
+	   vice versa works. */
+
+	rc = setregid(-1, gid);
+	if (rc) {
+		rc = -errno;
+		CT_ERROR(rc, "setregid %u", uid);
+		return rc;
+	}
+
+	rc = setreuid(-1, uid);
+	if (rc) {
+		rc = -errno;
+		CT_ERROR(rc, "setreuid %u", gid);
+	}
+
+	return rc;
+}
+
 static int enqueue_fsq_item(struct fsq_action_item_t *fsq_action_item)
 {
 	int rc;
@@ -900,6 +925,16 @@ static void *thread_sock_client(void *arg)
 		rc = fsq_send(&fsq_session, FSQ_ERROR | FSQ_REPLY);
 		goto out;
 	}
+
+	rc = set_privileges(uid, gid);
+	CT_DEBUG("[rc=%d] set_privileges uid: %u, gid: %u", rc,
+		 uid, gid);
+	if (rc) {
+		FSQ_ERROR(fsq_session, rc, "set_privileges failed");
+		rc = fsq_send(&fsq_session, FSQ_ERROR | FSQ_REPLY);
+		goto out;
+	}
+
 	rc = fsq_send(&fsq_session, FSQ_CONNECT | FSQ_REPLY);
 	if (rc)
 		goto out;
@@ -1184,13 +1219,6 @@ static int copy_action(struct fsq_action_item_t *fsq_action_item)
 				}
 				goto next; /* Directory exists, skip it. */
                         }
-			rc = chown(fpath_sub, fsq_action_item->uid, fsq_action_item->gid);
-			if (rc < 0) {
-				rc = -errno;
-				CT_ERROR(rc, "chown '%s', uid %zu, gid %zu",
-					 fpath_sub, fsq_action_item->uid, fsq_action_item->gid);
-				goto out;
-			}
 		}
 	next:
 		i++;
@@ -1269,18 +1297,6 @@ static int copy_action(struct fsq_action_item_t *fsq_action_item)
 		fd_write, fsq_action_item->fsq_info.fpath,
 		bytes_read_total, time_now() - ts);
 
-	/* Change owner and group. */
-	rc = fchown(fd_write, fsq_action_item->uid, fsq_action_item->gid);
-	CT_DEBUG("[rc=%d,fd=%d] fchown '%s', uid %zu gid %zu", rc, fd_write,
-		 fsq_action_item->fsq_info.fpath,
-		 fsq_action_item->uid, fsq_action_item->gid);
-	if (rc) {
-		rc = -errno;
-		CT_ERROR(rc, "fchown '%s', uid %zu, gid %zu",
-			 fsq_action_item->fsq_info.fpath,
-			 fsq_action_item->uid, fsq_action_item->gid);
-	}
-
 out:
 	if (fd_read != -1)
 		close(fd_read);
@@ -1315,7 +1331,7 @@ static int archive_state(const struct fsq_action_item_t *fsq_action_item,
 
 static int archive_action(struct fsq_action_item_t *fsq_action_item)
 {
-	int rc;
+	int rc, rc2 = 0;
 	struct hsm_user_request	*hur = NULL;
 	struct hsm_user_item	*hui = NULL;
 	struct lu_fid		fid;
@@ -1325,7 +1341,7 @@ static int archive_action(struct fsq_action_item_t *fsq_action_item)
 		 rc, fsq_action_item->fsq_info.fpath,
 		 PFID(&fid));
 	if (rc) {
-		CT_ERROR(rc, "llapi_path2fid '%s'",
+		CT_ERROR(rc, "llapi_path2fid '%s' failed",
 			 fsq_action_item->fsq_info.fpath);
 		return rc;
 	}
@@ -1346,11 +1362,32 @@ static int archive_action(struct fsq_action_item_t *fsq_action_item)
 	hui = &hur->hur_user_item[0];
 	hui->hui_fid = fid;
 
-	rc = llapi_hsm_request(fsq_action_item->fsq_info.fpath, hur);
+	/* The call llapi_hsm_request requires uid:gid = 0:0 privileges when
+	   /proc/fs/lustre/.../hsm/user_request_mask == HSMA_RESTORE (default setting). */
+	rc = set_privileges(0, 0);
+	CT_DEBUG("[rc=%d] set_privileges uid: %u, gid: %u", rc, 0, 0);
+	if (rc) {
+		CT_ERROR(rc, "set_privileges uid: %u, gid: %u failed", 0, 0);
+		goto out;
+	}
 
+	rc = llapi_hsm_request(fsq_action_item->fsq_info.fpath, hur);
+	if (rc) {
+		CT_ERROR(rc, "llapi_hsm_request '%s' failed",
+			 fsq_action_item->fsq_info.fpath);
+	}
+
+	rc2 = set_privileges(fsq_action_item->uid, fsq_action_item->gid);
+	CT_DEBUG("[rc=%d] set_privileges uid: %u, gid: %u", rc2,
+		 fsq_action_item->uid, fsq_action_item->gid);
+	if (rc2)
+		CT_ERROR(rc2, "set_privileges uid: %u, gid: %u failed",
+			 fsq_action_item->uid, fsq_action_item->gid);
+
+out:
 	free(hur);
 
-	return rc;
+	return rc == 0 ? rc2 : rc;
 }
 
 static int finalize_fsq_action_item(struct fsq_action_item_t *fsq_action_item)
@@ -1526,7 +1563,7 @@ static int process_fsq_action_item(struct fsq_action_item_t *fsq_action_item)
 			   time_now() - ts);
 
 		rc = xattr_update_fsq_state(fsq_action_item,
-					      STATE_LUSTRE_COPY_DONE);
+					    STATE_LUSTRE_COPY_DONE);
 		CT_DEBUG("[rc=%d] setting state from '%s' to '%s'",
 			 rc,
 			 FSQ_ACTION_STR(STATE_LUSTRE_COPY_RUN),
