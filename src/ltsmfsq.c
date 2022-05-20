@@ -886,7 +886,9 @@ static void *thread_sock_client(void *arg)
 	/* Verify FSQ protocol matches between client and server. */
 	if (fsq_session.fsq_packet.ver != FSQ_PROTOCOL_VER) {
 		rc = -ENOPROTOOPT;
-		FSQ_ERROR(fsq_session, rc, "fsq protocol mismatch");
+		FSQ_ERROR(fsq_session, rc,
+			  "fsq protocol mismatch used: %u, expected: %u",
+			  fsq_session.fsq_packet.ver, FSQ_PROTOCOL_VER);
 		rc = fsq_send(&fsq_session, FSQ_ERROR | FSQ_REPLY);
 		goto out;
 	}
@@ -896,7 +898,13 @@ static void *thread_sock_client(void *arg)
 	int archive_id = -1;
 	rc = client_authenticate(&fsq_session, &archive_id, &uid, &gid);
 	if (rc) {
-		FSQ_ERROR(fsq_session, rc, "client_authenticate failed");
+		FSQ_ERROR(fsq_session, rc,
+			  "client_authenticate failed "
+			  "node: '%s', passwd: '%s', "
+			  "uid: %u, gid: %u",
+			  fsq_session.fsq_packet.fsq_login.node,
+			  fsq_session.fsq_packet.fsq_login.password,
+			  uid, gid);
 		rc = fsq_send(&fsq_session, FSQ_ERROR | FSQ_REPLY);
 		goto out;
 	}
@@ -932,7 +940,10 @@ static void *thread_sock_client(void *arg)
 
 		rc = init_fsq_storage(fpath_local, &fd_local, &fsq_session);
 		if (rc) {
-			FSQ_ERROR(fsq_session, rc, "init_fsq_storage");
+			FSQ_ERROR(fsq_session, rc,
+				  "init_fsq_storage failed '%s'",
+				  FSQ_STORAGE_DEST_STR(
+					  fsq_session.fsq_packet.fsq_info.fsq_storage_dest));
 			rc = fsq_send(&fsq_session, FSQ_ERROR | FSQ_REPLY);
 			goto out;
 		}

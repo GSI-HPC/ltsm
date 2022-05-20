@@ -74,12 +74,12 @@
         s == FSQ_STORAGE_TSM        ? "FSQ_STORAGE_TSM"        :           \
         s == FSQ_STORAGE_NULL       ? "FSQ_STORAGE_NULL"       : "UNKNOWN"
 
-#define FSQ_ERROR(fsq_session, rc, str)				\
+#define FSQ_ERROR(fsq_session, rc, ...)				\
 do {								\
 	fsq_session.fsq_packet.fsq_error.rc = rc;		\
-	strncpy(fsq_session.fsq_packet.fsq_error.strerror,	\
-		str, FSQ_MAX_ERRMSG_LENGTH);			\
-	CT_ERROR(rc, str);					\
+	snprintf(fsq_session.fsq_packet.fsq_error.strerror,	\
+		 FSQ_MAX_ERRMSG_LENGTH, __VA_ARGS__);		\
+	CT_ERROR(rc, __VA_ARGS__);				\
 } while (0);
 
 enum fsq_action_state_t {
