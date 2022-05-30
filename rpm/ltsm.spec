@@ -75,6 +75,9 @@ rm -rf %{buildroot}
 
 %changelog
 
+* Mon May 30 2022 Thomas Stibor <t.stibor@gsi.de> 0.8.4-1
+- Implement FSQ protocol version 1
+
 * Tue Jan 26 2021 Thomas Stibor <t.stibor@gsi.de> 0.8.3-2
 - Improvement: Remove useless mutex lock on llapi_hsm_request
 

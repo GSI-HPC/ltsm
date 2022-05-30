@@ -1,3 +1,9 @@
+ltsm (0.8.4) unstable; urgency=medium
+
+  * Implement FSQ protocol version 1
+
+ -- Thomas Stibor <thomas@stibor.net>  Mon, 30 May 2022 09:56:55 +0100
+
 ltsm (0.8.3-2) unstable; urgency=medium
 
   * Improvement: Remove useless mutex lock on llapi_hsm_request
