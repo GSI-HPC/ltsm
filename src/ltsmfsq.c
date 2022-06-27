@@ -112,7 +112,7 @@ static void usage(const char *cmd_name, const int rc)
 		"\t-c, --conf <file>\n"
 		"\t\t""option conf file\n"
 		"\t-v, --verbose {error, warn, message, info, debug}"
-		" [default: message]\n"
+		" [default: %s]\n"
 		"\t\t""produce more verbose output\n"
 		"\t-h, --help\n"
 		"\t\t""show this help\n"
@@ -123,6 +123,7 @@ static void usage(const char *cmd_name, const int rc)
 		N_THREADS_SOCK_DEFAULT,
 		N_THREADS_QUEUE_DEFAULT,
 		N_TOL_FILE_ERRORS,
+		LOG_LEVEL_HUMAN_STR(opt.o_verbose),
 		PACKAGE_VERSION,
 		FSQ_PROTOCOL_VER_STR(FSQ_PROTOCOL_VER));
 

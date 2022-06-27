@@ -132,7 +132,7 @@ static void usage(const char *cmd_name, const int rc)
 		"\t-c, --conf <file>\n"
 		"\t\t""option conf file\n"
 		"\t-v, --verbose {error, warn, message, info, debug}"
-		" [default: message]\n"
+		" [default: %s]\n"
 		"\t\t""produce more verbose output\n"
 		"\t--abort-on-error\n"
 		"\t\t""abort operation on major error\n"
@@ -152,6 +152,7 @@ static void usage(const char *cmd_name, const int rc)
 		"version: %s © 2017 by GSI Helmholtz Centre for Heavy Ion Research\n",
 		cmd_name,
 		nthreads,
+		LOG_LEVEL_HUMAN_STR(opt.o_verbose),
 		libapi_ver.version, libapi_ver.release, libapi_ver.level,
 		libapi_ver.subLevel,
 		appapi_ver.applicationVersion, appapi_ver.applicationRelease,

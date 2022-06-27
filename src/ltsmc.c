@@ -90,7 +90,7 @@ static void usage(const char *cmd_name, const int rc)
 		"\t-o, --owner <string>\n"
 		"\t-p, --password <string>\n"
 		"\t-s, --servername <string>\n"
-		"\t-v, --verbose {error, warn, message, info, debug} [default: message]\n"
+		"\t-v, --verbose {error, warn, message, info, debug} [default: %s]\n"
 		"\t-c, --conf <file>\n"
 		"\t-y, --datelow <string>\n"
 		"\t-z, --datehigh <string>\n"
@@ -99,6 +99,7 @@ static void usage(const char *cmd_name, const int rc)
 		"IBM API application client version: %d.%d.%d.%d\n"
 		"version: %s © 2017 by GSI Helmholtz Centre for Heavy Ion Research\n",
 		cmd_name,
+		LOG_LEVEL_HUMAN_STR(opt.o_verbose),
 		libapi_ver.version, libapi_ver.release, libapi_ver.level,
 		libapi_ver.subLevel,
 		appapi_ver.applicationVersion, appapi_ver.applicationRelease,

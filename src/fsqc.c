@@ -26,6 +26,13 @@
 
 #define BUF_LENGTH 0xFFFFF
 
+#define FSQ_STORAGE_DEST_HUMAN_STR(s)			       \
+	s == FSQ_STORAGE_LOCAL      ? "local"      :	       \
+	s == FSQ_STORAGE_LUSTRE     ? "lustre"     :	       \
+	s == FSQ_STORAGE_LUSTRE_TSM ? "lustre_tsm" : 	       \
+        s == FSQ_STORAGE_TSM        ? "tsm"        :           \
+        s == FSQ_STORAGE_NULL       ? "null"       : "UNKNOWN"
+
 struct options {
 	int	o_verbose;
 	char	o_servername[HOST_NAME_MAX + 1];
@@ -57,15 +64,17 @@ static void usage(const char *cmd_name, const int rc)
 		"\t-f, --fsname <string>\n"
 		"\t-a, --fpath <string>\n"
 		"\t-l, --filename <string>\n"
-		"\t-o, --storagedest {null, local, lustre, tsm, lustre_tsm}\n"
+		"\t-o, --storagedest {null, local, lustre, tsm, lustre_tsm} [default: %s] \n"
 		"\t-n, --node <string>\n"
 		"\t-p, --password <string>\n"
 		"\t-s, --servername <string>\n"
-		"\t-v, --verbose {error, warn, message, info, debug} [default: message]\n"
+		"\t-v, --verbose {error, warn, message, info, debug} [default: %s]\n"
 		"\t-h, --help\n"
 		"version: %s, fsq protocol version: %s "
 		"© 2022 by GSI Helmholtz Centre for Heavy Ion Research\n",
 		cmd_name,
+		FSQ_STORAGE_DEST_HUMAN_STR(opt.o_storage_dest),
+		LOG_LEVEL_HUMAN_STR(opt.o_verbose),
 		PACKAGE_VERSION,
 		FSQ_PROTOCOL_VER_STR(FSQ_PROTOCOL_VER));
 

@@ -35,6 +35,16 @@
 #include <sys/time.h>
 #include <linux/limits.h>
 
+#define LOG_LEVEL_HUMAN_STR(s)		              \
+	s == API_MSG_OFF    ? "off"    :	      \
+	s == API_MSG_FATAL  ? "fatal"  :	      \
+	s == API_MSG_ERROR  ? "error"  :	      \
+	s == API_MSG_WARN   ? "warn"   :	      \
+	s == API_MSG_NORMAL ? "normal" :	      \
+	s == API_MSG_INFO   ? "info"   :	      \
+	s == API_MSG_DEBUG  ? "debug"  :	      \
+        s == API_MSG_MAX    ? "max"    : "UNKNOWN"    \
+
 #define EFAILED 0
 #define UNUSED(x) (void)(x)
 
