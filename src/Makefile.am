@@ -22,14 +22,4 @@ if HAVE_TSM_LUSTRE
     sbin_PROGRAMS = lhsmtool_tsm
     lhsmtool_tsm_SOURCES = lhsmtool_tsm.c
     lhsmtool_tsm_LDADD = $(top_srcdir)/src/lib/libtsmapi.a
-
-    ltsmfsq_CFLAGS = -I@LUSTRE_SRC_DIR@/lustre/include -I@LUSTRE_SRC_DIR@/lustre/include/uapi -I@TSM_SRC_DIR@/ -I$(top_srcdir)/src/lib
-    sbin_PROGRAMS += ltsmfsq
-    ltsmfsq_SOURCES = ltsmfsq.c
-    ltsmfsq_LDADD = $(top_srcdir)/src/lib/libtsmapi.a $(top_srcdir)/src/lib/libfsqapi.a
 endif
-
-fsqc_CFLAGS = -m64 -D_FILE_OFFSET_BITS=64 -D_LARGEFILE64_SOURCE -I$(top_srcdir)/src/lib
-bin_PROGRAMS += fsqc
-fsqc_SOURCES = fsqc.c
-fsqc_LDADD = $(top_srcdir)/src/lib/libfsqapi.a

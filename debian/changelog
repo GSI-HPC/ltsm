@@ -1,3 +1,9 @@
+ltsm (0.8.3-47) unstable; urgency=low
+
+  * Automated changelog entry update
+
+ -- Thomas Stibor <t.stibor@gsi.de>  Thu, 21 Jul 2022 11:08:50 +0200
+
 ltsm (0.8.4) unstable; urgency=medium
 
   * Implement FSQ protocol version 1

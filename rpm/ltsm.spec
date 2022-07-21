@@ -22,9 +22,7 @@ Lustre TSM copytool for seamlessly archiving and retrieving data in Lustre
 mount points. In addition a TSM console client is provided for archiving,
 retrieving, deleting and querying data. This is especially useful when
 a Lustre storage deployment is decommissioned and the archived data still
-needs to be retrieved afterwards. Moreover, the package consists of a file system
-daemon (called ltsmfsq) that implements a protocol for receiving data via socket,
-copy data to Lustre and finally archive data on TSM server.
+needs to be retrieved afterwards.
 
 %prep
 %autosetup -n %{name}-%{version}-%{release}
@@ -41,34 +39,25 @@ mkdir -p %{buildroot}/%{_etcdir}/default
 make install DESTDIR=%{buildroot}
 install -m 644 debian/%{name}.lhsmtool_tsm.service %{buildroot}/%{_unitdir}/%{name}.lhsmtool_tsm.service
 install -m 600 debian/lhsmtool_tsm.default %{buildroot}/%{_etcdir}/default/lhsmtool_tsm
-install -m 644 debian/%{name}.ltsmfsq.service %{buildroot}/%{_unitdir}/%{name}.ltsmfsq.service
-install -m 600 debian/ltsmfsq.default %{buildroot}/%{_etcdir}/default/ltsmfsq
 
 %files
 %defattr(-,root,root)
 %doc script/ltsmsync.sh
 %{_mandir}/man1/lhsmtool_tsm.1.*
 %{_mandir}/man1/ltsmc.1.*
-%{_mandir}/man1/ltsmfsq.1.*
 %{_bindir}/ltsmc
 %{_sbindir}/lhsmtool_tsm
-%{_sbindir}/ltsmfsq
 %{_unitdir}/%{name}.lhsmtool_tsm.service
 %{_etcdir}/default/lhsmtool_tsm
-%{_unitdir}/%{name}.ltsmfsq.service
-%{_etcdir}/default/ltsmfsq
 
 %post
 %systemd_post %{name}.lhsmtool_tsm.service
-%systemd_post %{name}.ltsmfsq.service
 
 %preun
 %systemd_preun %{name}.lhsmtool_tsm.service
-%systemd_preun %{name}.ltsmfsq.service
 
 %postun
 %systemd_postun %{name}.lhsmtool_tsm.service
-%systemd_postun %{name}.ltsmfsq.service
 
 %clean
 rm -rf %{buildroot}

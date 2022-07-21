@@ -78,7 +78,7 @@ AS_IF([test "x$tsmheader" = "xyes"],
 	],
 	[
 	AM_CONDITIONAL([HAVE_TSM], [false])
-	AC_MSG_WARN([cannot find TSM API headers and/or TSM API library, only FSQ library will be build])
+	AC_MSG_WARN([cannot find TSM API headers and/or TSM API library])
 	]
 )
 
@@ -100,7 +100,7 @@ AC_CHECK_LIB([m],[ceil])
 # Check for required zlib library.
 AC_CHECK_LIB([z], [crc32], [], [AC_MSG_ERROR([cannot find library zlib, install zlib package or provide library path e.g. ./configure LDFLAGS='-L/<PATH_TO_LIB> -Wl,-rpath,<PATH_TO_LIB>'])])
 
-# Check for required xattr library, otherwise we cannot get Lustre stripe information and FSQ library.
+# Check for required xattr library, otherwise we cannot get Lustre stripe information.
 AC_CHECK_LIB([attr], [fgetxattr], [], [AC_MSG_ERROR([cannot find library libattr, install libattr package or provide library path e.g. ./configure LDFLAGS='-L/<PATH_TO_LIB> -Wl,-rpath,<PATH_TO_LIB>'])])
 
 # Check for required uuid library.
@@ -142,8 +142,6 @@ if test "x$enable_tests" = "xyes"; then
 else
     enable_tests="no"
 fi
-
-AC_DEFINE([FSQ_PROTOCOL_VER], [1], [define used FSQ protocol version])
 
 # Propage flags and dirs among final Makefiles.
 AC_SUBST([AM_CFLAGS])
@@ -187,8 +185,7 @@ AC_OUTPUT
 echo
 echo "configured ltsm:"
 echo
-echo "build fsqapi library           : yes"
 echo "build tsmapi library and ltsmc : ${tsmheader}"
-echo "build ltsmfsq and lhsmtool_tsm : ${tsmheader_and_lapiheader}"
+echo "build lhsmtool_tsm             : ${tsmheader_and_lapiheader}"
 echo "build test suite               : ${enable_tests}"
 echo

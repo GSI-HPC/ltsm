@@ -122,12 +122,11 @@ configure: WARNING: cannot find Lustre API headers and/or Lustre API library
 ...
 configured ltsm:
 
-build fsqapi library           : yes
 build tsmapi library and ltsmc : yes
-build ltsmfsq and lhsmtool_tsm : no
+build lhsmtool_tsm             : no
 build test suite               : yes
 ```
-and the console client *ltsmc* as well as the *fsqlib* are built only. For building also the Lustre Copytool thus make sure the Lustre header files
+and the console client *ltsmc* is built only. For building also the Lustre Copytool thus make sure the Lustre header files
 and the Lustre library `liblustreapi.so` are available and the paths are correctly specified e.g.
 ```
 ./autogen.sh && ./configure CFLAGS='-g -DDEBUG -O0' --with-lustre-src=/usr/local/include/lustre LDFLAGS='-L/usr/local/lib' --with-tsm-headers=/opt/tivoli/tsm/client/api/bin64/sample --enable-tests
@@ -136,10 +135,8 @@ and the Lustre library `liblustreapi.so` are available and the paths are correct
 If *required* TSM and *optional* Lustre header files and libraries are found the following executable files are provided:
   * `src/lhsmtool_tsm` (Lustre TSM Copytool)
   * `src/ltsmc` (Console client)
-  * `src/ltsmfsq` (Lustre TSM File System Daemon)
   * `src/test/test_cds` (Test suite for data structures (linked-list, queue, hashtable, etc.))
   * `src/test/test_tsmapi` (Test suite for *tsmapi*)
-  * `src/test/test_fsqapi` (Test suite for *fsqapi*)
   * `src/test/ltsmbench` (Benchmark suite for measuring threaded archive/retrieve performance)
 
 ### Install or Build DEB/RPM Package
@@ -340,51 +337,6 @@ lustre stripe count                        : 1
 
 ```
 
-# Lustre TSM File Storage Queue
-The goal of the Lustre TSM File Storage Queue (short ltsmfsq) is to
-efficiently and robustly transfer data to a Lustre file system and
-additionally archive the data seamlessly on a TSM server.
-A deployed Lustre file system is frequently shared and accessed by thousands of users and
-can suffer from latency delays. To overcome this problem,
-the daemon implements a straightforward socket communication protocol and employs
-(similar to the copytool architecture) a *queue* data-structure and
-*multiple producer-consumer* model to leverage asynchronous data transfer by using an intermediate
-local file system. The daemon can be started as follows:
-```
->ltsmfsq -l /fsqdata -i identmap.conf -s 16 -q 12 -v info /lustre
-[I] 1579167563.378896 [174822] ltsmfsq.c:137 node: 'polaris', servername: 'tsmserver-8', archive_id: 15, uid: 1000, gid: 2000
-[M] 1579167563.382178 [174822] ltsmfsq.c:1618 listening on port 7625 with 16 socket threads, 12 queue worker threads, local fs '/fsqdata' and number of tolerated file errors 16
-[M] 1579167563.382268 [174822] ltsmfsq.c:1539 created queue consumer thread fsq_queue/0
-[M] 1579167563.382309 [174822] ltsmfsq.c:1539 created queue consumer thread fsq_queue/1
-[M] 1579167563.382353 [174822] ltsmfsq.c:1539 created queue consumer thread fsq_queue/2
-[M] 1579167563.382387 [174822] ltsmfsq.c:1539 created queue consumer thread fsq_queue/3
-[M] 1579167563.382418 [174822] ltsmfsq.c:1539 created queue consumer thread fsq_queue/4
-[M] 1579167563.382448 [174822] ltsmfsq.c:1539 created queue consumer thread fsq_queue/5
-[M] 1579167563.382480 [174822] ltsmfsq.c:1539 created queue consumer thread fsq_queue/6
-[M] 1579167563.382511 [174822] ltsmfsq.c:1539 created queue consumer thread fsq_queue/7
-[M] 1579167563.382544 [174822] ltsmfsq.c:1539 created queue consumer thread fsq_queue/8
-[M] 1579167563.382575 [174822] ltsmfsq.c:1539 created queue consumer thread fsq_queue/9
-[M] 1579167563.382606 [174822] ltsmfsq.c:1539 created queue consumer thread fsq_queue/10
-[M] 1579167563.382641 [174822] ltsmfsq.c:1539 created queue consumer thread fsq_queue/11
-```
-
-For interfacing the daemon from a client, use the function calls provided in: [fsqapi.h](http://github.com/tstibor/ltsm/blob/master/src/lib/fsqapi.h)
-```
-void fsq_init(struct fsq_login_t *fsq_login, const char *servername,
-              const char *node, const char *password,
-              const char *owner, const char *platform,
-              const char *fsname, const char *fstype,
-              const char *hostname, const int port);
-int fsq_fconnect(struct fsq_login_t *fsq_login,
-                 struct fsq_session_t *fsq_session);
-void fsq_fdisconnect(struct fsq_session_t *fsq_session);
-int fsq_fopen(const char *fs, const char *fpath, const char *desc,
-              struct fsq_session_t *fsq_session);
-ssize_t fsq_fwrite(const void *ptr, size_t size, size_t nmemb,
-                   struct fsq_session_t *fsq_session);
-int fsq_fclose(struct fsq_session_t *fsq_session);
-```
-
 # Tips for Tuning
 There are basically 3 knobs for adjusting the archive/retrieve performance.
 1. The [Txnbytelimit](http://www.ibm.com/support/knowledgecenter/en/SSGSG7_7.1.6/client/r_opt_txnbytelimit.html) option for adjusting the number of bytes the *tsmapi* buffers before it sends a transaction to the TSM server. The option depends on the workload, a value of *2GByte* resulted in good performance on most tested machines and setups.
@@ -442,8 +394,7 @@ transfer as depicted below.
 ![Archive performace](https://raw.githubusercontent.com/tstibor/ltsm.github.io/master/doc/images/scaling.png)
 
 ## More Information
-In the manual pages [lhsmtool_tsm.1](http://github.com/tstibor/ltsm/blob/master/man/lhsmtool_tsm.1), [ltsmc.1](http://github.com/tstibor/ltsm/blob/master/man/ltsmc.1) and [ltsmfsq.1](http://github.com/tstibor/ltsm/blob/master/man/ltsmfsq.1) usage details and options of *lhsmtool_tsm*, *ltsmc* and *ltsmfsq*
-are provided. In addition, a [screencast](https://github.com/tstibor/ltsm.github.io/raw/master/screencast/ltsm-screencast-2.mp4) of an older version of this project is provided.
+In the manual pages [lhsmtool_tsm.1](http://github.com/tstibor/ltsm/blob/master/man/lhsmtool_tsm.1) and [ltsmc.1](http://github.com/tstibor/ltsm/blob/master/man/ltsmc.1) usage details and options of *lhsmtool_tsm* and *ltsmc* are provided. In addition, a [screencast](https://github.com/tstibor/ltsm.github.io/raw/master/screencast/ltsm-screencast-2.mp4) of an older version of this project is provided.
 
 ## References
 A thorough description and code examples of IBM's low-level TSM API/library can be found in the open document [Using the Application Programming Interface](https://github.com/tstibor/ltsm.github.io/raw/master/doc/tsm/using_the_programming_application_interface.pdf), Fourth edition (September 2015).

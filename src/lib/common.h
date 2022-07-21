@@ -88,11 +88,6 @@
 #define DSM_MAX_PLATFORM_LENGTH 16
 #endif
 
-/* Length of fsq error message. */
-#ifndef FSQ_MAX_ERRMSG_LENGTH
-#define FSQ_MAX_ERRMSG_LENGTH 1024
-#endif
-
 #define OPTNCMP(str1, str2)				\
 	((strlen(str1) == strlen(str2)) &&		\
 	 (strncmp(str1, str2, strlen(str1)) == 0))
