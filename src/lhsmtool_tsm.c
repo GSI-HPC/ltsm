@@ -42,7 +42,7 @@
 #include "ltsmapi.h"
 #include "queue.h"
 
-#define XATTR_LUSTRE_UUID "user.lustre.uuid"
+#define XATTR_LTSM_UUID "user.ltsm.uuid"
 
 /* Lustre commit 3bfb6107ba4e92d8aa02e842502bc44bac7b8b43
    increased the upper limit of maximum HSM backends
@@ -505,7 +505,7 @@ static int ct_archive(struct session_t *session)
 	uuid_generate(uuid);
 	uuid_unparse_lower(uuid, uuid_str);
 
-	rc = setxattr(fpath, XATTR_LUSTRE_UUID, (uuid_t *)&uuid,
+	rc = setxattr(fpath, XATTR_LTSM_UUID, (uuid_t *)&uuid,
 		      sizeof(uuid_t), 0);
 	CT_DEBUG("[rc=%d] setxattr '%s'", rc, fpath);
 	if (rc < 0) {
@@ -566,7 +566,7 @@ cleanup:
 
 	if (rc) {
 		int rc2;
-		rc2 = removexattr(fpath, XATTR_LUSTRE_UUID);
+		rc2 = removexattr(fpath, XATTR_LTSM_UUID);
 		CT_DEBUG("[rc=%d,rc2=%d] removexattr '%s'", rc, rc2, fpath);
 		if (rc2)
 			CT_WARN("rc2=%d] removexattr failed on '%s'",
@@ -595,7 +595,7 @@ static int ct_restore(struct session_t *session)
 		return rc;
 	}
 
-	rc = getxattr(fpath, XATTR_LUSTRE_UUID, (uuid_t *)&uuid,
+	rc = getxattr(fpath, XATTR_LTSM_UUID, (uuid_t *)&uuid,
 		      sizeof(uuid_t));
 	CT_DEBUG("[rc=%zd] getxattr '%s'", rc, fpath);
 	if (rc < 0)
