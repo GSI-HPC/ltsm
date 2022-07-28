@@ -5,7 +5,7 @@ fi
 # End automatically added section
 # Automatically added by dh_installinit
 if [ "$1" = "purge" ] ; then
-	update-rc.d lhsmtool_tsm remove >/dev/null
+	update-rc.d fsqd remove >/dev/null
 fi
 
 

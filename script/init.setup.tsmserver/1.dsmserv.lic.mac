@@ -1,4 +1,0 @@
-register license "file=/opt/tivoli/tsm/server/bin/tsmbasic.lic"
-register license "file=/opt/tivoli/tsm/server/bin/tsmee.lic" 
-register license "file=/opt/tivoli/tsm/server/bin/dataret.lic"
-query license

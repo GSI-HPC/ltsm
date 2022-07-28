@@ -1,9 +1,9 @@
 Format: http://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
-Upstream-Name: ltsm
-Source: https://github.com/tstibor/ltsm
+Upstream-Name: fsq
+Source: https://github.com/tstibor/fsq
 
 Files: *
-Copyright: 2017 GSI Helmholtz Centre for Heavy Ion Research
+Copyright: 2022 GSI Helmholtz Centre for Heavy Ion Research
            Thomas Stibor <t.stibor@gsi.de>
 License: GPL-2.0
 

@@ -6,12 +6,12 @@ AC_PREREQ([2.69])
 m4_define([GIT_VERSION_STRING], m4_esyscmd([git describe --tags | sed 's/\(.*\)-.*/\1/' | tr -d '\n']))
 
 # Define package information.
-AC_INIT([ltsm], [GIT_VERSION_STRING], [t.stibor@gsi.de], [], [https://github.com/tstibor/ltsm])
+AC_INIT([fsq], [GIT_VERSION_STRING], [t.stibor@gsi.de], [], [https://github.com/tstibor/fsq])
 
 m4_include([m4/ax_pthread.m4])
 AM_INIT_AUTOMAKE
 
-AC_CONFIG_SRCDIR([src/ltsmc.c])
+AC_CONFIG_SRCDIR([src/fsqd.c])
 AC_CONFIG_HEADERS([config.h])
 
 # Checks for programs.
@@ -30,7 +30,7 @@ AC_LANG([C])
 LT_INIT
 AC_CONFIG_MACRO_DIR([m4])
 
-# Path to Lustre src directory.
+# Path to Lustre header files directory, needed to compile fsqd.
 AC_ARG_WITH([lustre-headers],
 	AS_HELP_STRING([--with-lustre-headers[=PATH]],[path to location of Lustre header files [default=/usr/include/lustre]]),
 	LUSTRE_SRC_DIR="$withval", LUSTRE_SRC_DIR="/usr/include/lustre")
@@ -45,7 +45,7 @@ AS_IF([test "x$lapiheader" = "xyes"],
 	AC_CHECK_LIB([lustreapi],
 		 [llapi_error],
 		 [],
-		 [AC_MSG_ERROR([cannot find Lustre API library lustreapi, fix it by providing library path e.g. ./configure LDFLAGS='-L/<PATH_TO_LIB> -Wl,-rpath,<PATH_TO_LIB>'])]
+		 [AC_MSG_ERROR([cannot find Lustre API library lustreapi, provide library path e.g. ./configure LDFLAGS='-L/<PATH_TO_LIB> -Wl,-rpath,<PATH_TO_LIB>'])]
         )
 	#
 	AC_DEFINE([HAVE_LUSTRE], [1], [define to 1 if Lustre source is available])
@@ -57,7 +57,7 @@ AS_IF([test "x$lapiheader" = "xyes"],
 	]
 )
 
-# Path to TSM API src directory.
+# Path to TSM src directory.
 AC_ARG_WITH([tsm-headers], AS_HELP_STRING([--with-tsm-headers[=PATH]],[path to location of IBM TSM header files [default=/opt/tivoli/tsm/client/api/bin64/sample]]),
 	TSM_SRC_DIR="$withval", TSM_SRC_DIR="/opt/tivoli/tsm/client/api/bin64/sample")
 
@@ -78,19 +78,44 @@ AS_IF([test "x$tsmheader" = "xyes"],
 	],
 	[
 	AM_CONDITIONAL([HAVE_TSM], [false])
-	AC_MSG_WARN([cannot find TSM API headers and/or TSM API library, only FSQ library will be build])
+	AC_MSG_WARN([cannot find TSM API headers and/or TSM API library, only fsqc and fsq library will be build])
 	]
 )
 
-tsmheader_and_lapiheader="no"
-AS_IF([test "x$lapiheader" = "xyes" && test "x$tsmheader" = "xyes"],
+# Path to LTSM header file directory.
+AC_ARG_WITH([ltsm-headers], AS_HELP_STRING([--with-ltsm-headers[=PATH]],[path to location of ltsmapi header files [default=/usr/include]]),
+	LTSM_SRC_DIR="$withval", LTSM_SRC_DIR="/usr/include")
+
+ltsmheader="no"
+AC_CHECK_FILE("$LTSM_SRC_DIR/ltsmapi.h", [ltsmheader="yes"],
+	[AC_MSG_WARN([cannot find ltsmapi header files, use --with-ltsm-headers=PATH])])
+AS_IF([test "x$ltsmheader" = "xyes"],
+	[
+	# We found the required LTSM header file, so let's check for LTSM API library.
+	AC_CHECK_LIB([ltsmapi],
+		[tsm_init],
+		[],
+		[AC_MSG_ERROR([cannot find library ltsmapi, provide library path e.g. ./configure LDFLAGS='-L/<PATH_TO_LIB> -Wl,-rpath,<PATH_TO_LIB>'])]
+        )
+	#
+	AC_DEFINE([HAVE_LTSM], [1], [define to 1 if ltsmapi is available])
+	AM_CONDITIONAL([HAVE_LTSM], [true])
+	],
+	[
+	AM_CONDITIONAL([HAVE_LTSM], [false])
+	AC_MSG_WARN([cannot find ltsmapi headers and/or library, only fsqc and fsq library will be build])
+	]
+)
+
+tsmheader_and_ltsmheader_and_lapiheader="no"
+AS_IF([test "x$lapiheader" = "xyes" && test "x$ltsmheader" = "xyes" && test "x$tsmheader" = "xyes"],
       [
-      AC_DEFINE([HAVE_TSM_LUSTRE], [1], [define to 1 if Lustre and TSM source is available])
-      AM_CONDITIONAL([HAVE_TSM_LUSTRE], [true])
-      tsmheader_and_lapiheader="yes"
+      AC_DEFINE([HAVE_TSM_LTSM_LUSTRE], [1], [define to 1 if Lustre and ltsm API's are available])
+      AM_CONDITIONAL([HAVE_TSM_LTSM_LUSTRE], [true])
+      tsmheader_and_ltsmheader_and_lapiheader="yes"
       ],
       [
-      AM_CONDITIONAL([HAVE_TSM_LUSTRE], [false])
+      AM_CONDITIONAL([HAVE_TSM_LTSM_LUSTRE], [false])
       ]
 )
 
@@ -116,21 +141,6 @@ AX_PTHREAD([AC_DEFINE(HAVE_PTHREAD, 1, [Define if you have POSIX threads librari
             CC="$PTHREAD_CC"],[])
 AC_SEARCH_LIBS(pthread_create, pthread)
 
-# Check whether struct lov_user_md has member lmm_pool_name.
-AC_MSG_CHECKING([whether 'struct lov_user_md_v3' is defined])
-AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[
-#include <lustre/lustre_user.h>
-]], [[
-do {
-   ((struct lov_user_md *)0)->lmm_pool_name = NULL;
-} while(0)
-]])],[
-  AC_MSG_RESULT(yes)
-  AC_DEFINE(LOV_MAGIC_V3,[1],[define if you have 'struct lov_user_md_v3'])
-],[
-  AC_MSG_RESULT(no)
-])
-
 #  Default-disabled tests.
 AC_ARG_ENABLE([tests],
     AS_HELP_STRING([--enable-tests], [enable and build tests]))
@@ -148,6 +158,7 @@ AC_DEFINE([FSQ_PROTOCOL_VER], [1], [define used FSQ protocol version])
 # Propage flags and dirs among final Makefiles.
 AC_SUBST([AM_CFLAGS])
 AC_SUBST([LUSTRE_SRC_DIR])
+AC_SUBST([LTSM_SRC_DIR])
 AC_SUBST([TSM_SRC_DIR])
 
 # Checks for typedefs, structures, and compiler characteristics.
@@ -187,8 +198,7 @@ AC_OUTPUT
 echo
 echo "configured ltsm:"
 echo
-echo "build fsqapi library           : yes"
-echo "build tsmapi library and ltsmc : ${tsmheader}"
-echo "build ltsmfsq and lhsmtool_tsm : ${tsmheader_and_lapiheader}"
-echo "build test suite               : ${enable_tests}"
+echo "build fsqc and fsqapi library : yes"
+echo "build fsqd                    : ${tsmheader_and_ltsmheader_and_lapiheader}"
+echo "build test suite              : ${enable_tests}"
 echo

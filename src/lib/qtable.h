@@ -19,7 +19,7 @@
 #ifndef QTABLE_H
 #define QTABLE_H
 
-#include "tsmapi.h"
+#include "ltsmapi.h"
 
 dsInt16_t init_qtable(struct qtable_t *qtable);
 void destroy_qtable(struct qtable_t *qtable);

@@ -1,0 +1,10 @@
+[Unit]
+Description=File Storage Queue Server
+Documentation=man:fsqd(1)
+
+[Service]
+EnvironmentFile=-/etc/default/fsqd
+ExecStart=/usr/sbin/fsqd $FSQD_OPTS
+
+[Install]
+WantedBy=multi-user.target

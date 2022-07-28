@@ -1,2 +1,0 @@
-define stg fsdir_stg fsdir_devc maxscr=999
-q stg

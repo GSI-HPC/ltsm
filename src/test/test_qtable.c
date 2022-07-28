@@ -19,7 +19,7 @@
 #include <stdlib.h>
 #include <strings.h>
 #include <time.h>
-#include "tsmapi.h"
+#include "ltsmapi.h"
 #include "qtable.c"
 #include "log.h"
 #include "CuTest.h"

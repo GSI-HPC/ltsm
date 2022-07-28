@@ -1,3 +1,0 @@
-define copygroup fsdir_domain fsdir_policyset fsdir_mgmtclass dest=fsdir_stg
-define copygroup fsdir_domain fsdir_policyset fsdir_mgmtclass dest=fsdir_stg type=archive retv=0 retmin=0
-q copygroup

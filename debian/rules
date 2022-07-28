@@ -14,5 +14,4 @@ override_dh_auto_install:
 	dh_auto_install -- prefix=/usr
 
 override_dh_installinit:
-	dh_installinit -p ltsm --name=lhsmtool_tsm
-	dh_installinit -p ltsm --name=ltsmfsq
+	dh_installinit -p fsq --name=fsqd

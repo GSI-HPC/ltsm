@@ -1,2 +1,0 @@
-assign defmgmt fsdir_domain fsdir_policyset fsdir_mgmtclass
-q domain fsdir_domain

@@ -1,2 +1,0 @@
-define policyset fsdir_domain fsdir_policyset
-q policyset

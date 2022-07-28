@@ -1,6 +1,0 @@
-SErvername		 tsmserver-8
-   Nodename		 polaris
-   TCPServeraddress	 192.168.254.101
-   Compression           no
-   TXNBytelimit          2G
-   ENABLEINSTRUMENTATION off

@@ -1,7 +1,0 @@
-# Conf example for ltsmc
-servername lxltsm01-failover
-node 	   polaris
-password   polaris
-owner	   sirius
-fsname	   /
-verbose	   info

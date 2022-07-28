@@ -1,2 +1,0 @@
-# Store this file at /etc/default/lhsmtool_tsm
-LHSMTOOL_TSM_OPTS="--restore-stripe -v debug -n polaris -p polaris -s 'lxltsm01-tsm-server' -t 4 /lustre"
