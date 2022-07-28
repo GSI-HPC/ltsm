@@ -20,7 +20,7 @@
 
 #include <getopt.h>
 #include <pthread.h>
-#include "tsmapi.h"
+#include "ltsmapi.h"
 #include "test_utils.h"
 #include "measurement.h"
 

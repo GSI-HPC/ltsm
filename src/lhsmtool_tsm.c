@@ -39,7 +39,7 @@
 #include <uuid/uuid.h>
 #include <sys/xattr.h>
 #include <lustre/lustreapi.h>
-#include "tsmapi.h"
+#include "ltsmapi.h"
 #include "queue.h"
 
 #define XATTR_LUSTRE_UUID "user.lustre.uuid"

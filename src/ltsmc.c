@@ -23,7 +23,7 @@
 #include <sys/stat.h>
 #include <sys/param.h>
 #include <zlib.h>
-#include "tsmapi.h"
+#include "ltsmapi.h"
 #include "measurement.h"
 
 MSRT_DECLARE(tsm_archive_fpath);

@@ -185,7 +185,7 @@ AC_OUTPUT
 echo
 echo "configured ltsm:"
 echo
-echo "build tsmapi library and ltsmc : ${tsmheader}"
-echo "build lhsmtool_tsm             : ${tsmheader_and_lapiheader}"
-echo "build test suite               : ${enable_tests}"
+echo "build ltsmapi library and ltsmc : ${tsmheader}"
+echo "build lhsmtool_tsm              : ${tsmheader_and_lapiheader}"
+echo "build test suite                : ${enable_tests}"
 echo

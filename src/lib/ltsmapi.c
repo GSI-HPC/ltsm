@@ -37,7 +37,7 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <netdb.h>
-#include "tsmapi.h"
+#include "ltsmapi.h"
 #include "common.h"
 #include "qtable.h"
 

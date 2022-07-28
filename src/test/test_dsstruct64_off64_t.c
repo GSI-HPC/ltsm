@@ -18,7 +18,7 @@
 
 #include <stdlib.h>
 #include <strings.h>
-#include "tsmapi.c"
+#include "ltsmapi.c"
 #include "log.h"
 #include "CuTest.h"
 

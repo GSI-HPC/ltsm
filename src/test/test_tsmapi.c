@@ -23,7 +23,7 @@
 #include <time.h>
 #include <unistd.h>
 #include "CuTest.h"
-#include "tsmapi.c"
+#include "ltsmapi.c"
 #include "test_utils.h"
 
 #define SERVERNAME	"tsmserver-8"
@@ -213,7 +213,7 @@ void test_set_prefix(CuTest *tc)
 	free(_prefix);
 }
 
-CuSuite* tsmapi_get_suite()
+CuSuite* ltsmapi_get_suite()
 {
     CuSuite* suite = CuSuiteNew();
 #ifdef TEST_TSM_CALLS
@@ -232,16 +232,16 @@ void run_all_tests(void)
 
 	CuString *output = CuStringNew();
 	CuSuite *suite = CuSuiteNew();
-	CuSuite *tsmapi_suite = tsmapi_get_suite();
+	CuSuite *ltsmapi_suite = ltsmapi_get_suite();
 
-	CuSuiteAddSuite(suite, tsmapi_suite);
+	CuSuiteAddSuite(suite, ltsmapi_suite);
 
 	CuSuiteRun(suite);
 	CuSuiteSummary(suite, output);
 	CuSuiteDetails(suite, output);
 	printf("%s\n", output->buffer);
 
-	CuSuiteDelete(tsmapi_suite);
+	CuSuiteDelete(ltsmapi_suite);
 
 	free(suite);
 	CuStringDelete(output);
