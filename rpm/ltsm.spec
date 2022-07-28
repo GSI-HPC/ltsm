@@ -3,7 +3,7 @@
 %define release %{_release}
 %define _etcdir /etc
 
-Summary: Lustre TSM copytool, TSM console client and Lustre TSM File System Daemon.
+Summary: Lustre TSM copytool and TSM console client.
 Name: %{name}
 Version: %{version}
 Release: %{release}
@@ -63,6 +63,9 @@ install -m 600 debian/lhsmtool_tsm.default %{buildroot}/%{_etcdir}/default/lhsmt
 rm -rf %{buildroot}
 
 %changelog
+
+* Thu Jul 28 2022 Thomas Stibor <t.stibor@gsi.de> 0.9.0-1
+- Remove FSQ to keep LTSM as a Lustre TSM copytool project.
 
 * Mon May 30 2022 Thomas Stibor <t.stibor@gsi.de> 0.8.4-1
 - Implement FSQ protocol version 1

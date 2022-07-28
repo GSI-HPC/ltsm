@@ -1,4 +1,4 @@
-LTSM - Lightweight TSM API, Lustre TSM Copytool for Archiving Data, TSM Console Client and Lustre TSM File Storage Queue API and Daemon.
+LTSM - Lightweight TSM API, Lustre TSM Copytool for Archiving and Retrieving Data.
 ==============
 
 [![Tag Version](https://img.shields.io/github/tag/tstibor/ltsm.svg)](https://github.com/tstibor/ltsm/tags)
@@ -9,7 +9,6 @@ This project consists of *five* parts:
 2. Lustre TSM Copytool.
 3. TSM console client.
 4. Benchmark and test suite.
-5. Lustre TSM storage API/library and daemon.
 
 # Introduction into Lustre HSM
 Lustre has since version 2.5 hierarchical storage management (HSM) capabilities, that is, data can be automatically
@@ -388,10 +387,24 @@ The TSM bulk data is placed on regular disks bundled into a hardware RAID-6 devi
 The Lustre file system can be bond to *multiple* HSM storage backends, where each bond is identified by
 an unique number called the *archive id*. This concepts thus allows scaling within the Lustre HSM framework.
 In the simplest case, only one copytool instance is started which handles
-all archive id's in the range {1,2,...,32}. That is, all data is transferred through a single TSM Server though
+all archive id's in the range {1,2,...,32}. That is, all data is transferred through a single TSM server though
 with multi-threaded access. In the full expanded parallel setup 32 TSM servers can be leveraged for data
 transfer as depicted below.
 ![Archive performace](https://raw.githubusercontent.com/tstibor/ltsm.github.io/master/doc/images/scaling.png)
+
+## Moving and Renaming Files already Archived and Released
+Archiving and releasing a file F with the TSM copytool and subsequently moving
+F to a different Lustre directory results in a mismatch between
+the `readlink -f F` and the TSM object /fs/hl/ll stored on the TSM server.
+As a consequence the file cannot be retrieved from the TSM server anymore.
+To overcome this problem, each file archived with the TSM copytool stores in the extended attribute
+`user.lustre.uuid` an UUID value, e.g. `user.lustre.uuid=0xc72e6182ab0b4e00b6798282dea857fe`.
+The UUID value is also stored in the TSM object description field when F is archived.
+Additional fields are `/fs/hl/ll` and some more as described above.
+A released file F is queried e.g. as follows: `/fs/*/**` and `description=0xc72e6182ab0b4e00b6798282dea857fe`.
+If the query is successful, then the data of the TSM object is written into file F.
+Otherwise, the query is repeated however as follows: `/fs/hl/ll`, that is with `readlink -f F`.
+Note, make sure the Lustre file system is mounted with extended attribute capability, that is `(/lustre type lustre (...,user_xattr,...)`.
 
 ## More Information
 In the manual pages [lhsmtool_tsm.1](http://github.com/tstibor/ltsm/blob/master/man/lhsmtool_tsm.1) and [ltsmc.1](http://github.com/tstibor/ltsm/blob/master/man/ltsmc.1) usage details and options of *lhsmtool_tsm* and *ltsmc* are provided. In addition, a [screencast](https://github.com/tstibor/ltsm.github.io/raw/master/screencast/ltsm-screencast-2.mp4) of an older version of this project is provided.
