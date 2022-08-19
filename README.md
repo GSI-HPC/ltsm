@@ -4,7 +4,7 @@ LTSM - Lightweight TSM API, Lustre TSM Copytool for Archiving and Retrieving Dat
 [![Tag Version](https://img.shields.io/github/tag/tstibor/ltsm.svg)](https://github.com/tstibor/ltsm/tags)
 [![License](http://img.shields.io/:license-gpl2-blue.svg)](http://www.gnu.org/licenses/gpl-2.0.html)
 
-This project consists of *five* parts:
+This project consists of *four* parts:
 1. Lightweight TSM API/library (called *tsmapi*) supporting operations (*archiving*, *retrieving*, *deleting*, *querying*).
 2. Lustre TSM Copytool.
 3. TSM console client.
