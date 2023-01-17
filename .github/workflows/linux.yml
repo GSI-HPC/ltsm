@@ -19,7 +19,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        container: ["debian-bullseye", "debian-buster"]
+        container: ["debian", "debian-buster"]
 
     container:
       image: ghcr.io/${{ github.repository_owner }}/${{ matrix.container }}
