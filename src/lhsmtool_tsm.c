@@ -505,13 +505,16 @@ static int ct_archive(struct session_t *session)
 	uuid_generate(uuid);
 	uuid_unparse_lower(uuid, uuid_str);
 
+	/* If Lustre file system is not mounted with option user_xattr and
+	   file is archived and subsequently moved to into another directory
+	   on the Lustre mount point, it cannot be retrieved. For the sake
+	   of compatibility we output an error when setxattr fails, however
+	   continue to archive the file without UUID xattr. */
 	rc = setxattr(fpath, XATTR_LTSM_UUID, (uuid_t *)&uuid,
 		      sizeof(uuid_t), 0);
-	CT_DEBUG("[rc=%d] setxattr '%s'", rc, fpath);
-	if (rc < 0) {
-		CT_ERROR(errno, "setxattr on '%s' failed", fpath);
-		goto cleanup;
-	}
+	CT_DEBUG("[rc=%d] setxattr '%s' uuid '%s'", rc, fpath, uuid_str);
+	if (rc < 0)
+		CT_ERROR(errno, "setxattr '%s' uuid '%s' failed", fpath, uuid_str);
 
 	rc = ct_hsm_action_begin(session, mdt_index, open_flags, false);
 	CT_DEBUG("[rc=%d] ct_hsm_action_begin on '%s'", rc, fpath);
@@ -599,9 +602,8 @@ static int ct_restore(struct session_t *session)
 		      sizeof(uuid_t));
 	CT_DEBUG("[rc=%zd] getxattr '%s'", rc, fpath);
 	if (rc < 0)
-		CT_WARN("getxattr failed on '%s', no "
-			"uuid restore feasible, try "
-			"/fs/hl/ll restore: %s",
+		CT_WARN("getxattr failed on '%s' '%s', no "
+			"uuid restore feasible, try /fs/hl/ll",
 			fpath, strerror(errno));
 	else
 		uuid_unparse_lower(uuid, uuid_str);
