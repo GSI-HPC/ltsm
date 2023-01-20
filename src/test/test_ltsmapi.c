@@ -13,7 +13,7 @@
  */
 
 /*
- * Copyright (c) 2017-2020, GSI Helmholtz Centre for Heavy Ion Research
+ * Copyright (c) 2017-2023, GSI Helmholtz Centre for Heavy Ion Research
  */
 
 #include <string.h>

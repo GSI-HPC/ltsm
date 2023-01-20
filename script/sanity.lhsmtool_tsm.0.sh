@@ -114,7 +114,6 @@ lfs hsm_archive ${PATH_DIR}/*
 __hsm_match_and_wait ${PATH_DIR} "${STRDEF_ARCHIVE_EXISTS}"
 __hsm_match_state ${PATH_DIR} "${STRDEF_ARCHIVE_EXISTS}"
 
-
 # Released state
 echo "releasing files in ${PATH_DIR}/*"
 STRDEF_RELEASED_EXISTS="(0x0000000d) released exists archived, archive_id:1"
