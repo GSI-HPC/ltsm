@@ -13,7 +13,7 @@
  */
 
 /*
- * Copyright (c) 2017, GSI Helmholtz Centre for Heavy Ion Research
+ * Copyright (c) 2017-2023, GSI Helmholtz Centre for Heavy Ion Research
  */
 
 #define _GNU_SOURCE
@@ -90,9 +90,6 @@ static void sanity_arg_check(const char *argv)
 	/* Required arguments. */
 	if (!opt.o_node[0]) {
 		fprintf(stdout, "missing argument -n, --node <string>\n\n");
-		usage(argv, 1);
-	} else if (!opt.o_password[0]) {
-		fprintf(stdout, "missing argument -p, --password <string>\n\n");
 		usage(argv, 1);
 	} else if (!opt.o_servername[0]) {
 		fprintf(stdout, "missing argument -s, --servername "

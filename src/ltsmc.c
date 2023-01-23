@@ -260,9 +260,6 @@ static void sanity_arg_check(const char *argv)
 	if (!opt.o_node[0]) {
 		CT_ERROR(0, "missing argument -n, --node <string>");
 		usage(argv, 1);
-	} else if (!opt.o_password[0]) {
-		CT_ERROR(0, "missing argument -p, --password <string>");
-		usage(argv, 1);
 	} else if (!opt.o_servername[0]) {
 		CT_ERROR(0, "missing argument -s, --servername <string>");
 		usage(argv, 1);
