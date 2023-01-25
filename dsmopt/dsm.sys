@@ -4,3 +4,5 @@ SErvername		 tsmserver-8
    Compression           no
    TXNBytelimit          2G
    ENABLEINSTRUMENTATION off
+   PASSWORDAccess        generate
+   PASSWORDDIR           /etc/tsm/pw
