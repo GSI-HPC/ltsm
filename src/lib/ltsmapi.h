@@ -13,7 +13,7 @@
  */
 
 /*
- * Copyright (c) 2016-2019, GSI Helmholtz Centre for Heavy Ion Research
+ * Copyright (c) 2016-2023, GSI Helmholtz Centre for Heavy Ion Research
  */
 
 /* Important note: The API can only retrieve objects that were
@@ -23,7 +23,7 @@
    queries must be constructed (in a clever way) with wildcard (*) and
    question mark (?) to match sub directories and files. For more detail c.f.
    PDF Dokument: Using the Application Programming Interface
-   (http://www.ibm.com/support/knowledgecenter/SSGSG7_7.1.3/api/b_api_using.pdf)
+   (https://www.ibm.com/docs/en/SSEQVQ_8.1.10/api/b_api_using.pdf)
 */
 
 #ifndef TSMAPI_H
@@ -31,8 +31,6 @@
 
 #if HAVE_CONFIG_H
 #include <config.h>
-#else
-#error "Missing autoconf generated config.h file"
 #endif
 
 #include <stdint.h>

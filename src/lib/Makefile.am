@@ -1,6 +1,7 @@
 libltsmapi_la_CFLAGS = -m64 -DLINUX_CLIENT -D_FILE_OFFSET_BITS=64 -D_LARGEFILE64_SOURCE -I$(top_srcdir)/src/lib
 
-noinst_HEADERS = common.h log.h list.h queue.h chashtable.h qtable.h measurement.h ltsmapi.h
+pkginclude_HEADERS = ltsmapi.h common.h log.h list.h chashtable.h
+noinst_HEADERS = queue.h qtable.h measurement.h
 
 if HAVE_TSM
     libltsmapi_la_CFLAGS += -I@TSM_SRC_DIR@/
