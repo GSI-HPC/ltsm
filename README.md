@@ -100,7 +100,7 @@ will be notified to dequeue and execute new HSM action.
 Before using LTSM a working access to a TSM server is required. One can install for testing purposes a fully working
 TSM server (e.g. inside a KVM) for a period of 30 days before the license expires. A complete installation and setup guide is provided
 at [TSM Server Installation Guide](https://github.com/tstibor/ltsm.github.io/tree/master/doc/tutorial).
-Download and install the TSM API client provided at [7.1.X.Y-TIV-TSMBAC-LinuxX86_DEB.tar](http://ftp.software.ibm.com/storage/tivoli-storage-management/maintenance/client/v7r1/Linux/LinuxX86_DEB/BA/).
+Download and install the TSM API client provided at [8.1.X.Y-TIV-TSMBAC-LinuxX86_DEB.tar](https://public.dhe.ibm.com/storage/tivoli-storage-management/patches/client/v8r1/Linux/LinuxX86_DEB/v8117/8.1.17.2-TIV-TSMBAC-LinuxX86_DEB.tar).
 Make sure to install `tivsm-api64.amd64.deb` where the header files `dapitype.h, dsmapips.h, ...` and the low-level library `libApiTSM64.so` are provided.
 
 ### Compile *lhsmtool_tsm* and *ltsmc*
