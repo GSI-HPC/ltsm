@@ -3,7 +3,6 @@ LTSM - Lightweight TSM API, Lustre TSM Copytool for Archiving and Retrieving Dat
 
 [![Tag Version](https://img.shields.io/github/tag/tstibor/ltsm.svg)](https://github.com/tstibor/ltsm/tags)
 [![License](http://img.shields.io/:license-gpl2-blue.svg)](http://www.gnu.org/licenses/gpl-2.0.html)
-[![Linux](https://github.com/tstibor/ltsm/actions/workflows/linux.yml/badge.svg)](https://github.com/tstibor/ltsm/actions)
 
 This project consists of *four* parts:
 1. Lightweight TSM API/library (called *tsmapi*) supporting operations (*archiving*, *retrieving*, *deleting*, *querying*).
@@ -408,7 +407,7 @@ Otherwise, the query is repeated however as follows: `/fs/hl/ll`, that is with `
 Note, make sure the Lustre file system is mounted with extended attribute capability, that is `(/lustre type lustre (...,user_xattr,...)`.
 
 ## More Information
-In the manual pages [lhsmtool_tsm.1](http://github.com/tstibor/ltsm/blob/master/man/lhsmtool_tsm.1) and [ltsmc.1](http://github.com/tstibor/ltsm/blob/master/man/ltsmc.1) usage details and options of *lhsmtool_tsm* and *ltsmc* are provided. In addition, a [screencast](https://github.com/tstibor/ltsm.github.io/raw/master/screencast/ltsm-screencast-2.mp4) of an older version of this project is provided.
+In the manual pages [lhsmtool_tsm.1](http://github.com/tstibor/ltsm/blob/master/man/lhsmtool_tsm.1) and [ltsmc.1](http://github.com/tstibor/ltsm/blob/master/man/ltsmc.1) usage details and options of *lhsmtool_tsm* and *ltsmc* are provided.
 
 ## References
 A thorough description and code examples of IBM's low-level TSM API/library can be found in the open document [Using the Application Programming Interface](https://github.com/tstibor/ltsm.github.io/raw/master/doc/tsm/using_the_programming_application_interface.pdf), Fourth edition (September 2015).
@@ -418,7 +417,4 @@ This project is funded by Intel® through GSI's [Intel® Parallel Computing Cent
 
 ## License
 This project itself is licensed under the [GPL-2 license](http://www.gnu.org/licenses/old-licenses/gpl-2.0.en.html). The code however, depends on IBM's low-level TSM API/libraries which are distributed
-under different licenses and thus are not provided in the repository. See [IBM Tivoli Storage Manager Server](http://ftp.software.ibm.com/storage/tivoli-storage-management/maintenance/server/v7r1/Linux/7.1.7.000/README.htm).
-
-## Warranty
-Note, this project is still under development and in a beta development state. It is however ready to be tested.
+under different licenses and thus are not provided in the repository. See [IBM Tivoli Storage Manager Server](https://public.dhe.ibm.com/storage/tivoli-storage-management/patches/client/v8r1/Linux/LinuxX86_DEB/v8117/8.1.17.2-TIV-TSMBAC.README.htm).
