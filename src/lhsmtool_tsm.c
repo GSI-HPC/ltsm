@@ -131,6 +131,8 @@ static void usage(const char *cmd_name, const int rc)
 		"\t\t""hostname of tsm server\n"
 		"\t-c, --conf <file>\n"
 		"\t\t""option conf file\n"
+		"\t-f, --fsname\n"
+		"\t\t""set fsname manually </override_fs_name>\n"
 		"\t-v, --verbose {error, warn, message, info, debug}"
 		" [default: %s]\n"
 		"\t\t""produce more verbose output\n"
@@ -297,6 +299,7 @@ static int ct_parseopts(int argc, char *argv[])
 		{.name = "owner",          .has_arg = required_argument, .flag = NULL,                  .val = 'o'},
 		{.name = "servername",     .has_arg = required_argument, .flag = NULL,                  .val = 's'},
 		{.name = "conf",	   .has_arg = required_argument, .flag = NULL,		        .val = 'c'},
+		{.name = "fsname",	   .has_arg = required_argument, .flag = NULL,		        .val = 'f'},
 		{.name = "verbose",        .has_arg = required_argument, .flag = NULL,                  .val = 'v'},
 		{.name = "dry-run",	   .has_arg = no_argument,	 .flag = &opt.o_dry_run,        .val =   1},
 		{.name = "restore-stripe", .has_arg = no_argument,	 .flag = &opt.o_restore_stripe, .val =   1},
@@ -308,7 +311,7 @@ static int ct_parseopts(int argc, char *argv[])
 	int c, rc;
 	optind = 0;
 
-	while ((c = getopt_long(argc, argv, "a:t:n:p:o:s:c:v:h",
+	while ((c = getopt_long(argc, argv, "a:t:n:p:o:s:c:f:v:h",
 				long_opts, NULL)) != -1) {
 		switch (c) {
 		case 'a': {
@@ -343,6 +346,11 @@ static int ct_parseopts(int argc, char *argv[])
 		}
 		case 'c': {
 			read_conf(optarg);
+			break;
+		}
+		case 'f': {
+			strncpy(opt.o_fsname, optarg,
+				DSM_MAX_FSNAME_LENGTH);
 			break;
 		}
 		case 'v': {
@@ -388,7 +396,10 @@ static int ct_parseopts(int argc, char *argv[])
 	opt.o_mnt_fd = -1;
 
 	/* Filespace name is set to Lustre mount point. */
-	strncpy(opt.o_fsname, opt.o_mnt, DSM_MAX_FSNAME_LENGTH);
+	if (!opt.o_fsname[0]) {
+		strncpy(opt.o_fsname, opt.o_mnt, DSM_MAX_FSNAME_LENGTH);
+	}
+
 	const size_t len_fsname = strlen(opt.o_fsname);
 	if (len_fsname > 2 && opt.o_fsname[len_fsname - 1] == '/')
 		opt.o_fsname[len_fsname - 1] = '\0';

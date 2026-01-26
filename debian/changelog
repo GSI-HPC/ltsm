@@ -1,3 +1,9 @@
+ltsm (0.9.3) unstable; urgency=low
+
+  * Added option to set fsname manually
+
+ -- Samuel Hasert <s.hasert@gsi.de>  Tue, 06 Jan 2026 10:26:20 +0200
+
 ltsm (0.9.2) unstable; urgency=low
 
   * Increased buffersize to 16 MiB

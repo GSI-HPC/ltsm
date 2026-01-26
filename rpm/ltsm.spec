@@ -64,6 +64,9 @@ rm -rf %{buildroot}
 
 %changelog
 
+* Tue Jan 06 2026 Samuel Hasert <s.hasert@gsi.de> 0.9.3
+- Added option to set fsname manually
+
 * Mon Sep 15 2025 Samuel Hasert <s.hasert@gsi.de> 0.9.2
 - Increased buffersize to 16 MiB
 
